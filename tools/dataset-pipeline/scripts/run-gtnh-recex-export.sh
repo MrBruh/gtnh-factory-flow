@@ -62,6 +62,7 @@ if [[ -z "$start_script" ]]; then
 fi
 
 chmod +x "$start_script"
+start_script="$(realpath "$start_script")"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Drecex.autorun=true -Xmx${GTNH_EXPORT_MAX_MEMORY}"
 
 set +e
