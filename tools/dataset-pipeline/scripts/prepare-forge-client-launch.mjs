@@ -51,7 +51,6 @@ exec java \\
   -Xmx${shellQuote(javaMemory)} \\
   -Dfile.encoding=UTF-8 \\
   -Djava.system.class.loader=com.gtnewhorizons.retrofuturabootstrap.RfbSystemClassLoader \\
-  -Djava.security.manager=allow \\
   --enable-native-access=ALL-UNNAMED \\
   --add-opens=java.base/java.io=ALL-UNNAMED \\
   --add-opens=java.base/java.lang.invoke=ALL-UNNAMED \\
