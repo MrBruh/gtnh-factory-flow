@@ -20,6 +20,7 @@ source = source.replace(
     "import cpw.mods.fml.common.event.FMLServerStartedEvent;",
     "import cpw.mods.fml.common.eventhandler.SubscribeEvent;",
     "import cpw.mods.fml.common.gameevent.TickEvent;",
+    "import net.minecraft.client.Minecraft;",
     "",
     "import java.util.concurrent.atomic.AtomicBoolean;",
   ].join("\n"),
@@ -44,6 +45,7 @@ source = source.replace(
         if (Boolean.getBoolean("recex.autorun") && FMLCommonHandler.instance().getSide().isClient()) {
             log.info("RecEx autorun registering mod event handler.");
             FMLCommonHandler.instance().bus().register(this);
+            startDelayedClientAutorunThread();
         }
     }
 
@@ -72,6 +74,27 @@ source = source.replace(
 
     public static void requestAutorunExport(String trigger) {
         runAutorunExport(trigger);
+    }
+
+    private static void startDelayedClientAutorunThread() {
+        Thread thread = new Thread(() -> {
+            try {
+                Thread.sleep(Long.getLong("recex.autorunDelayMillis", 45000L));
+                Minecraft minecraft = Minecraft.getMinecraft();
+                if (minecraft == null) {
+                    runAutorunExport("client-delayed-thread");
+                    return;
+                }
+
+                minecraft.addScheduledTask(() -> runAutorunExport("client-delayed-task"));
+            } catch (Throwable t) {
+                log.error("RecEx delayed autorun scheduling failed.", t);
+                FMLCommonHandler.instance().exitJava(2, false);
+            }
+        });
+        thread.setDaemon(true);
+        thread.setName("recex-delayed-autorun-scheduler");
+        thread.start();
     }
 
     private static void runAutorunExport(String trigger) {
