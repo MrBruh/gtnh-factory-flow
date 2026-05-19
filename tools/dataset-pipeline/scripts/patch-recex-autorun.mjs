@@ -383,44 +383,62 @@ public final class ClientItemStackIconRenderer {
         }
 
         Framebuffer framebuffer = new Framebuffer(ICON_SIZE, ICON_SIZE, true);
-        framebuffer.bindFramebuffer(true);
+        ByteBuffer buffer;
+        boolean projectionPushed = false;
+        boolean modelViewPushed = false;
 
-        GL11.glPushAttrib(GL11.GL_ALL_ATTRIB_BITS);
-        GL11.glViewport(0, 0, ICON_SIZE, ICON_SIZE);
-        GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
-        GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+        try {
+            framebuffer.bindFramebuffer(true);
 
-        GL11.glMatrixMode(GL11.GL_PROJECTION);
-        GL11.glPushMatrix();
-        GL11.glLoadIdentity();
-        GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, 1000.0D, 3000.0D);
+            GL11.glViewport(0, 0, ICON_SIZE, ICON_SIZE);
+            GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
 
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glPushMatrix();
-        GL11.glLoadIdentity();
-        GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPushMatrix();
+            projectionPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, 1000.0D, 3000.0D);
 
-        RenderHelper.enableGUIStandardItemLighting();
-        GL11.glEnable(GL12.GL_RESCALE_NORMAL);
-        FontRenderer fontRenderer = stack.getItem().getFontRenderer(stack);
-        if (fontRenderer == null) {
-            fontRenderer = mc.fontRenderer;
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPushMatrix();
+            modelViewPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+
+            RenderHelper.enableGUIStandardItemLighting();
+            GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+            FontRenderer fontRenderer = stack.getItem().getFontRenderer(stack);
+            if (fontRenderer == null) {
+                fontRenderer = mc.fontRenderer;
+            }
+            RENDER_ITEM.renderItemIntoGUI(fontRenderer, mc.getTextureManager(), stack, (ICON_SIZE - 16) / 2, (ICON_SIZE - 16) / 2);
+            RenderHelper.disableStandardItemLighting();
+
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopMatrix();
+            modelViewPushed = false;
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPopMatrix();
+            projectionPushed = false;
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+
+            buffer = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * 4);
+            GL11.glReadPixels(0, 0, ICON_SIZE, ICON_SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
+        } finally {
+            RenderHelper.disableStandardItemLighting();
+            if (modelViewPushed) {
+                GL11.glMatrixMode(GL11.GL_MODELVIEW);
+                GL11.glPopMatrix();
+            }
+            if (projectionPushed) {
+                GL11.glMatrixMode(GL11.GL_PROJECTION);
+                GL11.glPopMatrix();
+            }
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            framebuffer.unbindFramebuffer();
+            framebuffer.deleteFramebuffer();
         }
-        RENDER_ITEM.renderItemIntoGUI(fontRenderer, mc.getTextureManager(), stack, (ICON_SIZE - 16) / 2, (ICON_SIZE - 16) / 2);
-        RenderHelper.disableStandardItemLighting();
-
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-        GL11.glPopMatrix();
-        GL11.glMatrixMode(GL11.GL_PROJECTION);
-        GL11.glPopMatrix();
-        GL11.glMatrixMode(GL11.GL_MODELVIEW);
-
-        ByteBuffer buffer = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * 4);
-        GL11.glReadPixels(0, 0, ICON_SIZE, ICON_SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
-
-        GL11.glPopAttrib();
-        framebuffer.unbindFramebuffer();
-        framebuffer.deleteFramebuffer();
 
         BufferedImage image = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
         for (int y = 0; y < ICON_SIZE; y++) {
