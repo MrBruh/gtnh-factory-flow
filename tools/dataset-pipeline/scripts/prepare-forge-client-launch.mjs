@@ -84,7 +84,7 @@ exec java \\
   -Djava.library.path=${shellQuote(nativesDir)} \\
   -Dorg.lwjgl.librarypath=${shellQuote(nativesDir)} \\
   -cp ${shellQuote(classpath)} \\
-  com.gtnewhorizons.retrofuturabootstrap.Main \\
+  com.gtnewhorizons.retrofuturabootstrap.MainStartOnFirstThread \\
   --username GTNHFactoryFlow \\
   --version ${shellQuote(minecraftVersion + "-Forge")} \\
   --gameDir ${shellQuote(instanceRoot)} \\
