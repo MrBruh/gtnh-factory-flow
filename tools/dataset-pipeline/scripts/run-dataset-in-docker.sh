@@ -6,6 +6,9 @@ publish="${2:-false}"
 image="${GTNH_DATASET_DOCKER_IMAGE:-gtnh-factory-flow-dataset:java17}"
 memory="${GTNH_EXPORT_MAX_MEMORY:-8G}"
 timeout_seconds="${GTNH_EXPORT_TIMEOUT_SECONDS:-3600}"
+docker_memory_limit="${GTNH_DATASET_DOCKER_MEMORY_LIMIT:-10g}"
+docker_memory_swap="${GTNH_DATASET_DOCKER_MEMORY_SWAP:-12g}"
+docker_cpus="${GTNH_DATASET_DOCKER_CPUS:-8}"
 
 docker build -t "$image" -f tools/dataset-pipeline/docker/Dockerfile .
 
@@ -36,6 +39,9 @@ for line in "${versions[@]}"; do
   docker run --rm \
     --name "gtnh-export-${version_id}" \
     --shm-size=2g \
+    --memory="${docker_memory_limit}" \
+    --memory-swap="${docker_memory_swap}" \
+    --cpus="${docker_cpus}" \
     -e "GITHUB_TOKEN=${GITHUB_TOKEN:-}" \
     -e "GTNH_CHANNEL=${version_channel}" \
     -e "GTNH_VERSION_ID=${version_id}" \
