@@ -252,8 +252,8 @@ async function findPatchRoot(startDir) {
 
 async function buildClasspath() {
   const jars = [
-    ...(await findJars(path.join(instanceRoot, "libraries"))),
     ...(await findJars(librariesDir)),
+    ...(await findJars(path.join(instanceRoot, "libraries"))),
     path.join(versionsDir, `${minecraftVersion}.jar`),
   ];
 

@@ -79,7 +79,7 @@ jobs:
       - name: Prepare headless client runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl git unzip xvfb xauth
+          sudo apt-get install -y curl git unzip xvfb xauth libegl1 libgl1 libgl1-mesa-dri libglx-mesa0 mesa-utils
 
       - uses: actions/download-artifact@v4
         with:
