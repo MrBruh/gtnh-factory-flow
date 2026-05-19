@@ -3,7 +3,7 @@ set -euo pipefail
 
 channel="${1:-daily}"
 publish="${2:-false}"
-image="${GTNH_DATASET_DOCKER_IMAGE:-gtnh-factory-flow-dataset:java17}"
+image="${GTNH_DATASET_DOCKER_IMAGE:-gtnh-factory-flow-dataset:java21}"
 memory="${GTNH_EXPORT_MAX_MEMORY:-6G}"
 timeout_seconds="${GTNH_EXPORT_TIMEOUT_SECONDS:-3600}"
 docker_memory_limit="${GTNH_DATASET_DOCKER_MEMORY_LIMIT:-10g}"
