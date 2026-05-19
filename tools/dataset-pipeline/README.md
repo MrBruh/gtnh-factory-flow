@@ -1,13 +1,13 @@
 # Dataset Pipeline
 
 This directory contains the CI-side GTNH dataset pipeline. It detects GTNH stable/daily
-versions, invokes a private client/exporter command, validates the normalized output, and
+versions, invokes a real GTNH build/exporter runner, validates the normalized output, and
 publishes only real generated datasets.
 
 Responsibilities:
 
 - Detect GTNH stable and daily versions.
-- Download or locate a clean GTNH client instance.
+- Download or locate a clean GTNH client/server build.
 - Run NESQL Exporter, RecEx, or NERD outside the browser and outside the deployed app.
 - Normalize raw exporter output into the internal `RecipeDataset` model.
 - Compress and checksum generated JSON.
@@ -29,14 +29,13 @@ It currently:
 - Detects the latest successful daily build from `GTNewHorizons/DreamAssemblerXXL`.
 - Creates one build job per detected channel.
 - Installs a headless runtime with Xvfb for exporters that need a Minecraft client GUI.
-- Runs an exporter command from the repository secret `GTNH_CLIENT_EXPORT_COMMAND`.
+- Runs `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh` by default.
 - Expects the exporter to write `recipes.json` to `$GTNH_DATASET_OUT_DIR`.
 - Rebuilds `public/datasets/gtnh/datasets.manifest.json` from generated datasets.
 
-`GTNH_CLIENT_EXPORT_COMMAND` is intentionally private because the exact client bootstrap
-depends on launcher credentials, cache layout, Java version, exporter jar, and which
-exporter is selected. The command must run the real selected GTNH client/exporter and
-produce a normalized `RecipeDataset`, not raw exporter output and not a public dump.
+`GTNH_CLIENT_EXPORT_COMMAND` can override the default runner. The override must run the
+real selected GTNH build/exporter and produce a normalized `RecipeDataset`, not raw
+exporter output and not a public dump.
 
 The command receives:
 
@@ -48,13 +47,13 @@ The command receives:
 - `GTNH_DATASET_CHANNEL` - `stable` or `daily`.
 - `GTNH_SOURCE_KIND`, `GTNH_SOURCE_REF`, `GTNH_SOURCE_URL` - detected upstream source.
 
-If the secret is missing, the workflow fails before publishing. This is deliberate: the
-site must not expose empty placeholder datasets as GTNH versions.
+If the runner fails or produces no recipes, the workflow fails before publishing. This is
+deliberate: the site must not expose empty placeholder datasets as GTNH versions.
 
 ## RecEx Notes
 
 RecEx is a GTNH recipe exporter mod. Its README states that export happens while a
 world/server is loaded, and that exported files are placed in `RecEx-Records/` at the
-Minecraft instance root. A private client command can therefore install the selected GTNH
-pack, add RecEx, launch the client under Xvfb, trigger the exporter, then normalize
+Minecraft instance root. The default CI runner builds a patched RecEx jar that auto-runs
+the existing exporter entry point, launches the selected GTNH build, then normalizes
 `RecEx-Records/` into `$GTNH_DATASET_OUT_DIR/recipes.json`.

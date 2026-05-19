@@ -18,8 +18,8 @@ artifacts.
    - Read stable releases and daily builds from the upstream GTNH repositories.
    - Store channel, version id, source URL, and timestamp.
 
-2. Download or locate client instance
-   - Fetch or mount a clean GTNH client instance outside the web app.
+2. Download or locate GTNH build
+   - Fetch or mount a clean GTNH client/server build outside the web app.
    - Record pack version, mod list checksum, and exporter versions.
 
 3. Run exporters
@@ -67,16 +67,20 @@ recipe creation as a substitute for missing GTNH data.
 ## GitHub Actions Contract
 
 `.github/workflows/gtnh-dataset-pipeline.yml` detects the current stable and daily GTNH
-targets, then calls the private command stored in the repository secret
-`GTNH_CLIENT_EXPORT_COMMAND`.
+targets, then calls the exporter runner.
 
-That command must:
+The default runner is `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh`. It:
 
-- Download or reuse the selected GTNH client instance.
-- Install and run the selected exporter, such as RecEx, NESQL Exporter, or NERD.
-- Use the real runtime recipe registry from the client/exporter.
+- Downloads the official selected GTNH build.
+- Downloads/builds RecEx from the upstream repository.
+- Patches RecEx to auto-run the existing exporter entry point in CI.
+- Launches the pack headlessly.
+- Uses the real runtime recipe registry from the GTNH build/exporter.
 - Normalize raw output into the internal `RecipeDataset` shape.
 - Write `$GTNH_DATASET_OUT_DIR/recipes.json`.
+
+`GTNH_CLIENT_EXPORT_COMMAND` can still override this default with another private runner,
+for example a Prism + NESQL Exporter path once account/cache handling is available.
 
 The command receives these directories:
 
@@ -88,7 +92,7 @@ It also receives version metadata through `GTNH_DATASET_VERSION_ID`,
 `GTNH_DATASET_VERSION_LABEL`, `GTNH_DATASET_CHANNEL`, `GTNH_SOURCE_KIND`,
 `GTNH_SOURCE_REF`, and `GTNH_SOURCE_URL`.
 
-If `GTNH_CLIENT_EXPORT_COMMAND` is absent, the workflow fails and publishes nothing. This
+If the runner fails or produces no recipes, the workflow fails and publishes nothing. This
 prevents fake GTNH versions from appearing in the hosted UI.
 
 ## RecEx Integration Notes
@@ -96,8 +100,8 @@ prevents fake GTNH versions from appearing in the hosted UI.
 The official GTNH RecEx repository describes RecEx as a recipe exporter mod for
 Minecraft that exports recipes during runtime to JSON. Its README also notes that the
 export runs while a world/server is loaded and writes files to `RecEx-Records/` at the
-Minecraft instance root. A private CI command should therefore launch the selected GTNH
-client under Xvfb, trigger RecEx or the chosen exporter, then normalize the raw output.
+Minecraft instance root. The CI runner patches RecEx to call `RecipeExporter.run()`
+automatically and then normalizes the raw output.
 
 ## Non-Goals For MVP
 

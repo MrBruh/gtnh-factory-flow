@@ -79,7 +79,7 @@ jobs:
       - name: Prepare headless client runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb xauth
+          sudo apt-get install -y curl git unzip xvfb xauth
 
       - uses: actions/download-artifact@v4
         with:

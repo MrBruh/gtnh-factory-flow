@@ -71,21 +71,22 @@ The workflow detects:
 - stable releases from `GTNewHorizons/GT-New-Horizons-Modpack`
 - daily builds from `GTNewHorizons/DreamAssemblerXXL`
 
-To actually generate recipes, configure the repository secret
-`GTNH_CLIENT_EXPORT_COMMAND`. That command must download or use the selected GTNH client
-instance, install/run NESQL Exporter, RecEx, or NERD, and write a normalized
+By default, the workflow runs `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh`.
+That script downloads the selected official GTNH build, injects a CI-patched RecEx
+exporter, launches the pack headlessly, reads `RecEx-Records`, and writes a normalized
 `RecipeDataset` to:
 
 ```bash
 $GTNH_DATASET_OUT_DIR/recipes.json
 ```
 
-The command also receives `GTNH_INSTANCE_DIR`, `GTNH_RAW_EXPORT_DIR`,
+The command receives `GTNH_INSTANCE_DIR`, `GTNH_RAW_EXPORT_DIR`,
 `GTNH_DATASET_VERSION_ID`, `GTNH_DATASET_VERSION_LABEL`, `GTNH_DATASET_CHANNEL`,
 `GTNH_SOURCE_KIND`, `GTNH_SOURCE_REF`, and `GTNH_SOURCE_URL`.
 
-Without that secret, the workflow fails and publishes nothing. This is intentional: the
-hosted site must not show placeholder GTNH versions.
+`GTNH_CLIENT_EXPORT_COMMAND` remains available as an override secret if a different
+exporter runner is needed later, for example a Prism/NESQL pipeline. The default path is
+versioned in this repo and does not use a public recipe dump.
 
 1. Generate a normalized `RecipeDataset` JSON from a real GTNH client using NESQL
    Exporter, RecEx, or NERD.
@@ -95,10 +96,9 @@ hosted site must not show placeholder GTNH versions.
 5. Use the plus icon to place recipe nodes on the graph.
 6. Connect nodes in the flowchart. The app picks the first matching output/input resource.
 
-RecEx is supported as a client-side exporter path: it exports during runtime and writes
-raw records to `RecEx-Records/` in the Minecraft instance root. The private command is
-responsible for launching the selected GTNH client under CI, triggering the exporter, and
-normalizing those raw records.
+RecEx exports during runtime and writes raw records to `RecEx-Records/` in the Minecraft
+instance root. The pipeline patches RecEx only to auto-run and exit in CI; the recipe data
+still comes from the live GTNH runtime registry.
 
 ## Plan JSON vs Versioned GTNH Dataset
 

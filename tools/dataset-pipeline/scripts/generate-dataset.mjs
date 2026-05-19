@@ -8,7 +8,9 @@ const versionLabel = requiredEnv("GTNH_VERSION_LABEL");
 const sourceKind = requiredEnv("GTNH_SOURCE_KIND");
 const sourceRef = requiredEnv("GTNH_SOURCE_REF");
 const sourceUrl = process.env.GTNH_SOURCE_URL;
-const exportCommand = process.env.GTNH_CLIENT_EXPORT_COMMAND;
+const exportCommand =
+  process.env.GTNH_CLIENT_EXPORT_COMMAND ||
+  "bash tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh";
 const outDir = path.join("public", "datasets", "gtnh", versionId);
 const pipelineDir = ".pipeline";
 const instanceDir = path.join(pipelineDir, "client-instance", versionId);
@@ -30,16 +32,6 @@ const pipelineRecord = {
   sourceUrl,
   generatedAt: new Date().toISOString(),
 };
-
-if (!exportCommand) {
-  await writePipelineRecord({
-    ...pipelineRecord,
-    status: "missing-client-exporter",
-    message:
-      "Missing GTNH_CLIENT_EXPORT_COMMAND. Configure a private CI command that downloads or mounts the selected GTNH client, installs/runs NESQL Exporter, RecEx, or NERD, and writes normalized recipes.json to GTNH_DATASET_OUT_DIR.",
-  });
-  throw new Error("GTNH_CLIENT_EXPORT_COMMAND is required. No dataset was generated or published.");
-}
 
 console.log(`Running configured exporter for ${versionId}.`);
 const { spawn } = await import("node:child_process");
