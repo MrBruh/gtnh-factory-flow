@@ -76,6 +76,11 @@ jobs:
 
       - run: npm install
 
+      - name: Prepare headless client runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth
+
       - uses: actions/download-artifact@v4
         with:
           name: detected-gtnh-versions
@@ -88,7 +93,8 @@ jobs:
           GTNH_VERSION_LABEL: ${{ matrix.gtnhVersion }}
           GTNH_SOURCE_KIND: ${{ matrix.sourceKind }}
           GTNH_SOURCE_REF: ${{ matrix.sourceRef }}
-          GTNH_EXPORT_COMMAND: ${{ secrets.GTNH_EXPORT_COMMAND }}
+          GTNH_SOURCE_URL: ${{ matrix.sourceUrl }}
+          GTNH_CLIENT_EXPORT_COMMAND: ${{ secrets.GTNH_CLIENT_EXPORT_COMMAND }}
         run: node tools/dataset-pipeline/scripts/generate-dataset.mjs
 
       - uses: actions/upload-artifact@v4
@@ -101,7 +107,7 @@ jobs:
   publish:
     name: Publish generated datasets
     needs: build
-    if: ${{ always() && (github.event_name == 'schedule' || inputs.publish == true) }}
+    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || inputs.publish == true) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

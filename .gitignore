@@ -13,6 +13,8 @@
 # testing
 /coverage
 /.pipeline
+/.tmp
+*.tar
 
 # next.js
 /.next/
@@ -31,7 +33,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 dev-server*.log
-.deploy-exotiserver.sh
+.deploy-exotiserver*.sh
 
 # env files (can opt-in for committing if needed)
 .env*

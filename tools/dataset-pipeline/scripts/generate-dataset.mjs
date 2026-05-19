@@ -7,37 +7,38 @@ const versionId = requiredEnv("GTNH_VERSION_ID");
 const versionLabel = requiredEnv("GTNH_VERSION_LABEL");
 const sourceKind = requiredEnv("GTNH_SOURCE_KIND");
 const sourceRef = requiredEnv("GTNH_SOURCE_REF");
-const exportCommand = process.env.GTNH_EXPORT_COMMAND;
+const sourceUrl = process.env.GTNH_SOURCE_URL;
+const exportCommand = process.env.GTNH_CLIENT_EXPORT_COMMAND;
 const outDir = path.join("public", "datasets", "gtnh", versionId);
 const pipelineDir = ".pipeline";
+const instanceDir = path.join(pipelineDir, "client-instance", versionId);
+const rawExportDir = path.join(pipelineDir, "raw-export", versionId);
 
 await fs.mkdir(outDir, { recursive: true });
 await fs.mkdir(pipelineDir, { recursive: true });
+await fs.mkdir(instanceDir, { recursive: true });
+await fs.mkdir(rawExportDir, { recursive: true });
 
 const pipelineRecord = {
   schemaVersion: 1,
-  status: "pending-exporter",
+  status: "started",
   channel,
   versionId,
   versionLabel,
   sourceKind,
   sourceRef,
+  sourceUrl,
   generatedAt: new Date().toISOString(),
-  message:
-    "No GTNH_EXPORT_COMMAND secret is configured. Add a CI command that downloads the pack, runs NESQL/NERD/RecEx, and writes a normalized RecipeDataset JSON.",
 };
 
 if (!exportCommand) {
-  await fs.writeFile(
-    path.join(pipelineDir, `${versionId}.pipeline.json`),
-    `${JSON.stringify(pipelineRecord, null, 2)}\n`,
-  );
-  await fs.writeFile(
-    path.join(outDir, ".pipeline-status.json"),
-    `${JSON.stringify(pipelineRecord, null, 2)}\n`,
-  );
-  console.log(pipelineRecord.message);
-  process.exit(0);
+  await writePipelineRecord({
+    ...pipelineRecord,
+    status: "missing-client-exporter",
+    message:
+      "Missing GTNH_CLIENT_EXPORT_COMMAND. Configure a private CI command that downloads or mounts the selected GTNH client, installs/runs NESQL Exporter, RecEx, or NERD, and writes normalized recipes.json to GTNH_DATASET_OUT_DIR.",
+  });
+  throw new Error("GTNH_CLIENT_EXPORT_COMMAND is required. No dataset was generated or published.");
 }
 
 console.log(`Running configured exporter for ${versionId}.`);
@@ -51,6 +52,12 @@ const exitCode = await new Promise((resolve) => {
       GTNH_DATASET_OUT_DIR: outDir,
       GTNH_DATASET_VERSION_ID: versionId,
       GTNH_DATASET_CHANNEL: channel,
+      GTNH_DATASET_VERSION_LABEL: versionLabel,
+      GTNH_INSTANCE_DIR: instanceDir,
+      GTNH_RAW_EXPORT_DIR: rawExportDir,
+      GTNH_SOURCE_KIND: sourceKind,
+      GTNH_SOURCE_REF: sourceRef,
+      ...(sourceUrl ? { GTNH_SOURCE_URL: sourceUrl } : {}),
     },
   });
   child.on("exit", (code) => resolve(code ?? 1));
@@ -67,10 +74,54 @@ if (!existsSync(recipeDatasetPath)) {
   );
 }
 
-await fs.writeFile(
-  path.join(pipelineDir, `${versionId}.pipeline.json`),
-  `${JSON.stringify({ ...pipelineRecord, status: "generated" }, null, 2)}\n`,
-);
+const dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
+validateDataset(dataset);
+
+await writePipelineRecord({
+  ...pipelineRecord,
+  status: "generated",
+  recipeCount: dataset.recipes.length,
+  resourceCount: dataset.resources.length,
+  recipeMapCount: dataset.recipeMaps.length,
+});
+
+function validateDataset(dataset) {
+  if (dataset.schemaVersion !== 1) {
+    throw new Error("recipes.json must be a RecipeDataset with schemaVersion 1.");
+  }
+  if (dataset.datasetVersionId !== versionId) {
+    throw new Error(
+      `recipes.json datasetVersionId must be ${versionId}, got ${dataset.datasetVersionId}.`,
+    );
+  }
+  if (dataset.gtnhVersion !== versionLabel) {
+    throw new Error(
+      `recipes.json gtnhVersion must be ${versionLabel}, got ${dataset.gtnhVersion}.`,
+    );
+  }
+  if (!dataset.sourceInfo || dataset.sourceInfo.sourceId === "unknown") {
+    throw new Error("recipes.json sourceInfo.sourceId must identify nesql, recex, or nerd.");
+  }
+  if (!Array.isArray(dataset.resources)) {
+    throw new Error("recipes.json resources must be an array.");
+  }
+  if (!Array.isArray(dataset.recipes) || dataset.recipes.length === 0) {
+    throw new Error("recipes.json recipes must be a non-empty array from the client export.");
+  }
+  if (!Array.isArray(dataset.recipeMaps)) {
+    throw new Error("recipes.json recipeMaps must be an array.");
+  }
+  if (!dataset.oreDictionary || typeof dataset.oreDictionary !== "object") {
+    throw new Error("recipes.json oreDictionary must be an object.");
+  }
+}
+
+async function writePipelineRecord(record) {
+  await fs.writeFile(
+    path.join(pipelineDir, `${versionId}.pipeline.json`),
+    `${JSON.stringify(record, null, 2)}\n`,
+  );
+}
 
 function requiredEnv(name) {
   const value = process.env[name];
