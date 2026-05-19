@@ -22,6 +22,7 @@ source = source.replace(
     "import cpw.mods.fml.common.gameevent.TickEvent;",
     "import net.minecraft.client.Minecraft;",
     "",
+    "import java.lang.reflect.Method;",
     "import java.util.concurrent.atomic.AtomicBoolean;",
   ].join("\n"),
 );
@@ -86,7 +87,13 @@ source = source.replace(
                     return;
                 }
 
-                minecraft.addScheduledTask(() -> runAutorunExport("client-delayed-task"));
+                Method method = minecraft.getClass().getMethod("func_152344_a", Runnable.class);
+                method.invoke(minecraft, new Runnable() {
+                    @Override
+                    public void run() {
+                        runAutorunExport("client-delayed-task");
+                    }
+                });
             } catch (Throwable t) {
                 log.error("RecEx delayed autorun scheduling failed.", t);
                 FMLCommonHandler.instance().exitJava(2, false);
