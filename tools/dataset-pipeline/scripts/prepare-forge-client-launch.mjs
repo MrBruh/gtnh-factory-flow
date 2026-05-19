@@ -3,13 +3,15 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
-const instanceRoot = process.argv[2];
-const runtimeDir = process.argv[3];
+const instanceRootArg = process.argv[2];
+const runtimeDirArg = process.argv[3];
 
-if (!instanceRoot || !runtimeDir) {
+if (!instanceRootArg || !runtimeDirArg) {
   throw new Error("Usage: prepare-forge-client-launch.mjs <instance-root> <runtime-dir>");
 }
 
+const instanceRoot = path.resolve(instanceRootArg);
+const runtimeDir = path.resolve(runtimeDirArg);
 const minecraftVersion = process.env.GTNH_MINECRAFT_VERSION ?? "1.7.10";
 const javaMemory = process.env.GTNH_EXPORT_MAX_MEMORY ?? "12G";
 const assetsDir = path.join(runtimeDir, "assets");
