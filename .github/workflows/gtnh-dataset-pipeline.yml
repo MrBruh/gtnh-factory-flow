@@ -138,12 +138,12 @@ jobs:
 
       - name: Commit dataset updates
         run: |
-          if git diff --quiet -- public/datasets/gtnh; then
-            echo "No dataset changes to commit."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/datasets/gtnh
+          if git diff --cached --quiet -- public/datasets/gtnh; then
+            echo "No dataset changes to commit."
+            exit 0
+          fi
           git commit -m "Update GTNH datasets"
           git push
