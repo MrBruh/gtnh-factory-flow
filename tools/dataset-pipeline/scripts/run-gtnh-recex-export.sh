@@ -31,9 +31,10 @@ node tools/dataset-pipeline/scripts/download-gtnh-pack.mjs "$pack_archive"
 rm -rf "$GTNH_INSTANCE_DIR/pack"
 mkdir -p "$GTNH_INSTANCE_DIR/pack"
 unzip -q "$pack_archive" -d "$GTNH_INSTANCE_DIR/pack"
+chmod -R u+rwX "$GTNH_INSTANCE_DIR/pack"
 
 if ! instance_root="$(node tools/dataset-pipeline/scripts/find-gtnh-instance-root.mjs "$GTNH_INSTANCE_DIR/pack" 2>/tmp/gtnh-find-root.err)"; then
-  nested_pack="$(find "$GTNH_INSTANCE_DIR/pack" -maxdepth 3 -type f -name '*.zip' | sort | head -n 1)"
+  nested_pack="$(find "$GTNH_INSTANCE_DIR/pack" -maxdepth 3 -type f -name '*.zip' 2>/dev/null | sort | head -n 1)"
   if [[ -z "$nested_pack" ]]; then
     cat /tmp/gtnh-find-root.err >&2
     exit 1
@@ -42,6 +43,7 @@ if ! instance_root="$(node tools/dataset-pipeline/scripts/find-gtnh-instance-roo
   rm -rf "$GTNH_INSTANCE_DIR/pack-content"
   mkdir -p "$GTNH_INSTANCE_DIR/pack-content"
   unzip -q "$nested_pack" -d "$GTNH_INSTANCE_DIR/pack-content"
+  chmod -R u+rwX "$GTNH_INSTANCE_DIR/pack-content"
   instance_root="$(node tools/dataset-pipeline/scripts/find-gtnh-instance-root.mjs "$GTNH_INSTANCE_DIR/pack-content")"
 fi
 mkdir -p "$instance_root/mods"
