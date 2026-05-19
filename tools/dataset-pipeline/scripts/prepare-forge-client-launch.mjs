@@ -159,7 +159,11 @@ async function downloadMultiMcPatchLibraries() {
         `https://repo1.maven.org/maven2/${maven.path}`,
       ].filter(Boolean);
 
-      await downloadFirst(urls, target);
+      try {
+        await downloadFirst(urls, target);
+      } catch (error) {
+        console.warn(`Skipping unresolved MultiMC library ${library.name}: ${error.message}`);
+      }
     }
   }
 }
