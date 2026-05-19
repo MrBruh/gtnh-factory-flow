@@ -257,7 +257,7 @@ async function buildClasspath() {
   ];
 
   const uniqueJars = [...new Set(jars.filter((jar) => existsSync(jar)))];
-  const filteredJars = preferMinecraftGuava(uniqueJars);
+  const filteredJars = filterLegacyLwjgl2(preferMinecraftGuava(uniqueJars));
   if (!filteredJars.some((jar) => jar.toLowerCase().includes("launchwrapper"))) {
     throw new Error("Could not find launchwrapper in GTNH/Minecraft libraries.");
   }
@@ -279,6 +279,17 @@ function preferMinecraftGuava(jars) {
       return true;
     }
     return normalized.includes("/com/google/guava/guava/17.0/guava-17.0.jar");
+  });
+}
+
+function filterLegacyLwjgl2(jars) {
+  return jars.filter((jar) => {
+    const normalized = jar.replace(/\\/g, "/");
+    return !(
+      normalized.includes("/org/lwjgl/lwjgl/lwjgl/2.9.1/") ||
+      normalized.includes("/org/lwjgl/lwjgl/lwjgl_util/2.9.1/") ||
+      normalized.includes("/org/lwjgl/lwjgl/lwjgl-platform/2.9.1/")
+    );
   });
 }
 
