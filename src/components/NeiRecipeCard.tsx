@@ -1,8 +1,9 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
-import type { Recipe, ResourceAmount } from "@/lib/model/types";
+import type { Recipe } from "@/lib/model/types";
 import { formatRate } from "@/lib/model";
+import { NeiRecipeCanvas } from "./nei/NeiRecipeCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 interface NeiRecipeCardProps {
@@ -11,8 +12,6 @@ interface NeiRecipeCardProps {
 }
 
 export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
-  const inputs = recipe.inputs;
-  const outputs = recipe.outputs;
   const durationSeconds = recipe.durationTicks / 20;
   const totalEu = recipe.eut * recipe.durationTicks;
 
@@ -37,18 +36,7 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
           <NeiButton label=">" dark />
         </div>
 
-        <div className="mt-1 border-2 border-[#a2a2a2] bg-[#d0d0d0] p-2 shadow-[inset_2px_2px_0_#efefef,inset_-2px_-2px_0_#9a9a9a]">
-          <div className="grid grid-cols-[108px_1fr_108px] items-center gap-3">
-            <NeiGrid resources={inputs} />
-            <div className="grid justify-items-center gap-5">
-              <div className="text-[38px] leading-none text-[#efefef] [text-shadow:2px_0_0_#8f8f8f,0_2px_0_#8f8f8f]">
-                =&gt;
-              </div>
-              <div className="h-9 w-9 rounded-full border-4 border-yellow-300 border-b-transparent bg-transparent" />
-            </div>
-            <NeiGrid resources={outputs} />
-          </div>
-        </div>
+        <NeiRecipeCanvas recipe={recipe} scale={2} className="mt-1" />
 
         {!compact ? (
           <footer className="mt-2 px-1 text-[18px] leading-[22px] text-black">
@@ -93,24 +81,6 @@ function NeiTabs({ recipe }: { recipe: Recipe }) {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-function NeiGrid({ resources }: { resources: ResourceAmount[] }) {
-  const slots = Array.from({ length: 9 }, (_, index) => resources[index]);
-
-  return (
-    <div className="grid grid-cols-3 gap-0">
-      {slots.map((resource, index) => (
-        <ResourceIcon
-          key={`${resource?.kind ?? "empty"}-${resource?.id ?? index}-${index}`}
-          resource={resource}
-          size="md"
-          showName={false}
-          className="!h-9 !w-9"
-        />
-      ))}
     </div>
   );
 }

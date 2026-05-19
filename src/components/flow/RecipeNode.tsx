@@ -1,10 +1,10 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { FactoryNode, NodeThroughputResult, Recipe, ResourceAmount } from "@/lib/model/types";
+import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import { formatRate } from "@/lib/model";
-import { ResourceIcon } from "@/components/nei/ResourceIcon";
-import { makeResourceHandleId, type ResourceHandleSide } from "./resource-handles";
+import { NeiRecipeCanvas } from "@/components/nei/NeiRecipeCanvas";
+import { makeResourceHandleId } from "./resource-handles";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -46,23 +46,28 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           {recipe.name}
         </div>
 
-        <div className="mt-1 border-2 border-[#a2a2a2] bg-[#d0d0d0] p-2 shadow-[inset_2px_2px_0_#efefef,inset_-2px_-2px_0_#9a9a9a]">
-          <div className="grid grid-cols-[108px_1fr_108px] items-center gap-3">
-            <NodeGrid side="input" resources={recipe.inputs} />
-            <div className="grid justify-items-center gap-3">
-              <div className="text-[34px] leading-none text-[#efefef] [text-shadow:2px_0_0_#8f8f8f,0_2px_0_#8f8f8f]">
-                =&gt;
-              </div>
-              <div
+        <NeiRecipeCanvas
+          recipe={recipe}
+          scale={2}
+          className="mt-1"
+          renderHandle={(slot) => {
+            const isInput = slot.side === "input";
+            return (
+              <Handle
+                id={makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex)}
+                type={isInput ? "target" : "source"}
+                position={isInput ? Position.Left : Position.Right}
+                title={`${isInput ? "Input" : "Output"}: ${
+                  slot.resource.displayName ?? slot.resource.id
+                }`}
                 className={[
-                  "h-7 w-7 rounded-full border-4 border-b-transparent",
-                  color.spinner,
+                  "!h-3 !w-3 !border-2 !border-white",
+                  isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
                 ].join(" ")}
               />
-            </div>
-            <NodeGrid side="output" resources={recipe.outputs} />
-          </div>
-        </div>
+            );
+          }}
+        />
 
         <div className="mt-1 grid grid-cols-3 gap-1 text-[12px] leading-4 text-black">
           <Stat label="Machines" value={`${projectNode.machineCount}x`} />
@@ -70,53 +75,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           <Stat label="EU/t" value={formatRate(result?.euT ?? 0, 0)} />
         </div>
       </div>
-    </div>
-  );
-}
-
-function NodeGrid({ side, resources }: { side: ResourceHandleSide; resources: ResourceAmount[] }) {
-  const slots = Array.from({ length: 9 }, (_, index) => resources[index]);
-
-  return (
-    <div className="grid grid-cols-3 gap-0">
-      {slots.map((resource, index) => (
-        <NodeSlot
-          key={`${resource?.kind ?? side}-${resource?.id ?? "empty"}-${index}`}
-          side={side}
-          resource={resource}
-          slotIndex={index}
-        />
-      ))}
-    </div>
-  );
-}
-
-function NodeSlot({
-  side,
-  resource,
-  slotIndex,
-}: {
-  side: ResourceHandleSide;
-  resource?: ResourceAmount;
-  slotIndex: number;
-}) {
-  const isInput = side === "input";
-
-  return (
-    <div className="nodrag relative">
-      {resource ? (
-        <Handle
-          id={makeResourceHandleId(side, resource, slotIndex)}
-          type={isInput ? "target" : "source"}
-          position={isInput ? Position.Left : Position.Right}
-          title={`${isInput ? "Input" : "Output"}: ${resource.displayName ?? resource.id}`}
-          className={[
-            "!h-3 !w-3 !border-2 !border-white",
-            isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
-          ].join(" ")}
-        />
-      ) : null}
-      <ResourceIcon resource={resource} size="md" showName={false} className="!h-9 !w-9" />
     </div>
   );
 }
