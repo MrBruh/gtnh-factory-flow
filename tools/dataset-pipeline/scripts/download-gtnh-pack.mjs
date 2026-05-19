@@ -73,13 +73,19 @@ async function downloadFile(url, filePath, headers = {}) {
     throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
   }
 
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  const existing = await fs.stat(filePath).catch(() => undefined);
+  if (existing && contentLength > 0 && existing.size === contentLength) {
+    console.log(`Using existing GTNH pack download: ${formatBytes(existing.size)}.`);
+    return;
+  }
+
   if (!response.body) {
     throw new Error(`Failed to download ${url}: response has no body.`);
   }
 
   const file = await fs.open(filePath, "w");
   const reader = response.body.getReader();
-  const contentLength = Number(response.headers.get("content-length") ?? 0);
   let downloaded = 0;
   let nextProgress = 100 * 1024 * 1024;
 
