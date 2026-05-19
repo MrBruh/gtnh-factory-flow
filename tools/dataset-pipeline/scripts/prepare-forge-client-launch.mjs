@@ -47,7 +47,7 @@ exec java \\
   -Djava.library.path=${shellQuote(nativesDir)} \\
   -Dorg.lwjgl.librarypath=${shellQuote(nativesDir)} \\
   -cp ${shellQuote(classpath)} \\
-  net.minecraft.launchwrapper.Launch \\
+  com.gtnewhorizons.retrofuturabootstrap.Main \\
   --username GTNHFactoryFlow \\
   --version ${shellQuote(minecraftVersion + "-Forge")} \\
   --gameDir ${shellQuote(instanceRoot)} \\
