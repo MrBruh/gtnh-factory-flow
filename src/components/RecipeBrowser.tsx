@@ -64,8 +64,8 @@ export function RecipeBrowser() {
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
         {recipes.length === 0 ? (
           <div className="rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-600">
-            No recipes loaded. Use Import GTNH dataset. The app no longer supports manual recipe
-            entry.
+            The selected GTNH version is loaded automatically, but its real recipe export is not
+            published yet. No manual recipe entry is available.
           </div>
         ) : (
           <div className="space-y-2">

@@ -5,7 +5,6 @@ import { useRef } from "react";
 import {
   cloneImportedProject,
   parseFactoryProjectJson,
-  parseRecipeDatasetJson,
   serializeFactoryProject,
 } from "@/lib/import-export";
 import type { ResourceKind, TargetRate } from "@/lib/model/types";
@@ -17,7 +16,6 @@ interface TopBarProps {
 }
 
 export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
-  const datasetInputRef = useRef<HTMLInputElement>(null);
   const projectInputRef = useRef<HTMLInputElement>(null);
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
@@ -26,7 +24,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
   const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
   const datasetError = useFactoryStore((state) => state.datasetError);
   const setProject = useFactoryStore((state) => state.setProject);
-  const setDataset = useFactoryStore((state) => state.setDataset);
   const setTargetRate = useFactoryStore((state) => state.setTargetRate);
   const recalculate = useFactoryStore((state) => state.recalculate);
 
@@ -71,23 +68,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
     } finally {
       if (projectInputRef.current) {
         projectInputRef.current.value = "";
-      }
-    }
-  };
-
-  const importDatasetJson = async (file: File) => {
-    try {
-      const text = await file.text();
-      const parsedDataset = parseRecipeDatasetJson(text);
-      setDataset(parsedDataset);
-      onNotice(
-        `GTNH dataset loaded: ${parsedDataset.gtnhVersion}, ${parsedDataset.recipes.length.toLocaleString()} recipes.`,
-      );
-    } catch (error) {
-      onNotice(error instanceof Error ? error.message : "Dataset import failed.");
-    } finally {
-      if (datasetInputRef.current) {
-        datasetInputRef.current.value = "";
       }
     }
   };
@@ -166,8 +146,14 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
       <div className="flex flex-wrap gap-2">
         <ToolbarButton
           icon={Database}
-          label="Import dataset file"
-          onClick={() => datasetInputRef.current?.click()}
+          label="Reload dataset"
+          onClick={() => {
+            if (selectedDatasetVersionId) {
+              onLoadDatasetVersion(selectedDatasetVersionId);
+            } else {
+              onNotice("No GTNH dataset version is available yet.");
+            }
+          }}
         />
         <ToolbarButton
           icon={Calculator}
@@ -185,18 +171,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
         <ToolbarButton icon={Download} label="Export plan JSON" onClick={exportJson} />
       </div>
 
-      <input
-        ref={datasetInputRef}
-        type="file"
-        accept="application/json,.json"
-        className="hidden"
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) {
-            void importDatasetJson(file);
-          }
-        }}
-      />
       <input
         ref={projectInputRef}
         type="file"
