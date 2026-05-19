@@ -73,8 +73,40 @@ async function downloadFile(url, filePath, headers = {}) {
     throw new Error(`Failed to download ${url}: ${response.status} ${response.statusText}`);
   }
 
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  await fs.writeFile(filePath, bytes);
+  if (!response.body) {
+    throw new Error(`Failed to download ${url}: response has no body.`);
+  }
+
+  const file = await fs.open(filePath, "w");
+  const reader = response.body.getReader();
+  const contentLength = Number(response.headers.get("content-length") ?? 0);
+  let downloaded = 0;
+  let nextProgress = 100 * 1024 * 1024;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      downloaded += value.byteLength;
+      await file.write(value);
+
+      if (downloaded >= nextProgress) {
+        console.log(
+          `Downloaded ${formatBytes(downloaded)}${
+            contentLength > 0 ? ` / ${formatBytes(contentLength)}` : ""
+          }`,
+        );
+        nextProgress += 100 * 1024 * 1024;
+      }
+    }
+  } finally {
+    await file.close();
+  }
+
+  console.log(`Finished GTNH pack download: ${formatBytes(downloaded)}.`);
 }
 
 async function githubJson(url) {
@@ -99,4 +131,15 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable ${name}.`);
   }
   return value;
+}
+
+function formatBytes(bytes) {
+  const units = ["B", "KiB", "MiB", "GiB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
 }
