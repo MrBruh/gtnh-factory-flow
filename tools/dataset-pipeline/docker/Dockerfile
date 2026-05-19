@@ -1,3 +1,5 @@
+FROM eclipse-temurin:25-jdk-jammy AS jdk25
+
 FROM eclipse-temurin:21-jdk-jammy
 
 ENV DEBIAN_FRONTEND=noninteractive
@@ -31,4 +33,5 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace
+COPY --from=jdk25 /opt/java/openjdk /opt/java/jdk-25
 CMD ["bash"]
