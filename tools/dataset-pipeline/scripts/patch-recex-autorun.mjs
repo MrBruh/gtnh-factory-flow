@@ -320,6 +320,7 @@ import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import javax.imageio.ImageIO;
 
@@ -340,7 +341,9 @@ import com.bigbass.recex.RecipeExporterMod;
 public final class ClientItemStackIconRenderer {
 
     private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 32);
+    private static final int MAX_RENDER_FAILURES = Integer.getInteger("recex.maxIconRenderFailures", 200);
     private static final Map<String, String> CACHE = new ConcurrentHashMap<String, String>();
+    private static final AtomicInteger RENDER_FAILURES = new AtomicInteger(0);
     private static final RenderItem RENDER_ITEM = new RenderItem();
 
     private ClientItemStackIconRenderer() {}
@@ -354,7 +357,10 @@ public final class ClientItemStackIconRenderer {
             String key = stackKey(stack);
             String cached = CACHE.get(key);
             if (cached != null) {
-                return cached;
+                return cached.length() > 0 ? cached : null;
+            }
+            if (RENDER_FAILURES.get() >= MAX_RENDER_FAILURES) {
+                return null;
             }
 
             File outDir = iconDir();
@@ -371,7 +377,14 @@ public final class ClientItemStackIconRenderer {
             CACHE.put(key, filename);
             return filename;
         } catch (Throwable t) {
-            RecipeExporterMod.log.warn("Failed to render icon for " + stack + ": " + t.toString());
+            int failureCount = RENDER_FAILURES.incrementAndGet();
+            CACHE.put(stackKey(stack), "");
+            if (failureCount <= 25 || failureCount == MAX_RENDER_FAILURES) {
+                RecipeExporterMod.log.warn("Failed to render icon for " + stack + ": " + t.toString());
+            }
+            if (failureCount == MAX_RENDER_FAILURES) {
+                RecipeExporterMod.log.warn("Disabling further RecEx icon rendering after " + failureCount + " failures.");
+            }
             return null;
         }
     }
