@@ -75,17 +75,40 @@ start_script="$(realpath "$start_script")"
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Drecex.autorun=true"
 export _JAVA_OPTIONS="${_JAVA_OPTIONS:-} -Xms4G -Xmx${GTNH_EXPORT_MAX_MEMORY}"
 
-set +e
-timeout "$GTNH_EXPORT_TIMEOUT_SECONDS" bash -lc "cd '$instance_root' && bash '$start_script'" 2>&1 | tee "$server_log"
-exit_code=$?
-set -e
+setsid bash -lc "cd '$instance_root' && bash '$start_script'" >"$server_log" 2>&1 &
+server_pid=$!
+tail -n +1 -f "$server_log" &
+tail_pid=$!
 
-if [[ "$exit_code" != "0" && "$exit_code" != "124" ]]; then
-  echo "GTNH export process exited with code $exit_code" >&2
-  exit "$exit_code"
-fi
+raw_recex_json=""
+deadline=$((SECONDS + GTNH_EXPORT_TIMEOUT_SECONDS))
 
-raw_recex_json="$(find "$instance_root/RecEx-Records" -type f -name '*.json' 2>/dev/null | sort | tail -n 1)"
+while (( SECONDS < deadline )); do
+  raw_recex_json="$(find "$instance_root/RecEx-Records" -type f -name '*.json' 2>/dev/null | sort | tail -n 1 || true)"
+  if [[ -n "$raw_recex_json" ]]; then
+    current_size="$(stat -c%s "$raw_recex_json")"
+    sleep 5
+    next_size="$(stat -c%s "$raw_recex_json")"
+    if [[ "$current_size" == "$next_size" ]]; then
+      echo "Detected completed RecEx export: $raw_recex_json"
+      break
+    fi
+  fi
+
+  if ! kill -0 "$server_pid" 2>/dev/null; then
+    wait "$server_pid"
+    server_exit=$?
+    echo "GTNH server process exited with code $server_exit before producing a RecEx export." >&2
+    exit "$server_exit"
+  fi
+
+  sleep 5
+done
+
+kill "$tail_pid" 2>/dev/null || true
+kill -TERM "-$server_pid" 2>/dev/null || true
+sleep 5
+kill -KILL "-$server_pid" 2>/dev/null || true
 
 if [[ -z "$raw_recex_json" ]]; then
   echo "RecEx did not produce a JSON export under $instance_root/RecEx-Records" >&2
