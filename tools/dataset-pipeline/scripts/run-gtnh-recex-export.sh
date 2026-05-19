@@ -42,7 +42,7 @@ git clone --depth 1 https://github.com/GTNewHorizons/RecEx.git "$recex_work"
 node tools/dataset-pipeline/scripts/patch-recex-autorun.mjs "$recex_work"
 
 chmod +x "$recex_work/gradlew"
-(cd "$recex_work" && ./gradlew --no-daemon build)
+(cd "$recex_work" && ./gradlew --no-daemon build -x spotlessJavaCheck)
 recex_jar="$(find "$recex_work/build/libs" -maxdepth 1 -type f -name 'RecEx-*.jar' ! -name '*sources*' ! -name '*dev*' | sort | tail -n 1)"
 cp "$recex_jar" "$instance_root/mods/"
 
