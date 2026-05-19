@@ -21,6 +21,8 @@ routing, layout, metadata, or client/server component boundaries.
 ## GTNH Data Rules
 
 - Never hardcode real GTNH values without a source.
+- Never generate or invent Minecraft item/fluid icons. Use `iconPath` only when it points
+  to a real texture extracted from the selected GTNH build, or leave the slot iconless.
 - Demo values must remain clearly marked as demo data and must not be exposed as the main
   GTNH recipe source.
 - Do not claim demo recipes, fuel values, EU/t, or durations are authoritative.

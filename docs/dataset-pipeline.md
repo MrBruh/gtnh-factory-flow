@@ -32,13 +32,23 @@ artifacts.
      byproducts, and machine metadata into internal JSON.
    - Preserve NEI image paths, slot positions, recipe-map names, and additional machine
      metadata when the exporter provides them.
+   - Extract matching real Minecraft PNG textures from the selected GTNH instance/mod
+     jars and attach `iconPath` only when an actual asset was found.
    - Validate the normalized output with dataset schemas.
 
-5. Compress and hash
+5. Extract real icons
+   - Scan `assets/<modid>/textures/items`, `blocks`, and `fluids` inside the selected
+     GTNH mods.
+   - Copy only matched PNGs into `/public/datasets/gtnh/<version>/textures/`.
+   - Never generate substitute icons. If a GregTech metaitem needs client-side dynamic
+     rendering and no exact PNG exists, leave the icon blank until an item-stack render
+     exporter is added.
+
+6. Compress and hash
    - Write `recipes.json` and optional compressed variants.
    - Generate SHA-256 checksums for every published artifact.
 
-6. Publish only real generated datasets
+7. Publish only real generated datasets
    - Place artifacts under `/public/datasets/gtnh/<version>/`.
    - Update `/public/datasets/gtnh/datasets.manifest.json`.
    - If artifacts are hosted elsewhere, set
@@ -46,7 +56,7 @@ artifacts.
    - Do not point the browser at a private GitHub raw URL that requires a token.
    - Do not publish placeholder versions when the client export fails.
 
-7. Diff versions
+8. Diff versions
    - Compare recipe ids, recipe maps, inputs, outputs, durations, EU/t, circuits, and
      source metadata.
    - Emit machine-readable diffs for UI inspection later.
@@ -77,6 +87,8 @@ The default runner is `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh`.
 - Launches the pack headlessly.
 - Uses the real runtime recipe registry from the GTNH build/exporter.
 - Normalize raw output into the internal `RecipeDataset` shape.
+- Extracts real matching texture PNGs from the selected GTNH mods and stores them next
+  to the dataset.
 - Write `$GTNH_DATASET_OUT_DIR/recipes.json`.
 
 `GTNH_CLIENT_EXPORT_COMMAND` can still override this default with another private runner,

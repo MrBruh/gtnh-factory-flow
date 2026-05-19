@@ -52,7 +52,10 @@ source = source.replace(
 
 await fs.writeFile(modPath, source);
 
-const exporterPath = path.join(repoDir, "src/main/java/com/bigbass/recex/recipes/RecipeExporter.java");
+const exporterPath = path.join(
+  repoDir,
+  "src/main/java/com/bigbass/recex/recipes/RecipeExporter.java",
+);
 let exporterSource = await fs.readFile(exporterPath, "utf8");
 
 exporterSource = exporterSource.replace(

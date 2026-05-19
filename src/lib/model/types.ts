@@ -112,6 +112,8 @@ export interface FactoryEdge {
   id: string;
   source: string;
   target: string;
+  sourceHandle?: string;
+  targetHandle?: string;
   resourceKind: ResourceKind;
   resourceId: ResourceId;
   label?: string;

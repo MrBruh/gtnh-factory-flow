@@ -31,6 +31,8 @@ It currently:
 - Installs a headless runtime with Xvfb for exporters that need a Minecraft client GUI.
 - Runs `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh` by default.
 - Expects the exporter to write `recipes.json` to `$GTNH_DATASET_OUT_DIR`.
+- Extracts matched real PNG textures from the selected GTNH mods into
+  `$GTNH_DATASET_OUT_DIR/textures`.
 - Rebuilds `public/datasets/gtnh/datasets.manifest.json` from generated datasets.
 
 `GTNH_CLIENT_EXPORT_COMMAND` can override the default runner. The override must run the
@@ -57,3 +59,13 @@ world/server is loaded, and that exported files are placed in `RecEx-Records/` a
 Minecraft instance root. The default CI runner builds a patched RecEx jar that auto-runs
 the existing exporter entry point, launches the selected GTNH build, then normalizes
 `RecEx-Records/` into `$GTNH_DATASET_OUT_DIR/recipes.json`.
+
+## Texture Icons
+
+`apply-texture-icons.mjs` scans the selected instance's mod jars and uses only real PNG
+assets from `assets/<modid>/textures/items`, `blocks`, and `fluids`. Matched icons are
+copied under `/datasets/gtnh/<version>/textures/` and referenced through `iconPath`.
+
+The script does not synthesize missing icons. GregTech metaitems and NBT-dependent stacks
+often need Minecraft client-side rendering instead of a static PNG lookup; those resources
+stay iconless until the pipeline has a dedicated item-stack render exporter.

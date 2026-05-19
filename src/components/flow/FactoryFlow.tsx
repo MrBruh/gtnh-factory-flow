@@ -14,6 +14,7 @@ import { useMemo } from "react";
 import { formatRate } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
+import { parseResourceHandleId } from "./resource-handles";
 
 const nodeTypes = {
   recipeNode: RecipeNode,
@@ -72,6 +73,8 @@ export function FactoryFlow() {
           id: edge.id,
           source: edge.source,
           target: edge.target,
+          sourceHandle: edge.sourceHandle,
+          targetHandle: edge.targetHandle,
           type: "smoothstep",
           label,
           markerEnd: {
@@ -95,6 +98,28 @@ export function FactoryFlow() {
 
   const handleConnect = (connection: Connection) => {
     if (connection.source && connection.target) {
+      const sourceHandle = parseResourceHandleId(connection.sourceHandle);
+      const targetHandle = parseResourceHandleId(connection.targetHandle);
+
+      if (
+        sourceHandle?.side === "output" &&
+        targetHandle?.side === "input" &&
+        sourceHandle.kind === targetHandle.kind &&
+        sourceHandle.resourceId === targetHandle.resourceId
+      ) {
+        connectNodes(connection.source, connection.target, {
+          kind: sourceHandle.kind,
+          id: sourceHandle.resourceId,
+          sourceHandle: connection.sourceHandle ?? undefined,
+          targetHandle: connection.targetHandle ?? undefined,
+        });
+        return;
+      }
+
+      if (connection.sourceHandle || connection.targetHandle) {
+        return;
+      }
+
       connectNodes(connection.source, connection.target);
     }
   };

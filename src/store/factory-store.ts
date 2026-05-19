@@ -10,6 +10,7 @@ import type {
   FactoryNode,
   FactoryProject,
   Recipe,
+  ResourceAmount,
   TargetRate,
   ThroughputResult,
 } from "@/lib/model/types";
@@ -43,7 +44,14 @@ interface FactoryStore {
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   deleteNode: (nodeId: string) => void;
   setNodePosition: (nodeId: string, position: FactoryNode["position"]) => void;
-  connectNodes: (sourceNodeId: string, targetNodeId: string) => void;
+  connectNodes: (
+    sourceNodeId: string,
+    targetNodeId: string,
+    resource?: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+      sourceHandle?: string;
+      targetHandle?: string;
+    },
+  ) => void;
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
   selectFuelProfile: (fuelProfileId: string) => void;
@@ -207,9 +215,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setNodePosition: (nodeId, position) => {
     get().updateNode(nodeId, { position });
   },
-  connectNodes: (sourceNodeId, targetNodeId) => {
+  connectNodes: (sourceNodeId, targetNodeId, resource) => {
     set((state) => {
-      const edge = buildEdgeBetweenNodes(state.project, sourceNodeId, targetNodeId);
+      const edge = buildEdgeBetweenNodes(state.project, sourceNodeId, targetNodeId, resource);
       if (!edge) {
         return state;
       }
@@ -219,7 +227,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           existing.source === edge.source &&
           existing.target === edge.target &&
           existing.resourceKind === edge.resourceKind &&
-          existing.resourceId === edge.resourceId,
+          existing.resourceId === edge.resourceId &&
+          existing.sourceHandle === edge.sourceHandle &&
+          existing.targetHandle === edge.targetHandle,
       );
       if (duplicate) {
         return state;
@@ -284,6 +294,10 @@ function buildEdgeBetweenNodes(
   project: FactoryProject,
   sourceNodeId: string,
   targetNodeId: string,
+  selectedResource?: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+    sourceHandle?: string;
+    targetHandle?: string;
+  },
 ): FactoryEdge | undefined {
   const sourceNode = project.nodes.find((node) => node.id === sourceNodeId);
   const targetNode = project.nodes.find((node) => node.id === targetNodeId);
@@ -294,10 +308,16 @@ function buildEdgeBetweenNodes(
     return undefined;
   }
 
-  const matchedOutput =
-    sourceRecipe.outputs.find((output) =>
-      targetRecipe.inputs.some((input) => getResourceKey(input) === getResourceKey(output)),
-    ) ?? primaryOutput(sourceRecipe);
+  const matchedOutput = selectedResource
+    ? sourceRecipe.outputs.find(
+        (output) =>
+          output.kind === selectedResource.kind &&
+          output.id === selectedResource.id &&
+          targetRecipe.inputs.some((input) => getResourceKey(input) === getResourceKey(output)),
+      )
+    : (sourceRecipe.outputs.find((output) =>
+        targetRecipe.inputs.some((input) => getResourceKey(input) === getResourceKey(output)),
+      ) ?? primaryOutput(sourceRecipe));
 
   if (!matchedOutput) {
     return undefined;
@@ -307,6 +327,8 @@ function buildEdgeBetweenNodes(
     id: createId("edge"),
     source: sourceNode.id,
     target: targetNode.id,
+    sourceHandle: selectedResource?.sourceHandle,
+    targetHandle: selectedResource?.targetHandle,
     resourceKind: matchedOutput.kind,
     resourceId: matchedOutput.id,
     label: resourceLabel(matchedOutput),

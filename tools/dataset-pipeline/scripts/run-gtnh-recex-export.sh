@@ -119,3 +119,4 @@ fi
 
 cp "$raw_recex_json" "$GTNH_RAW_EXPORT_DIR/recex-export.json"
 node tools/dataset-pipeline/scripts/normalize-recex-export.mjs "$raw_recex_json" "$GTNH_DATASET_OUT_DIR/recipes.json"
+node tools/dataset-pipeline/scripts/apply-texture-icons.mjs "$instance_root" "$GTNH_DATASET_OUT_DIR/recipes.json" "$GTNH_DATASET_OUT_DIR"

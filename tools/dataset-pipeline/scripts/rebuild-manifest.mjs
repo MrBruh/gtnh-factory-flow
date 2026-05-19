@@ -87,6 +87,8 @@ function getRecipeDatasetPath(versionId) {
 
 async function readRecipeDataset(filePath) {
   const data = await fs.readFile(filePath);
-  const source = filePath.endsWith(".gz") ? gunzipSync(data).toString("utf8") : data.toString("utf8");
+  const source = filePath.endsWith(".gz")
+    ? gunzipSync(data).toString("utf8")
+    : data.toString("utf8");
   return JSON.parse(source);
 }

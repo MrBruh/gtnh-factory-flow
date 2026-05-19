@@ -1,0 +1,301 @@
+import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import crypto from "node:crypto";
+import { spawnSync } from "node:child_process";
+
+const instanceRoot = process.argv[2];
+const datasetPath = process.argv[3];
+const outDir = process.argv[4];
+
+if (!instanceRoot || !datasetPath || !outDir) {
+  throw new Error(
+    "Usage: apply-texture-icons.mjs <gtnh-instance-root> <recipes.json> <dataset-output-dir>",
+  );
+}
+
+if (!existsSync(datasetPath)) {
+  throw new Error(`Dataset not found: ${datasetPath}`);
+}
+
+const dataset = JSON.parse(await fs.readFile(datasetPath, "utf8"));
+const versionId = dataset.datasetVersionId;
+const textureOutDir = path.join(outDir, "textures");
+const publicTextureBase = `/datasets/gtnh/${versionId}/textures`;
+
+console.log("Indexing real GTNH texture assets from mod jars.");
+const textureIndex = await buildTextureIndex(instanceRoot);
+console.log(`Indexed ${textureIndex.byPath.size} texture PNGs from ${textureIndex.jarCount} jars.`);
+
+await fs.rm(textureOutDir, { recursive: true, force: true });
+await fs.mkdir(textureOutDir, { recursive: true });
+
+const resourcesByKey = new Map();
+for (const resource of dataset.resources ?? []) {
+  resourcesByKey.set(resourceKey(resource), resource);
+}
+for (const recipe of dataset.recipes ?? []) {
+  for (const resource of [...(recipe.inputs ?? []), ...(recipe.outputs ?? [])]) {
+    const key = resourceKey(resource);
+    if (!resourcesByKey.has(key)) {
+      resourcesByKey.set(key, resource);
+    }
+  }
+}
+
+const iconsByKey = new Map();
+let matched = 0;
+let missing = 0;
+
+for (const [key, resource] of resourcesByKey) {
+  const match = findTexture(resource, textureIndex);
+  if (!match) {
+    missing += 1;
+    continue;
+  }
+
+  const iconPath = await extractTexture(resource, match, textureOutDir, publicTextureBase);
+  iconsByKey.set(key, iconPath);
+  matched += 1;
+}
+
+for (const resource of dataset.resources ?? []) {
+  applyIcon(resource, iconsByKey);
+}
+for (const recipe of dataset.recipes ?? []) {
+  for (const resource of [...(recipe.inputs ?? []), ...(recipe.outputs ?? [])]) {
+    applyIcon(resource, iconsByKey);
+  }
+}
+
+await fs.writeFile(datasetPath, `${JSON.stringify(dataset, null, 2)}\n`);
+await fs.writeFile(
+  path.join(textureOutDir, "icon-report.json"),
+  `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      datasetVersionId: versionId,
+      generatedAt: new Date().toISOString(),
+      source: "minecraft-asset-pngs",
+      matchedResources: matched,
+      missingResources: missing,
+      notes:
+        "Only real PNG files extracted from the GTNH instance/mod jars are used. Missing icons are intentionally left blank; no generated or guessed item art is published.",
+    },
+    null,
+    2,
+  )}\n`,
+);
+
+console.log(`Applied ${matched} real texture icons. ${missing} resources remain iconless.`);
+
+async function buildTextureIndex(root) {
+  const jars = (await findFiles(path.join(root, "mods"), ".jar")).sort();
+  const byPath = new Map();
+  const byStem = new Map();
+  const byLooseStem = new Map();
+
+  for (const jar of jars) {
+    const list = spawnSync("unzip", ["-Z", "-1", jar], {
+      encoding: "utf8",
+      maxBuffer: 50 * 1024 * 1024,
+    });
+
+    if (list.status !== 0) {
+      continue;
+    }
+
+    for (const entry of list.stdout.split(/\r?\n/)) {
+      if (!isTextureEntry(entry)) {
+        continue;
+      }
+
+      const lowerEntry = entry.toLowerCase();
+      const asset = parseAssetTexturePath(lowerEntry);
+      if (!asset) {
+        continue;
+      }
+
+      const texture = { jar, entry, namespace: asset.namespace, stem: asset.stem };
+      byPath.set(lowerEntry, texture);
+      addFirst(byStem, `${asset.namespace}:${asset.stem}`, texture);
+      addFirst(byLooseStem, asset.stem, texture);
+    }
+  }
+
+  return { byPath, byStem, byLooseStem, jarCount: jars.length };
+}
+
+function findTexture(resource, textureIndex) {
+  const parsed = parseResourceId(resource.id);
+  const candidates = textureCandidates(resource, parsed);
+
+  for (const candidate of candidates.fullPaths) {
+    const match = textureIndex.byPath.get(candidate.toLowerCase());
+    if (match) {
+      return match;
+    }
+  }
+
+  if (parsed.namespace) {
+    for (const stem of candidates.stems) {
+      const match = textureIndex.byStem.get(`${parsed.namespace}:${stem.toLowerCase()}`);
+      if (match) {
+        return match;
+      }
+    }
+  }
+
+  for (const stem of candidates.looseStems) {
+    const match = textureIndex.byLooseStem.get(stem.toLowerCase());
+    if (match) {
+      return match;
+    }
+  }
+
+  return undefined;
+}
+
+function textureCandidates(resource, parsed) {
+  const namespace = parsed.namespace;
+  const name = parsed.name;
+  const stems = unique([
+    name,
+    name.replace(/^item\./i, ""),
+    name.replace(/^tile\./i, ""),
+    name.replace(/\./g, "_"),
+    name.replace(/\./g, "/"),
+    name.split(".").at(-1),
+    resource.displayName ? slug(resource.displayName) : "",
+  ]).filter(Boolean);
+
+  const fullPaths = [];
+  if (namespace) {
+    const textureFolders =
+      resource.kind === "fluid"
+        ? ["fluids", "fluid", "items", "blocks"]
+        : ["items", "item", "blocks", "block"];
+
+    for (const folder of textureFolders) {
+      for (const stem of stems) {
+        fullPaths.push(`assets/${namespace}/textures/${folder}/${stem}.png`);
+      }
+    }
+  }
+
+  const fluidStems =
+    resource.kind === "fluid"
+      ? stems.flatMap((stem) => [stem, `${stem}_still`, `still_${stem}`, `${stem}.still`])
+      : [];
+
+  return {
+    fullPaths,
+    stems: unique([...stems, ...fluidStems]),
+    looseStems: resource.kind === "fluid" ? unique([...stems, ...fluidStems]) : [],
+  };
+}
+
+async function extractTexture(resource, texture, textureOutDir, publicTextureBase) {
+  const keyHash = crypto
+    .createHash("sha1")
+    .update(`${resource.kind}:${resource.id}:${texture.entry}`)
+    .digest("hex")
+    .slice(0, 12);
+  const filename = `${safeFileName(resource.id)}-${keyHash}.png`;
+  const relativePath = path.posix.join(resource.kind, filename);
+  const outputPath = path.join(textureOutDir, resource.kind, filename);
+
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+
+  const extract = spawnSync("unzip", ["-p", texture.jar, texture.entry], {
+    encoding: "buffer",
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  if (extract.status !== 0 || extract.stdout.length === 0) {
+    throw new Error(`Failed to extract ${texture.entry} from ${texture.jar}`);
+  }
+
+  await fs.writeFile(outputPath, extract.stdout);
+  return `${publicTextureBase}/${relativePath}`;
+}
+
+function applyIcon(resource, iconsByKey) {
+  const iconPath = iconsByKey.get(resourceKey(resource));
+  if (iconPath) {
+    resource.iconPath = iconPath;
+  }
+}
+
+async function findFiles(root, extension) {
+  if (!existsSync(root)) {
+    return [];
+  }
+
+  const found = [];
+  for (const entry of await fs.readdir(root, { withFileTypes: true })) {
+    const fullPath = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      found.push(...(await findFiles(fullPath, extension)));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith(extension)) {
+      found.push(fullPath);
+    }
+  }
+  return found;
+}
+
+function isTextureEntry(entry) {
+  const lower = entry.toLowerCase();
+  return lower.startsWith("assets/") && lower.includes("/textures/") && lower.endsWith(".png");
+}
+
+function parseAssetTexturePath(entry) {
+  const match = entry.match(/^assets\/([^/]+)\/textures\/(?:items?|blocks?|fluids?)\/(.+)\.png$/);
+  if (!match) {
+    return undefined;
+  }
+  return {
+    namespace: match[1],
+    stem: match[2],
+  };
+}
+
+function parseResourceId(id) {
+  const withoutMeta = String(id).split("@")[0];
+  const separator = withoutMeta.indexOf(":");
+  if (separator === -1) {
+    return { namespace: undefined, name: withoutMeta.toLowerCase() };
+  }
+  return {
+    namespace: withoutMeta.slice(0, separator).toLowerCase(),
+    name: withoutMeta.slice(separator + 1).toLowerCase(),
+  };
+}
+
+function resourceKey(resource) {
+  return `${resource.kind}:${resource.id}`;
+}
+
+function addFirst(map, key, value) {
+  if (!map.has(key)) {
+    map.set(key, value);
+  }
+}
+
+function unique(values) {
+  return [...new Set(values.map((value) => String(value ?? "").trim()).filter(Boolean))];
+}
+
+function slug(value) {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9./_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function safeFileName(value) {
+  return (
+    slug(value)
+      .replace(/[/:@]+/g, "_")
+      .slice(0, 90) || "resource"
+  );
+}

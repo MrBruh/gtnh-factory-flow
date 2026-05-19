@@ -1,8 +1,10 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
-import { formatRate, formatResourceRate, makeResourceKey, primaryOutput } from "@/lib/model";
+import type { FactoryNode, NodeThroughputResult, Recipe, ResourceAmount } from "@/lib/model/types";
+import { formatRate } from "@/lib/model";
+import { ResourceIcon } from "@/components/nei/ResourceIcon";
+import { makeResourceHandleId, type ResourceHandleSide } from "./resource-handles";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -14,100 +16,132 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
-  const primary = primaryOutput(recipe);
-  const primaryFlow = primary
-    ? result?.outputs[makeResourceKey(primary.kind, primary.id)]
-    : undefined;
   const utilization = result?.utilization ?? 0;
   const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
-  const progressWidth = `${Math.min(Math.max(utilizationPercent, 0), 100)}%`;
   const status = result?.status ?? "underutilized";
   const color = getStatusColor(status);
 
   return (
     <div
       className={[
-        "min-w-[240px] rounded border bg-white shadow-sm",
-        selected ? "ring-2 ring-neutral-900" : "",
-        color.border,
+        "w-[360px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
+        selected ? "ring-2 ring-cyan-300" : "",
+        color.ring,
       ].join(" ")}
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        className="!h-3 !w-3 !border-2 !border-white !bg-neutral-500"
-      />
-      <div className={["rounded-t px-3 py-2", color.header].join(" ")}>
-        <div className="truncate text-sm font-semibold text-neutral-950">{recipe.name}</div>
-        <div className="mt-0.5 flex items-center justify-between gap-2 text-xs text-neutral-600">
-          <span className="truncate">{recipe.machineType}</span>
-          <span>{projectNode.machineCount}x</span>
-        </div>
-      </div>
-      <div className="space-y-2 px-3 py-2 text-xs text-neutral-700">
-        <div className="grid grid-cols-2 gap-2">
-          <Metric label="Util" value={`${formatRate(utilizationPercent, 1)}%`} />
-          <Metric label="EU/t" value={formatRate(result?.euT ?? 0, 0)} />
-        </div>
-        <div>
-          <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-wide text-neutral-500">
-            <span>Primary output</span>
-            <span>{formatResourceRate(primaryFlow)}</span>
+      <div className="px-2 pb-2 pt-1">
+        <div className="grid grid-cols-[22px_minmax(0,1fr)_22px] items-center">
+          <div className="h-7 border-2 border-[#252525] bg-[#8f8f8f] text-center text-[16px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]">
+            &lt;
           </div>
-          <div className="h-2 overflow-hidden rounded bg-neutral-200">
-            <div
-              className={["h-full rounded", color.bar].join(" ")}
-              style={{ width: progressWidth }}
-            />
+          <div className="h-7 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[17px] leading-[24px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+            {recipe.machineType}
+          </div>
+          <div className="h-7 border-2 border-[#252525] bg-[#8f8f8f] text-center text-[16px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]">
+            &gt;
           </div>
         </div>
+
+        <div className="h-6 truncate border-x-2 border-b-2 border-[#555] bg-[#a7a7a7] px-2 text-center text-[14px] leading-5 text-white shadow-[inset_2px_0_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:1px_1px_0_#3f3f3f]">
+          {recipe.name}
+        </div>
+
+        <div className="mt-1 border-2 border-[#a2a2a2] bg-[#d0d0d0] p-2 shadow-[inset_2px_2px_0_#efefef,inset_-2px_-2px_0_#9a9a9a]">
+          <div className="grid grid-cols-[108px_1fr_108px] items-center gap-3">
+            <NodeGrid side="input" resources={recipe.inputs} />
+            <div className="grid justify-items-center gap-3">
+              <div className="text-[34px] leading-none text-[#efefef] [text-shadow:2px_0_0_#8f8f8f,0_2px_0_#8f8f8f]">
+                =&gt;
+              </div>
+              <div
+                className={[
+                  "h-7 w-7 rounded-full border-4 border-b-transparent",
+                  color.spinner,
+                ].join(" ")}
+              />
+            </div>
+            <NodeGrid side="output" resources={recipe.outputs} />
+          </div>
+        </div>
+
+        <div className="mt-1 grid grid-cols-3 gap-1 text-[12px] leading-4 text-black">
+          <Stat label="Machines" value={`${projectNode.machineCount}x`} />
+          <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
+          <Stat label="EU/t" value={formatRate(result?.euT ?? 0, 0)} />
+        </div>
       </div>
-      <Handle
-        type="source"
-        position={Position.Right}
-        className="!h-3 !w-3 !border-2 !border-white !bg-neutral-700"
-      />
     </div>
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function NodeGrid({ side, resources }: { side: ResourceHandleSide; resources: ResourceAmount[] }) {
+  const slots = Array.from({ length: 9 }, (_, index) => resources[index]);
+
   return (
-    <div className="rounded border border-neutral-200 bg-neutral-50 px-2 py-1">
-      <div className="text-[10px] uppercase tracking-wide text-neutral-500">{label}</div>
-      <div className="truncate font-semibold text-neutral-900">{value}</div>
+    <div className="grid grid-cols-3 gap-0">
+      {slots.map((resource, index) => (
+        <NodeSlot
+          key={`${resource?.kind ?? side}-${resource?.id ?? "empty"}-${index}`}
+          side={side}
+          resource={resource}
+          slotIndex={index}
+        />
+      ))}
+    </div>
+  );
+}
+
+function NodeSlot({
+  side,
+  resource,
+  slotIndex,
+}: {
+  side: ResourceHandleSide;
+  resource?: ResourceAmount;
+  slotIndex: number;
+}) {
+  const isInput = side === "input";
+
+  return (
+    <div className="nodrag relative">
+      {resource ? (
+        <Handle
+          id={makeResourceHandleId(side, resource, slotIndex)}
+          type={isInput ? "target" : "source"}
+          position={isInput ? Position.Left : Position.Right}
+          title={`${isInput ? "Input" : "Output"}: ${resource.displayName ?? resource.id}`}
+          className={[
+            "!h-3 !w-3 !border-2 !border-white",
+            isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
+          ].join(" ")}
+        />
+      ) : null}
+      <ResourceIcon resource={resource} size="md" showName={false} className="!h-9 !w-9" />
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="truncate text-[9px] uppercase text-[#424242]">{label}</div>
+      <div className="truncate font-bold">{value}</div>
     </div>
   );
 }
 
 function getStatusColor(status: NodeThroughputResult["status"]) {
   if (status === "balanced") {
-    return {
-      border: "border-emerald-500",
-      header: "bg-emerald-50",
-      bar: "bg-emerald-500",
-    };
+    return { ring: "border-emerald-500", spinner: "border-yellow-300" };
   }
 
   if (status === "bottleneck" || status === "missing-recipe") {
-    return {
-      border: "border-red-500",
-      header: "bg-red-50",
-      bar: "bg-red-500",
-    };
+    return { ring: "border-red-500", spinner: "border-red-400" };
   }
 
   if (status === "disabled") {
-    return {
-      border: "border-neutral-300 opacity-70",
-      header: "bg-neutral-100",
-      bar: "bg-neutral-400",
-    };
+    return { ring: "opacity-70", spinner: "border-neutral-500" };
   }
 
-  return {
-    border: "border-amber-500",
-    header: "bg-amber-50",
-    bar: "bg-amber-500",
-  };
+  return { ring: "border-amber-500", spinner: "border-yellow-300" };
 }

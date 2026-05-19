@@ -113,6 +113,9 @@ jobs:
         run: |
           mkdir -p .pipeline/dataset-artifact/${{ matrix.id }}
           cp public/datasets/gtnh/${{ matrix.id }}/recipes.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/recipes.json.gz
+          if [ -d public/datasets/gtnh/${{ matrix.id }}/textures ]; then
+            cp -R public/datasets/gtnh/${{ matrix.id }}/textures .pipeline/dataset-artifact/${{ matrix.id }}/textures
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
