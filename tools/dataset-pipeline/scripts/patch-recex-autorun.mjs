@@ -51,3 +51,16 @@ source = source.replace(
 );
 
 await fs.writeFile(modPath, source);
+
+const exporterPath = path.join(repoDir, "src/main/java/com/bigbass/recex/recipes/RecipeExporter.java");
+let exporterSource = await fs.readFile(exporterPath, "utf8");
+
+exporterSource = exporterSource.replace(
+  "        out.mInputChances = recipe.mInputChances;\n",
+  [
+    "        // GTNH stable 2.8.x runtime GregTech does not expose mInputChances.",
+    "        // Keep the exporter compatible with both stable and newer daily builds.",
+  ].join("\n") + "\n",
+);
+
+await fs.writeFile(exporterPath, exporterSource);

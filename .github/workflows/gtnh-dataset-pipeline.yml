@@ -104,7 +104,8 @@ jobs:
         with:
           name: gtnh-export-logs-${{ matrix.id }}
           path: |
-            .pipeline/raw-export/${{ matrix.id }}/
+            .pipeline/raw-export/${{ matrix.id }}/*.log
+            .pipeline/raw-export/${{ matrix.id }}/recex-export.json
             .pipeline/${{ matrix.id }}.pipeline.json
 
       - uses: actions/upload-artifact@v4
