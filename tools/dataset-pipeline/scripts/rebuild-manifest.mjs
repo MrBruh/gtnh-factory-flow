@@ -1,6 +1,8 @@
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
+import { gunzipSync } from "node:zlib";
 
 const rootDir = path.join("public", "datasets", "gtnh");
 const entries = existsSync(rootDir) ? await fs.readdir(rootDir, { withFileTypes: true }) : [];
@@ -13,19 +15,25 @@ for (const entry of entries) {
 
   await removeIfExists(path.join(rootDir, entry.name, ".pipeline-status.json"));
 
-  const recipesPath = path.join(rootDir, entry.name, "recipes.json");
-  if (!existsSync(recipesPath)) {
+  const recipesPath = getRecipeDatasetPath(entry.name);
+  if (!recipesPath) {
     continue;
   }
 
-  const dataset = JSON.parse(await fs.readFile(recipesPath, "utf8"));
+  const dataset = await readRecipeDataset(recipesPath);
+  const checksumSha256 = crypto
+    .createHash("sha256")
+    .update(await fs.readFile(recipesPath))
+    .digest("hex");
+
   versions.push({
     id: dataset.datasetVersionId,
     gtnhVersion: dataset.gtnhVersion,
     channel: inferChannel(dataset.datasetVersionId),
     publishedAt: dataset.generatedAt,
     manifestPath: "/datasets/gtnh/datasets.manifest.json",
-    recipeDatasetPath: `/datasets/gtnh/${dataset.datasetVersionId}/recipes.json`,
+    recipeDatasetPath: `/datasets/gtnh/${dataset.datasetVersionId}/${path.basename(recipesPath)}`,
+    checksumSha256,
     sourceInfo: dataset.sourceInfo,
   });
 }
@@ -61,4 +69,24 @@ async function removeIfExists(filePath) {
   if (existsSync(filePath)) {
     await fs.rm(filePath, { force: true });
   }
+}
+
+function getRecipeDatasetPath(versionId) {
+  const gzipPath = path.join(rootDir, versionId, "recipes.json.gz");
+  if (existsSync(gzipPath)) {
+    return gzipPath;
+  }
+
+  const jsonPath = path.join(rootDir, versionId, "recipes.json");
+  if (existsSync(jsonPath)) {
+    return jsonPath;
+  }
+
+  return undefined;
+}
+
+async function readRecipeDataset(filePath) {
+  const data = await fs.readFile(filePath);
+  const source = filePath.endsWith(".gz") ? gunzipSync(data).toString("utf8") : data.toString("utf8");
+  return JSON.parse(source);
 }

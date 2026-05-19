@@ -27,7 +27,7 @@ export async function fetchRecipeDatasetVersion(
   const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
   const response = await fetch(withCacheBust(datasetUrl), {
     headers: {
-      Accept: "application/json",
+      Accept: "application/json, application/gzip, application/octet-stream",
     },
   });
 
@@ -35,7 +35,7 @@ export async function fetchRecipeDatasetVersion(
     throw new Error(`Could not load dataset ${version.id} (${response.status}).`);
   }
 
-  const dataset = parseRecipeDatasetJson(await response.text());
+  const dataset = parseRecipeDatasetJson(await readDatasetResponseText(response, datasetUrl));
 
   if (dataset.datasetVersionId !== version.id) {
     throw new Error(
@@ -61,6 +61,19 @@ export function resolveDatasetUrl(manifestUrl: string, datasetPath: string): str
   }
 
   return new URL(datasetPath, new URL(manifestUrl, window.location.origin)).toString();
+}
+
+async function readDatasetResponseText(response: Response, datasetUrl: string): Promise<string> {
+  if (!datasetUrl.endsWith(".gz")) {
+    return response.text();
+  }
+
+  if (!response.body || !("DecompressionStream" in globalThis)) {
+    throw new Error("This browser cannot decompress GTNH dataset files.");
+  }
+
+  const stream = response.body.pipeThrough(new DecompressionStream("gzip"));
+  return new Response(stream).text();
 }
 
 function withCacheBust(url: string): string {

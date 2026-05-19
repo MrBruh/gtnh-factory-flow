@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 const channel = requiredEnv("GTNH_CHANNEL");
 const versionId = requiredEnv("GTNH_VERSION_ID");
@@ -69,12 +70,20 @@ if (!existsSync(recipeDatasetPath)) {
 const dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
 validateDataset(dataset);
 
+const compactDatasetJson = JSON.stringify(dataset);
+const compressedRecipeDatasetPath = `${recipeDatasetPath}.gz`;
+await fs.writeFile(compressedRecipeDatasetPath, gzipSync(compactDatasetJson, { level: 9 }));
+await fs.rm(recipeDatasetPath, { force: true });
+
 await writePipelineRecord({
   ...pipelineRecord,
   status: "generated",
   recipeCount: dataset.recipes.length,
   resourceCount: dataset.resources.length,
   recipeMapCount: dataset.recipeMaps.length,
+  recipeDatasetPath: compressedRecipeDatasetPath,
+  uncompressedSizeBytes: Buffer.byteLength(compactDatasetJson),
+  compressedSizeBytes: (await fs.stat(compressedRecipeDatasetPath)).size,
 });
 
 function validateDataset(dataset) {

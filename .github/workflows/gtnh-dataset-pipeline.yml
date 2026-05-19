@@ -108,12 +108,16 @@ jobs:
             .pipeline/raw-export/${{ matrix.id }}/recex-export.json
             .pipeline/${{ matrix.id }}.pipeline.json
 
+      - name: Stage dataset artifact
+        run: |
+          mkdir -p .pipeline/dataset-artifact/${{ matrix.id }}
+          cp public/datasets/gtnh/${{ matrix.id }}/recipes.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/recipes.json.gz
+
       - uses: actions/upload-artifact@v4
         with:
           name: gtnh-dataset-${{ matrix.id }}
           path: |
-            public/datasets/gtnh/${{ matrix.id }}/
-            .pipeline/${{ matrix.id }}.pipeline.json
+            .pipeline/dataset-artifact/
 
   publish:
     name: Publish generated datasets
@@ -127,7 +131,16 @@ jobs:
         with:
           pattern: gtnh-dataset-*
           merge-multiple: true
-          path: public/datasets/gtnh
+          path: .pipeline/downloaded-datasets
+
+      - name: Stage downloaded datasets
+        run: |
+          mkdir -p public/datasets/gtnh
+          if [ -d .pipeline/downloaded-datasets/public/datasets/gtnh ]; then
+            cp -R .pipeline/downloaded-datasets/public/datasets/gtnh/. public/datasets/gtnh/
+          else
+            cp -R .pipeline/downloaded-datasets/. public/datasets/gtnh/
+          fi
 
       - uses: actions/setup-node@v4
         with:
