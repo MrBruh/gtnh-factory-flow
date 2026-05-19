@@ -13,7 +13,7 @@ if (!instanceRootArg || !runtimeDirArg) {
 const instanceRoot = path.resolve(instanceRootArg);
 const runtimeDir = path.resolve(runtimeDirArg);
 const minecraftVersion = process.env.GTNH_MINECRAFT_VERSION ?? "1.7.10";
-const javaMemory = process.env.GTNH_EXPORT_MAX_MEMORY ?? "12G";
+const javaMemory = process.env.GTNH_EXPORT_MAX_MEMORY ?? "6G";
 const assetsDir = path.join(runtimeDir, "assets");
 const librariesDir = path.join(runtimeDir, "libraries");
 const versionsDir = path.join(runtimeDir, "versions", minecraftVersion);

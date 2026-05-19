@@ -96,7 +96,7 @@ jobs:
           GTNH_SOURCE_REF: ${{ matrix.sourceRef }}
           GTNH_SOURCE_URL: ${{ matrix.sourceUrl }}
           GTNH_CLIENT_EXPORT_COMMAND: ${{ secrets.GTNH_CLIENT_EXPORT_COMMAND }}
-          GTNH_EXPORT_MAX_MEMORY: "12G"
+          GTNH_EXPORT_MAX_MEMORY: "6G"
           GTNH_EXPORT_PACK_KIND: "client"
           GTNH_RENDER_STACK_ICONS: "true"
           GITHUB_TOKEN: ${{ github.token }}
