@@ -20,6 +20,10 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const browseResource = useFactoryStore((state) => state.browseResource);
   const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
+  const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
+  const selectResourceConnectionSlot = useFactoryStore(
+    (state) => state.selectResourceConnectionSlot,
+  );
   const utilization = result?.utilization ?? 0;
   const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
   const status = result?.status ?? "underutilized";
@@ -28,7 +32,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   return (
     <div
       className={[
-        "w-[368px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
+        "group w-[368px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
         selected ? "ring-2 ring-cyan-300" : "",
         color.ring,
       ].join(" ")}
@@ -56,37 +60,78 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           recipe={recipe}
           scale={2}
           compact
-          onSlotClick={(slot, mode) =>
-            browseResource(
-              {
-                kind: slot.resource.kind,
-                id: slot.resource.id,
-                displayName: slot.resource.displayName,
-                iconPath: slot.resource.iconPath,
-                anchorNodeId: projectNode.id,
-              },
-              mode,
-            )
-          }
+          onSlotClick={(slot, mode) => {
+            if (mode === "uses") {
+              browseResource(
+                {
+                  kind: slot.resource.kind,
+                  id: slot.resource.id,
+                  displayName: slot.resource.displayName,
+                  iconPath: slot.resource.iconPath,
+                  anchorNodeId: projectNode.id,
+                },
+                mode,
+              );
+              return;
+            }
+
+            if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
+              return;
+            }
+
+            selectResourceConnectionSlot({
+              nodeId: projectNode.id,
+              side: slot.side,
+              kind: slot.resource.kind,
+              resourceId: slot.resource.id,
+              displayName: slot.resource.displayName,
+              iconPath: slot.resource.iconPath,
+              handleId: makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex),
+            });
+          }}
           renderHandle={(slot) => {
             const isInput = slot.side === "input";
             if (isInput && !isRecipeInputConsumed(slot.resource)) {
               return null;
             }
+            const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+            const slotState = getConnectionSlotState(
+              pendingResourceConnection,
+              projectNode.id,
+              slot.side,
+              slot.resource.kind,
+              slot.resource.id,
+              handleId,
+            );
+            const shouldShowHandle = selected || slotState !== "idle";
 
             return (
-              <Handle
-                id={makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex)}
-                type={isInput ? "target" : "source"}
-                position={isInput ? Position.Left : Position.Right}
-                title={`${isInput ? "Input" : "Output"}: ${
-                  slot.resource.displayName ?? slot.resource.id
-                }`}
-                className={[
-                  "!h-3 !w-3 !border-2 !border-white",
-                  isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
-                ].join(" ")}
-              />
+              <>
+                {slotState !== "idle" ? (
+                  <span
+                    className={[
+                      "pointer-events-none absolute inset-0 z-20",
+                      slotState === "selected" ? "ring-2 ring-amber-300" : "",
+                      slotState === "compatible" ? "ring-2 ring-cyan-300" : "",
+                    ].join(" ")}
+                  />
+                ) : null}
+                <Handle
+                  id={handleId}
+                  type={isInput ? "target" : "source"}
+                  position={isInput ? Position.Left : Position.Right}
+                  title={`${isInput ? "Input" : "Output"}: ${
+                    slot.resource.displayName ?? slot.resource.id
+                  }`}
+                  className={[
+                    "!h-3 !w-3 !border-2 !border-white transition-opacity",
+                    shouldShowHandle
+                      ? "!opacity-100"
+                      : "!opacity-0 group-hover:!opacity-100",
+                    isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
+                  ].join(" ")}
+                />
+              </>
             );
           }}
         />
@@ -99,6 +144,36 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
       </div>
     </div>
   );
+}
+
+type ConnectionSlotState = "idle" | "selected" | "compatible";
+
+function getConnectionSlotState(
+  pending: ReturnType<typeof useFactoryStore.getState>["pendingResourceConnection"],
+  nodeId: string,
+  side: "input" | "output",
+  kind: string,
+  resourceId: string,
+  handleId: string,
+): ConnectionSlotState {
+  if (!pending) {
+    return "idle";
+  }
+
+  if (pending.nodeId === nodeId && pending.handleId === handleId) {
+    return "selected";
+  }
+
+  if (
+    pending.nodeId !== nodeId &&
+    pending.side !== side &&
+    pending.kind === kind &&
+    pending.resourceId === resourceId
+  ) {
+    return "compatible";
+  }
+
+  return "idle";
 }
 
 function Stat({ label, value }: { label: string; value: string }) {

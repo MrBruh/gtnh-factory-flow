@@ -1,6 +1,6 @@
 "use client";
 
-import { Power, Trash2, X } from "lucide-react";
+import { Cable, Power, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
 import { formatRate, formatResourceRate, makeResourceKey, primaryOutput } from "@/lib/model";
@@ -15,6 +15,8 @@ export function InspectorPanel() {
   const selectedNodeId = useFactoryStore((state) => state.selectedNodeId);
   const updateNode = useFactoryStore((state) => state.updateNode);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
+  const deleteEdge = useFactoryStore((state) => state.deleteEdge);
+  const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
   const selectFuelProfile = useFactoryStore((state) => state.selectFuelProfile);
   const datasetRecipes = dataset?.recipes;
 
@@ -28,6 +30,9 @@ export function InspectorPanel() {
     ? recipes.find((recipe) => recipe.id === selectedNode.recipeId)
     : undefined;
   const nodeResult = selectedNode ? result.nodes[selectedNode.id] : undefined;
+  const selectedNodeEdges = selectedNode
+    ? project.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id)
+    : [];
 
   if (!selectedNode || !selectedRecipe) {
     return (
@@ -149,6 +154,68 @@ export function InspectorPanel() {
                 Enabled
               </label>
             </div>
+          </div>
+
+          <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Resource links
+              </h3>
+              <button
+                type="button"
+                onClick={() => autoConnectNode(selectedNode.id)}
+                className="inline-flex h-8 items-center gap-1 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+              >
+                <Cable className="h-3.5 w-3.5" />
+                Auto
+              </button>
+            </div>
+            {selectedNodeEdges.length === 0 ? (
+              <p className="text-sm text-neutral-500">No links yet.</p>
+            ) : (
+              <div className="space-y-1">
+                {selectedNodeEdges.map((edge) => {
+                  const isOutput = edge.source === selectedNode.id;
+                  const otherNode = project.nodes.find((node) =>
+                    isOutput ? node.id === edge.target : node.id === edge.source,
+                  );
+                  const otherRecipe = recipes.find((recipe) => recipe.id === otherNode?.recipeId);
+                  const edgeResult = result.edges[edge.id];
+                  const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
+                  const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
+                  return (
+                    <div
+                      key={edge.id}
+                      className="grid grid-cols-[18px_minmax(0,1fr)_auto_24px] items-center gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-xs"
+                    >
+                      <span className="font-semibold text-neutral-500">
+                        {isOutput ? ">" : "<"}
+                      </span>
+                      <span className="min-w-0 truncate text-neutral-800">
+                        {edge.label ?? edge.resourceId}
+                        <span className="text-neutral-400">
+                          {" "}
+                          {isOutput ? "to" : "from"} {otherRecipe?.machineType ?? "node"}
+                        </span>
+                      </span>
+                      <span className="font-semibold text-neutral-950">
+                        {formatRate(demand, 3)}
+                        {unit}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => deleteEdge(edge.id)}
+                        className="h-6 w-6 rounded border border-neutral-300 text-neutral-600 hover:bg-red-50 hover:text-red-700"
+                        aria-label="Delete link"
+                        title="Delete link"
+                      >
+                        <X className="mx-auto h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="rounded border border-neutral-200 bg-neutral-50 p-3">

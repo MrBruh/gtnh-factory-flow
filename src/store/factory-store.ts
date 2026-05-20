@@ -30,6 +30,7 @@ interface FactoryStore {
   recipeBrowserResource?: RecipeBrowserResource;
   recipeBrowserMode: RecipeBrowserMode;
   recipeResourceHistory: RecipeBrowserResource[];
+  pendingResourceConnection?: PendingResourceConnection;
   selectedNodeId?: string;
   selectedRecipeId?: string;
   lastResult: ThroughputResult;
@@ -43,6 +44,8 @@ interface FactoryStore {
   setRecipeSearch: (query: string) => void;
   browseResource: (resource: RecipeBrowserResource, mode?: RecipeBrowserMode) => void;
   clearResourceBrowser: () => void;
+  selectResourceConnectionSlot: (slot: PendingResourceConnection) => void;
+  cancelResourceConnection: () => void;
   recalculate: () => void;
   selectNode: (nodeId?: string) => void;
   selectRecipe: (recipeId?: string) => void;
@@ -83,6 +86,16 @@ export interface RecipeBrowserResource {
   anchorNodeId?: string;
 }
 
+export interface PendingResourceConnection {
+  nodeId: string;
+  side: "input" | "output";
+  kind: ResourceKind;
+  resourceId: string;
+  displayName?: string;
+  iconPath?: string;
+  handleId: string;
+}
+
 export const useFactoryStore = create<FactoryStore>((set, get) => ({
   project: initialProject,
   datasetManifest: undefined,
@@ -95,6 +108,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   recipeBrowserResource: undefined,
   recipeBrowserMode: "recipes",
   recipeResourceHistory: [],
+  pendingResourceConnection: undefined,
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
   lastResult: calculateThroughput(initialProject),
@@ -170,6 +184,64 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       recipeBrowserResource: undefined,
       recipeSearch: "",
     });
+  },
+  selectResourceConnectionSlot: (slot) => {
+    set((state) => {
+      const pending = state.pendingResourceConnection;
+
+      if (!pending) {
+        return {
+          pendingResourceConnection: slot,
+          selectedNodeId: slot.nodeId,
+        };
+      }
+
+      if (pending.nodeId === slot.nodeId && pending.handleId === slot.handleId) {
+        return {
+          pendingResourceConnection: undefined,
+          selectedNodeId: slot.nodeId,
+        };
+      }
+
+      if (!canConnectPendingSlots(pending, slot)) {
+        return {
+          pendingResourceConnection: slot,
+          selectedNodeId: slot.nodeId,
+        };
+      }
+
+      const source = pending.side === "output" ? pending : slot;
+      const target = pending.side === "input" ? pending : slot;
+      const edge = buildEdgeBetweenNodes(state.project, source.nodeId, target.nodeId, {
+        kind: source.kind,
+        id: source.resourceId,
+        displayName: source.displayName ?? target.displayName,
+        sourceHandle: source.handleId,
+        targetHandle: target.handleId,
+      });
+
+      if (!edge || hasDuplicateEdge(state.project.edges, edge)) {
+        return {
+          pendingResourceConnection: undefined,
+          selectedNodeId: slot.nodeId,
+        };
+      }
+
+      const project = touchProject({
+        ...state.project,
+        edges: [...state.project.edges, edge],
+      });
+
+      return {
+        project,
+        pendingResourceConnection: undefined,
+        selectedNodeId: slot.nodeId,
+        lastResult: calculateThroughput(project),
+      };
+    });
+  },
+  cancelResourceConnection: () => {
+    set({ pendingResourceConnection: undefined });
   },
   recalculate: () => {
     const { project } = get();
@@ -297,6 +369,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       });
       return {
         project,
+        pendingResourceConnection:
+          state.pendingResourceConnection?.nodeId === nodeId
+            ? undefined
+            : state.pendingResourceConnection,
         selectedNodeId: project.nodes[0]?.id,
         selectedRecipeId: project.nodes[0]?.recipeId ?? state.selectedRecipeId,
         lastResult: calculateThroughput(project),
@@ -405,6 +481,18 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     });
   },
 }));
+
+function canConnectPendingSlots(
+  first: PendingResourceConnection,
+  second: PendingResourceConnection,
+): boolean {
+  return (
+    first.nodeId !== second.nodeId &&
+    first.side !== second.side &&
+    first.kind === second.kind &&
+    first.resourceId === second.resourceId
+  );
+}
 
 function findRecipeForPlanning(state: FactoryStore, recipeId: string): Recipe | undefined {
   return (

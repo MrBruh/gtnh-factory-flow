@@ -10,7 +10,7 @@ import {
   type Edge,
   type NodeTypes,
 } from "@xyflow/react";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { formatRate } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
@@ -27,6 +27,8 @@ export function FactoryFlow() {
   const setNodePosition = useFactoryStore((state) => state.setNodePosition);
   const connectNodes = useFactoryStore((state) => state.connectNodes);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
+  const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
+  const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
 
   const nodes = useMemo<RecipeFlowNode[]>(
     () =>
@@ -64,10 +66,16 @@ export function FactoryFlow() {
         const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
         const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
         const transferred = edgeResult?.transferredPerSecond ?? demand;
+        const edgeColor = edgeResult?.isLimited
+          ? "#dc2626"
+          : edge.resourceKind === "fluid"
+            ? "#0284c7"
+            : "#0f766e";
+        const prefix = edge.resourceKind === "fluid" ? "F" : "I";
         const label =
           edgeResult?.isLimited === true
-            ? `${edge.label ?? edge.resourceId}: ${formatRate(transferred)}/${formatRate(demand)}${unit}`
-            : `${edge.label ?? edge.resourceId}: ${formatRate(demand)}${unit}`;
+            ? `${prefix} ${edge.label ?? edge.resourceId} ${formatRate(transferred)}/${formatRate(demand)}${unit}`
+            : `${prefix} ${edge.label ?? edge.resourceId} ${formatRate(demand)}${unit}`;
 
         return {
           id: edge.id,
@@ -79,15 +87,17 @@ export function FactoryFlow() {
           label,
           markerEnd: {
             type: MarkerType.ArrowClosed,
+            color: edgeColor,
           },
           style: {
-            stroke: edgeResult?.isLimited ? "#dc2626" : "#0f766e",
-            strokeWidth: 2,
+            stroke: edgeColor,
+            strokeDasharray: edgeResult?.isLimited ? "7 4" : undefined,
+            strokeWidth: edgeResult?.isLimited ? 3 : 2,
           },
           labelBgPadding: [6, 3],
           labelBgBorderRadius: 4,
           labelStyle: {
-            fill: "#262626",
+            fill: edgeResult?.isLimited ? "#991b1b" : "#262626",
             fontSize: 12,
             fontWeight: 700,
           },
@@ -124,15 +134,29 @@ export function FactoryFlow() {
     }
   };
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        cancelResourceConnection();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [cancelResourceConnection]);
+
   return (
-    <div className="h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
+    <div className="relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onConnect={handleConnect}
         onNodeClick={(_, node) => selectNode(node.id)}
-        onPaneClick={() => selectNode(undefined)}
+        onPaneClick={() => {
+          selectNode(undefined);
+          cancelResourceConnection();
+        }}
         onNodeDragStop={(_, node) => setNodePosition(node.id, node.position)}
         onEdgesDelete={(deletedEdges) => deletedEdges.forEach((edge) => deleteEdge(edge.id))}
         fitView
@@ -155,6 +179,13 @@ export function FactoryFlow() {
           }}
         />
       </ReactFlow>
+      {pendingResourceConnection ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center font-mono text-xs font-bold text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+          {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
+          {pendingResourceConnection.displayName ?? pendingResourceConnection.resourceId}
+          <span className="ml-2 font-normal">click matching slot, Esc to cancel</span>
+        </div>
+      ) : null}
     </div>
   );
 }
