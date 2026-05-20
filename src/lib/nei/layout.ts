@@ -32,6 +32,13 @@ export interface NeiSlotFrame {
   y: number;
 }
 
+export interface NeiOverflowGroup {
+  side: NeiSlotSide;
+  kind: ResourceKind;
+  capacity: number;
+  resourceCount: number;
+}
+
 export type NeiProgressTexture =
   | "arrow"
   | "arrow_multiple"
@@ -54,6 +61,7 @@ export interface NeiRecipeLayout {
   slotSize: number;
   frames: NeiSlotFrame[];
   slots: NeiPositionedSlot[];
+  overflowGroups: NeiOverflowGroup[];
   progressBars: NeiProgressBar[];
   logo: NeiPoint;
 }
@@ -220,6 +228,12 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
     slotSize: SLOT_SIZE,
     frames,
     slots,
+    overflowGroups: buildOverflowGroups(definition, recipe, {
+      itemInputs: itemInputs.length,
+      itemOutputs: itemOutputs.length,
+      fluidInputs: fluidInputs.length,
+      fluidOutputs: fluidOutputs.length,
+    }),
     progressBars: definition.progressBars ?? DEFAULT_PROGRESS_BARS,
     logo: definition.logo ?? { x: 152, y: 63 },
   };
@@ -524,30 +538,91 @@ function withRequiredMaxes(
   definition: RecipeMapLayoutDefinition,
   recipe: Recipe,
 ): RequiredRecipeMapLayoutDefinition {
-  const capacity = recipe.nei?.slotCapacity;
+  const machineDefinition = withMachineMaxes(definition, recipe);
 
   return {
-    maxItemInputs: Math.max(
-      definition.maxItemInputs ?? 1,
-      capacity?.maxItemInputs ?? 0,
-      countKind(recipe.inputs, "item"),
-    ),
-    maxItemOutputs: Math.max(
-      definition.maxItemOutputs ?? 1,
-      capacity?.maxItemOutputs ?? 0,
-      countKind(recipe.outputs, "item"),
-    ),
-    maxFluidInputs: Math.max(
-      definition.maxFluidInputs ?? 0,
-      capacity?.maxFluidInputs ?? 0,
-      countKind(recipe.inputs, "fluid"),
-    ),
+    maxItemInputs: Math.max(machineDefinition.maxItemInputs, countKind(recipe.inputs, "item")),
+    maxItemOutputs: Math.max(machineDefinition.maxItemOutputs, countKind(recipe.outputs, "item")),
+    maxFluidInputs: Math.max(machineDefinition.maxFluidInputs, countKind(recipe.inputs, "fluid")),
     maxFluidOutputs: Math.max(
-      definition.maxFluidOutputs ?? 0,
-      capacity?.maxFluidOutputs ?? 0,
+      machineDefinition.maxFluidOutputs,
       countKind(recipe.outputs, "fluid"),
     ),
   };
+}
+
+function withMachineMaxes(
+  definition: RecipeMapLayoutDefinition,
+  recipe: Recipe,
+): RequiredRecipeMapLayoutDefinition {
+  const capacity = recipe.nei?.slotCapacity;
+
+  return {
+    maxItemInputs: Math.max(definition.maxItemInputs ?? 1, capacity?.maxItemInputs ?? 0),
+    maxItemOutputs: Math.max(definition.maxItemOutputs ?? 1, capacity?.maxItemOutputs ?? 0),
+    maxFluidInputs: Math.max(definition.maxFluidInputs ?? 0, capacity?.maxFluidInputs ?? 0),
+    maxFluidOutputs: Math.max(definition.maxFluidOutputs ?? 0, capacity?.maxFluidOutputs ?? 0),
+  };
+}
+
+function buildOverflowGroups(
+  definition: RecipeMapLayoutDefinition,
+  recipe: Recipe,
+  counts: {
+    itemInputs: number;
+    itemOutputs: number;
+    fluidInputs: number;
+    fluidOutputs: number;
+  },
+): NeiOverflowGroup[] {
+  const capacity = recipe.nei?.slotCapacity;
+
+  return [
+    overflowGroup(
+      "input",
+      "item",
+      knownCapacity(definition.maxItemInputs, capacity?.maxItemInputs),
+      counts.itemInputs,
+    ),
+    overflowGroup(
+      "output",
+      "item",
+      knownCapacity(definition.maxItemOutputs, capacity?.maxItemOutputs),
+      counts.itemOutputs,
+    ),
+    overflowGroup(
+      "input",
+      "fluid",
+      knownCapacity(definition.maxFluidInputs, capacity?.maxFluidInputs),
+      counts.fluidInputs,
+    ),
+    overflowGroup(
+      "output",
+      "fluid",
+      knownCapacity(definition.maxFluidOutputs, capacity?.maxFluidOutputs),
+      counts.fluidOutputs,
+    ),
+  ].filter((group): group is NeiOverflowGroup => Boolean(group));
+}
+
+function knownCapacity(definitionCapacity?: number, enrichedCapacity?: number) {
+  const capacities = [definitionCapacity, enrichedCapacity].filter(
+    (value): value is number => typeof value === "number",
+  );
+  return capacities.length > 0 ? Math.max(...capacities) : 0;
+}
+
+function overflowGroup(
+  side: NeiSlotSide,
+  kind: ResourceKind,
+  capacity: number,
+  resourceCount: number,
+): NeiOverflowGroup | undefined {
+  if (capacity <= 0 || resourceCount <= capacity) {
+    return undefined;
+  }
+
+  return { side, kind, capacity, resourceCount };
 }
 
 function growCanvas(canvas: NeiSize, frames: NeiSlotFrame[]): NeiSize {

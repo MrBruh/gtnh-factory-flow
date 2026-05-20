@@ -146,6 +146,31 @@ describe("NEI layout", () => {
     expect(itemOutputFrames.filter((frame) => frame.resource)).toHaveLength(3);
   });
 
+  it("marks known machine output overflow without changing the full expanded layout", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Centrifuge",
+        sourceRecipeMap: "Centrifuge",
+        inputs: [{ kind: "item", id: "dust", amount: 1 }],
+        outputs: Array.from({ length: 10 }, (_, index) => ({
+          kind: "item",
+          id: `byproduct-${index}`,
+          amount: 1,
+          chance: 0.1,
+        })),
+      }),
+    );
+
+    const itemOutputFrames = layout.frames.filter(
+      (frame) => frame.kind === "item" && frame.side === "output",
+    );
+
+    expect(itemOutputFrames).toHaveLength(10);
+    expect(layout.overflowGroups).toEqual([
+      { side: "output", kind: "item", capacity: 6, resourceCount: 10 },
+    ]);
+  });
+
   it("uses FluidOnlyFrontend positions for fusion fluids", () => {
     const layout = getNeiRecipeLayout(
       recipe({

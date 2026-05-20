@@ -1,9 +1,10 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { Recipe } from "@/lib/model/types";
 import {
   getNeiRecipeLayout,
+  type NeiOverflowGroup,
   type NeiPositionedSlot,
   type NeiProgressTexture,
   type NeiSlotFrame,
@@ -25,9 +26,14 @@ export function NeiRecipeCanvas({
   renderHandle,
   onSlotClick,
 }: NeiRecipeCanvasProps) {
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const layout = getNeiRecipeLayout(recipe);
+  const renderFrames = useMemo(
+    () => getRenderFrames(layout.frames, layout.overflowGroups, expandedGroups),
+    [expandedGroups, layout.frames, layout.overflowGroups],
+  );
   const width = layout.canvas.width * scale;
-  const height = layout.canvas.height * scale;
+  const height = getCanvasHeight(renderFrames, layout.logo.y) * scale;
   const slotSize = layout.slotSize * scale;
 
   return (
@@ -45,7 +51,7 @@ export function NeiRecipeCanvas({
         <ProgressTexture key={`${bar.x}-${bar.y}-${index}`} bar={bar} scale={scale} />
       ))}
 
-      {layout.frames.map((frame) => (
+      {renderFrames.map((frame) => (
         <div
           key={`${frame.side}-${frame.kind}-${frame.slotIndex}`}
           className="nodrag absolute"
@@ -56,7 +62,21 @@ export function NeiRecipeCanvas({
             height: slotSize,
           }}
         >
-          <NeiSlotFrameView frame={frame} renderHandle={renderHandle} onSlotClick={onSlotClick} />
+          <NeiSlotFrameView
+            frame={frame}
+            renderHandle={renderHandle}
+            onSlotClick={onSlotClick}
+            onOverflowClick={
+              frame.overflowCount
+                ? () =>
+                    setExpandedGroups((current) => {
+                      const next = new Set(current);
+                      next.add(getGroupKey(frame));
+                      return next;
+                    })
+                : undefined
+            }
+          />
         </div>
       ))}
 
@@ -76,22 +96,78 @@ export function NeiRecipeCanvas({
   );
 }
 
+type RenderFrame = NeiSlotFrame & { overflowCount?: number };
+
+function getRenderFrames(
+  frames: NeiSlotFrame[],
+  overflowGroups: NeiOverflowGroup[],
+  expandedGroups: Set<string>,
+): RenderFrame[] {
+  if (overflowGroups.length === 0) {
+    return frames;
+  }
+
+  const groupsByKey = new Map(overflowGroups.map((group) => [getGroupKey(group), group]));
+
+  return frames.flatMap((frame): RenderFrame[] => {
+    const group = groupsByKey.get(getGroupKey(frame));
+    if (!group || expandedGroups.has(getGroupKey(frame))) {
+      return [frame];
+    }
+
+    if (frame.slotIndex >= group.capacity) {
+      return [];
+    }
+
+    if (frame.slotIndex === group.capacity - 1) {
+      return [
+        {
+          ...frame,
+          resource: undefined,
+          resourceIndex: undefined,
+          overflowCount: group.resourceCount - group.capacity + 1,
+        },
+      ];
+    }
+
+    return [frame];
+  });
+}
+
+function getCanvasHeight(frames: RenderFrame[], logoY: number) {
+  const maxSlotBottom = Math.max(0, ...frames.map((frame) => frame.y + 20));
+  return Math.max(82, logoY + 19, maxSlotBottom + 2);
+}
+
+function getGroupKey(group: Pick<NeiSlotFrame, "side" | "kind">) {
+  return `${group.side}:${group.kind}`;
+}
+
 function NeiSlotFrameView({
   frame,
   renderHandle,
   onSlotClick,
+  onOverflowClick,
 }: {
-  frame: NeiSlotFrame;
+  frame: RenderFrame;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
+  onOverflowClick?: () => void;
 }) {
   const slot = frame.resource ? (frame as NeiPositionedSlot) : undefined;
+  const isOverflow = Boolean(frame.overflowCount);
 
   return (
     <button
       type="button"
-      tabIndex={slot ? 0 : -1}
+      tabIndex={slot || isOverflow ? 0 : -1}
       onClick={(event) => {
+        if (isOverflow && onOverflowClick) {
+          event.stopPropagation();
+          onOverflowClick();
+          return;
+        }
+
         if (!slot || !onSlotClick) {
           return;
         }
@@ -100,6 +176,12 @@ function NeiSlotFrameView({
         onSlotClick(slot, "recipes");
       }}
       onContextMenu={(event) => {
+        if (isOverflow) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+
         if (!slot || !onSlotClick) {
           return;
         }
@@ -110,7 +192,9 @@ function NeiSlotFrameView({
       }}
       className={[
         "relative h-full w-full border-0 bg-transparent p-0 text-left",
-        slot && onSlotClick ? "cursor-pointer hover:ring-2 hover:ring-cyan-300" : "",
+        (slot && onSlotClick) || isOverflow
+          ? "cursor-pointer hover:ring-2 hover:ring-cyan-300"
+          : "",
       ].join(" ")}
       style={{
         backgroundImage: `url('${getSlotTexture(frame)}')`,
@@ -119,6 +203,11 @@ function NeiSlotFrameView({
       }}
     >
       {slot ? renderHandle?.(slot) : null}
+      {isOverflow ? (
+        <span className="flex h-full w-full items-center justify-center text-[13px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
+          ...
+        </span>
+      ) : null}
       {slot ? (
         <ResourceIcon
           resource={slot.resource}
