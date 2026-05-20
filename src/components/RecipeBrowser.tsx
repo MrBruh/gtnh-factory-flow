@@ -451,6 +451,12 @@ function RecipeBookOverlay({
     width: number;
     height: number;
   } | null>(null);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const closeImmediately = () => {
+    setIsClosing(true);
+    window.setTimeout(onClose, 0);
+  };
 
   const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) {
@@ -523,6 +529,10 @@ function RecipeBookOverlay({
     );
   };
 
+  if (isClosing) {
+    return null;
+  }
+
   return (
     <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:left-[360px] lg:right-[440px]">
       <section
@@ -544,7 +554,7 @@ function RecipeBookOverlay({
         <div className="relative flex min-h-0 flex-1 flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeImmediately}
             className="absolute -right-8 top-0 z-20 h-8 w-8 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]"
             title="Close"
             aria-label="Close recipe book"
