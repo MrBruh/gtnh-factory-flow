@@ -47,7 +47,7 @@ export async function fetchRecipeDatasetVersion(
 }
 
 export function pickDefaultDatasetVersion(manifest: DatasetManifest): DatasetVersion | undefined {
-  const preferredId = manifest.latestDailyVersion ?? manifest.latestStableVersion;
+  const preferredId = manifest.latestStableVersion ?? manifest.latestDailyVersion;
   if (preferredId) {
     return manifest.versions.find((version) => version.id === preferredId);
   }
