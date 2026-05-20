@@ -1,7 +1,8 @@
 "use client";
 
 import { ArrowLeft, GitBranchPlus, PlusCircle, Search, X } from "lucide-react";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useRef, useState } from "react";
+import type { PointerEvent } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
 import { getResourceKey, primaryOutput, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
@@ -86,14 +87,16 @@ export function RecipeBrowser() {
           scopedRecipes.some((recipe) => (recipe.source?.recipeMap ?? recipe.machineType) === map),
         )
       : [...new Set(scopedRecipes.map((recipe) => recipe.source?.recipeMap ?? recipe.machineType))];
-    return ["all", ...maps.filter(Boolean).sort((a, b) => a.localeCompare(b))];
+    return maps.filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [dataset, scopedRecipes]);
 
-  const activeRecipeMap = recipeMaps.includes(selectedRecipeMap) ? selectedRecipeMap : "all";
+  const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
+    ? selectedRecipeMap
+    : (recipeMaps[0] ?? "");
 
   const filteredRecipes = useMemo(() => {
     const query = deferredRecipeSearch.trim().toLowerCase();
-    const activeMap = activeRecipeMap === "all" ? undefined : activeRecipeMap;
+    const activeMap = activeRecipeMap || undefined;
     const resultsWithIcons: Array<{ recipe: Recipe; iconScore: number }> = [];
     const resultsWithoutIcons: Recipe[] = [];
 
@@ -338,11 +341,63 @@ function RecipeBookOverlay({
   onRecipeMapChange: (recipeMap: string) => void;
   onSelectRecipe: (recipeId: string) => void;
 }) {
+  const panelRef = useRef<HTMLElement>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const dragRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+
+  const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: dragOffset.x,
+      originY: dragOffset.y,
+    };
+  };
+
+  const handlePointerMove = (event: PointerEvent<HTMLElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setDragOffset(
+      clampDragOffset(
+        {
+          x: drag.originX + event.clientX - drag.startX,
+          y: drag.originY + event.clientY - drag.startY,
+        },
+        panelRef.current,
+      ),
+    );
+  };
+
+  const handlePointerUp = (event: PointerEvent<HTMLElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+    }
+  };
+
   return (
-    <div className="pointer-events-none fixed inset-x-3 top-[186px] z-30 flex justify-center lg:left-[360px] lg:right-[440px]">
+    <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:left-[360px] lg:right-[440px]">
       <section
-        className="pointer-events-auto relative w-full max-w-[640px] pt-[42px] font-mono"
+        ref={panelRef}
+        className="pointer-events-auto relative flex max-h-[calc(100vh-32px)] w-full max-w-[620px] flex-col pt-[42px] font-mono"
         aria-label="Recipe book"
+        style={{
+          transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+        }}
       >
         <div className="absolute left-2 right-2 top-0">
           <div className="nei-tab-scroll flex gap-1 overflow-x-auto bg-[#17191d] p-1 pb-2">
@@ -351,16 +406,16 @@ function RecipeBookOverlay({
                 key={recipeMap}
                 type="button"
                 onClick={() => onRecipeMapChange(recipeMap)}
-                title={recipeMap === "all" ? "All recipe maps" : recipeMap}
+                title={recipeMap}
                 className={neiTabClass(activeRecipeMap === recipeMap)}
               >
-                {recipeMap === "all" ? "All" : recipeMap}
+                {recipeMap}
               </button>
             ))}
           </div>
         </div>
 
-        <div className="border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+        <div className="flex min-h-0 max-h-[calc(100vh-74px)] flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center px-2 pt-2">
             <button
               type="button"
@@ -370,7 +425,13 @@ function RecipeBookOverlay({
             >
               R
             </button>
-            <div className="h-8 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[26px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+            <div
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              className="h-8 cursor-move select-none truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[26px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]"
+            >
               {resourceLabel(activeResource)}
             </div>
             <button
@@ -399,7 +460,7 @@ function RecipeBookOverlay({
             <div className="h-8 border-x-2 border-b-2 border-[#252525] bg-[#5d5d5d] shadow-[inset_2px_0_0_#9f9f9f,inset_-2px_-2px_0_#303030]" />
           </div>
 
-          <div className="max-h-[calc(100vh-330px)] min-h-[420px] overflow-y-auto p-3">
+          <div className="min-h-[260px] flex-1 overflow-y-auto p-3">
             {filteredRecipes.length === 0 ? (
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 No matching recipes.
@@ -487,6 +548,26 @@ function RecipeResultCard({
       ) : null}
     </article>
   );
+}
+
+function clampDragOffset(offset: { x: number; y: number }, panel: HTMLElement | null) {
+  if (!panel || typeof window === "undefined") {
+    return offset;
+  }
+
+  const rect = panel.getBoundingClientRect();
+  const margin = 12;
+  const maxX = Math.max(0, (window.innerWidth - rect.width) / 2 - margin);
+  const maxY = Math.max(0, (window.innerHeight - rect.height) / 2 - margin);
+
+  return {
+    x: clamp(offset.x, -maxX, maxX),
+    y: clamp(offset.y, -maxY, maxY),
+  };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
 }
 
 function buildResourceIndex(recipes: Recipe[]): Map<ResourceKey, IndexedResource> {
