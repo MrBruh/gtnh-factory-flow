@@ -159,7 +159,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({
       recipeBrowserResource: resource,
       recipeBrowserMode: mode,
-      recipeSearch: resource.displayName ?? resource.id,
       selectedNodeId: resource.anchorNodeId,
     });
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, GitBranchPlus, PlusCircle, Search, X } from "lucide-react";
+import { GitBranchPlus, PlusCircle, Search, X } from "lucide-react";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
@@ -140,28 +140,7 @@ export function RecipeBrowser() {
     <>
       <aside className="flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
         <div className="border-b border-neutral-800 px-3 py-3">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-neutral-50">NEI recipe browser</h2>
-              <p className="mt-1 text-xs text-neutral-400">
-                {dataset
-                  ? `${dataset.gtnhVersion} / ${dataset.recipes.length.toLocaleString()} recipes`
-                  : "Import a normalized NESQL/RecEx/NERD dataset"}
-              </p>
-            </div>
-            {activeResource ? (
-              <button
-                type="button"
-                onClick={clearResourceBrowser}
-                title="Back to resource search"
-                aria-label="Back to resource search"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-neutral-700 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
-          <label className="mt-3 flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
+          <label className="flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
             <Search className="h-4 w-4 text-neutral-500" />
             <input
               value={recipeSearch}
