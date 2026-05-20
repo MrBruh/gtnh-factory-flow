@@ -211,7 +211,24 @@ export function FactoryFlow() {
           pannable
           zoomable
           position="bottom-right"
+          bgColor="#f8fafc"
+          maskColor="rgba(15, 23, 42, 0.12)"
+          maskStrokeColor="#0f172a"
+          maskStrokeWidth={1}
+          nodeBorderRadius={3}
+          nodeStrokeWidth={3}
+          nodeStrokeColor={(node) => {
+            if (node.type === "storageNode") return "#111827";
+            const status = result.nodes[node.id]?.status;
+            if (status === "balanced") return "#047857";
+            if (status === "bottleneck" || status === "missing-recipe") return "#b91c1c";
+            if (status === "disabled") return "#737373";
+            return "#b45309";
+          }}
           nodeColor={(node) => {
+            if (node.type === "storageNode") {
+              return "#38bdf8";
+            }
             const status = result.nodes[node.id]?.status;
             if (status === "balanced") return "#10b981";
             if (status === "bottleneck" || status === "missing-recipe") return "#ef4444";
