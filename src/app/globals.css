@@ -42,6 +42,19 @@ textarea {
   fill: #ffffff;
 }
 
+.factory-flow-board .react-flow__edges {
+  z-index: 30;
+}
+
+.factory-flow-board .react-flow__nodes {
+  z-index: 20;
+}
+
+.factory-flow-board .react-flow__edge-path,
+.factory-flow-board .react-flow__edge-text {
+  pointer-events: auto;
+}
+
 .nei-tab-scroll {
   scrollbar-color: #8b8b8b #d0d0d0;
   scrollbar-width: thin;

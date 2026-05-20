@@ -79,6 +79,7 @@ export function FactoryFlow() {
 
         return {
           id: edge.id,
+          zIndex: 20,
           source: edge.source,
           target: edge.target,
           sourceHandle: edge.sourceHandle,
@@ -146,7 +147,7 @@ export function FactoryFlow() {
   }, [cancelResourceConnection]);
 
   return (
-    <div className="relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
+    <div className="factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
       <ReactFlow
         nodes={nodes}
         edges={edges}
