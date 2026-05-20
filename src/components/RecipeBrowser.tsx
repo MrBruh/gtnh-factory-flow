@@ -4,6 +4,7 @@ import { ArrowLeft, GitBranchPlus, PlusCircle, Search, X } from "lucide-react";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
+import type { DatasetResource } from "@/lib/datasets/types";
 import { getResourceKey, primaryOutput, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
@@ -89,6 +90,11 @@ export function RecipeBrowser() {
       : [...new Set(scopedRecipes.map((recipe) => recipe.source?.recipeMap ?? recipe.machineType))];
     return maps.filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [dataset, scopedRecipes]);
+
+  const recipeMapTabs = useMemo(
+    () => buildRecipeMapTabs(recipeMaps, dataset?.resources ?? []),
+    [dataset?.resources, recipeMaps],
+  );
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
     ? selectedRecipeMap
@@ -241,7 +247,7 @@ export function RecipeBrowser() {
           activeResource={activeResource}
           browserMode={browserMode}
           filteredRecipes={filteredRecipes}
-          recipeMaps={recipeMaps}
+          recipeMapTabs={recipeMapTabs}
           selectedRecipeId={selectedRecipeId}
           onAdd={addNodeForRecipe}
           onAddConnected={
@@ -267,6 +273,12 @@ export function RecipeBrowser() {
 
 interface IndexedResource extends Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath"> {
   recipeCount: number;
+}
+
+interface RecipeMapTab {
+  id: string;
+  label: string;
+  icon?: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath">;
 }
 
 function ResourceResult({
@@ -319,7 +331,7 @@ function RecipeBookOverlay({
   activeResource,
   browserMode,
   filteredRecipes,
-  recipeMaps,
+  recipeMapTabs,
   selectedRecipeId,
   onAdd,
   onAddConnected,
@@ -332,7 +344,7 @@ function RecipeBookOverlay({
   activeResource: IndexedResource & { anchorNodeId?: string };
   browserMode: "recipes" | "uses";
   filteredRecipes: Recipe[];
-  recipeMaps: string[];
+  recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
   onAdd: (recipeId: string) => void;
   onAddConnected?: (recipeId: string) => void;
@@ -401,15 +413,22 @@ function RecipeBookOverlay({
       >
         <div className="absolute left-2 right-2 top-0">
           <div className="nei-tab-scroll flex gap-1 overflow-x-auto bg-[#17191d] p-1 pb-2">
-            {recipeMaps.map((recipeMap) => (
+            {recipeMapTabs.map((tab) => (
               <button
-                key={recipeMap}
+                key={tab.id}
                 type="button"
-                onClick={() => onRecipeMapChange(recipeMap)}
-                title={recipeMap}
-                className={neiTabClass(activeRecipeMap === recipeMap)}
+                onClick={() => onRecipeMapChange(tab.id)}
+                title={tab.label}
+                aria-label={tab.label}
+                className={neiTabClass(activeRecipeMap === tab.id)}
               >
-                {recipeMap}
+                {tab.icon ? (
+                  <ResourceIcon resource={tab.icon} size="sm" showAmount={false} bare />
+                ) : (
+                  <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
+                    ?
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -640,12 +659,98 @@ function recipeIconScore(recipe: Recipe): number {
   );
 }
 
+function buildRecipeMapTabs(
+  recipeMaps: string[],
+  resources: DatasetResource[],
+): RecipeMapTab[] {
+  return recipeMaps.map((recipeMap) => {
+    const resource = findRecipeMapIcon(recipeMap, resources);
+    return {
+      id: recipeMap,
+      label: recipeMap,
+      icon: resource
+        ? {
+            kind: resource.kind,
+            id: resource.id,
+            amount: 1,
+            displayName: resource.displayName,
+            iconPath: resource.iconPath,
+          }
+        : undefined,
+    };
+  });
+}
+
+function findRecipeMapIcon(
+  recipeMap: string,
+  resources: DatasetResource[],
+): DatasetResource | undefined {
+  const recipeMapTokens = tokenizeRecipeMap(recipeMap);
+  const normalizedMap = normalizeText(recipeMap);
+  let best: { resource: DatasetResource; score: number } | undefined;
+
+  for (const resource of resources) {
+    if (resource.kind !== "item" || !resource.iconPath) {
+      continue;
+    }
+
+    const label = normalizeText(resource.displayName);
+    const tokens = new Set(label.split(" ").filter(Boolean));
+    let score = 0;
+
+    if (label === normalizedMap) {
+      score += 120;
+    } else if (label.includes(normalizedMap)) {
+      score += 80;
+    }
+
+    for (const token of recipeMapTokens) {
+      if (tokens.has(token) || label.includes(token)) {
+        score += 14;
+      }
+    }
+
+    if (resource.id.startsWith("gregtech:gt.blockmachines@")) {
+      score += 35;
+    }
+    if (/^(basic|steam|simple|large) /.test(label)) {
+      score += 12;
+    }
+    if (/\b(pipe|cover|upgrade|part|component)\b/.test(label)) {
+      score -= 30;
+    }
+
+    if (score > (best?.score ?? 0)) {
+      best = { resource, score };
+    }
+  }
+
+  return best && best.score >= 35 ? best.resource : undefined;
+}
+
+function tokenizeRecipeMap(value: string): string[] {
+  const aliases: Record<string, string[]> = {
+    washer: ["washing", "wash"],
+    wash: ["washing", "washer"],
+    extractor: ["extractor", "extract"],
+  };
+
+  return normalizeText(value)
+    .split(" ")
+    .filter((token) => token.length > 2)
+    .flatMap((token) => [token, ...(aliases[token] ?? [])]);
+}
+
+function normalizeText(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
 function neiTabClass(active: boolean): string {
   return [
-    "h-8 shrink-0 rounded-[3px] border px-2 text-sm font-semibold text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.06)]",
+    "flex h-10 w-10 shrink-0 items-center justify-center border-2 p-0 shadow-[inset_2px_2px_0_rgba(255,255,255,0.35),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
     active
-      ? "border-cyan-400 bg-cyan-700 text-cyan-50"
-      : "border-neutral-700 bg-[#202329] hover:border-neutral-500 hover:bg-[#2a2d34]",
+      ? "border-[#f4f4f4] bg-[#c6c6c6]"
+      : "border-[#252525] bg-[#7d7d7d] hover:bg-[#9b9b9b]",
   ].join(" ");
 }
 
