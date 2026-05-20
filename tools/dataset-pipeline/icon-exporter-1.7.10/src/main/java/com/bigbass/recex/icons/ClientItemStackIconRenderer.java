@@ -66,6 +66,7 @@ public final class ClientItemStackIconRenderer {
 
             if (!outFile.isFile()) {
                 BufferedImage image = renderStackToImage(renderStack);
+                applyMissingItemTint(renderStack, image);
                 if (!imageHasVisiblePixels(image) || missingTextureRatio(image) > 0.5D) {
                     ICONS_BY_STACK_KEY.put(key, "");
                     return null;
@@ -238,6 +239,64 @@ public final class ClientItemStackIconRenderer {
         }
 
         return visiblePixels > 0 ? (double) missingTexturePixels / (double) visiblePixels : 0.0D;
+    }
+
+    private static void applyMissingItemTint(ItemStack stack, BufferedImage image) {
+        int color;
+        try {
+            color = stack.getItem().getColorFromItemStack(stack, 0);
+        } catch (Throwable ignored) {
+            return;
+        }
+
+        if ((color & 0x00FFFFFF) == 0x00FFFFFF || !imageLooksUntinted(image)) {
+            return;
+        }
+
+        int tintRed = (color >> 16) & 255;
+        int tintGreen = (color >> 8) & 255;
+        int tintBlue = color & 255;
+
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int value = image.getRGB(x, y);
+                int alpha = (value >>> 24) & 255;
+                if (alpha == 0) {
+                    continue;
+                }
+
+                int red = (((value >> 16) & 255) * tintRed) / 255;
+                int green = (((value >> 8) & 255) * tintGreen) / 255;
+                int blue = ((value & 255) * tintBlue) / 255;
+                image.setRGB(x, y, (alpha << 24) | (red << 16) | (green << 8) | blue);
+            }
+        }
+    }
+
+    private static boolean imageLooksUntinted(BufferedImage image) {
+        int visiblePixels = 0;
+        int neutralPixels = 0;
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                int value = image.getRGB(x, y);
+                int alpha = (value >>> 24) & 255;
+                if (alpha == 0) {
+                    continue;
+                }
+
+                visiblePixels++;
+                int red = (value >> 16) & 255;
+                int green = (value >> 8) & 255;
+                int blue = value & 255;
+                int max = Math.max(red, Math.max(green, blue));
+                int min = Math.min(red, Math.min(green, blue));
+                if (max - min <= 10) {
+                    neutralPixels++;
+                }
+            }
+        }
+
+        return visiblePixels > 0 && (double) neutralPixels / (double) visiblePixels > 0.85D;
     }
 
     static File iconDir() {
