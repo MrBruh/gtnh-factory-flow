@@ -19,7 +19,7 @@ pack_archive="$GTNH_RAW_EXPORT_DIR/gtnh-pack.zip"
 recex_work="$GTNH_RAW_EXPORT_DIR/recex-autostart"
 runner_log="$GTNH_RAW_EXPORT_DIR/export-runner.log"
 runtime_log="$GTNH_RAW_EXPORT_DIR/gtnh-runtime.log"
-rendered_icon_dir="$GTNH_RAW_EXPORT_DIR/rendered-icons"
+rendered_icon_dir="$(realpath -m "$GTNH_RAW_EXPORT_DIR/rendered-icons")"
 export GTNH_RENDERED_ICON_DIR="$rendered_icon_dir"
 
 exec > >(tee -a "$runner_log") 2>&1
