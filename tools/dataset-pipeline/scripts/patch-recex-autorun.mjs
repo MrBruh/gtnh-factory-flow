@@ -61,12 +61,20 @@ source = source.replace(
             return;
         }
 
+        if (Boolean.getBoolean("recex.renderIcons")) {
+            return;
+        }
+
         runAutorunExport("client-load-complete");
     }
 
     @SubscribeEvent
     public void clientTick(TickEvent.ClientTickEvent e) {
         if (e.phase != TickEvent.Phase.END || !FMLCommonHandler.instance().getSide().isClient()) {
+            return;
+        }
+
+        if (Boolean.getBoolean("recex.renderIcons")) {
             return;
         }
 
@@ -80,7 +88,7 @@ source = source.replace(
     private static void startDelayedClientAutorunThread() {
         Thread thread = new Thread(() -> {
             try {
-                Thread.sleep(Long.getLong("recex.autorunDelayMillis", 45000L));
+                Thread.sleep(Long.getLong("recex.autorunDelayMillis", 90000L));
                 Minecraft minecraft = Minecraft.getMinecraft();
                 if (minecraft == null) {
                     runAutorunExport("client-delayed-thread");
@@ -188,7 +196,7 @@ public final class ClientAutorunExportHandler {
         }
 
         ticks++;
-        if (ticks < Integer.getInteger("recex.autorunDelayTicks", 80)) {
+        if (ticks < Integer.getInteger("recex.autorunDelayTicks", 220)) {
             return;
         }
 
