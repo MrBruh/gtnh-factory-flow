@@ -4,6 +4,7 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.creativetab.CreativeTabs;
 import net.minecraft.item.Item;
@@ -34,9 +36,11 @@ public final class ClientItemStackIconRenderer {
 
     private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 32);
     private static final int BACKGROUND_COLOR = 0xFFFEFFFF;
-    private static final int EXPORT_BATCH_SIZE = Integer.getInteger("recex.iconExportBatchSize", 64);
+    private static final int EXPORT_BATCH_SIZE = Integer.getInteger("recex.iconExportBatchSize", 16);
+    private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_STACK_KEY = new LinkedHashMap<String, String>();
     private static final RenderItem RENDER_ITEM = new RenderItem();
+    private static int renderWarnings;
 
     private ClientItemStackIconRenderer() {}
 
@@ -155,12 +159,13 @@ public final class ClientItemStackIconRenderer {
 
         private void exportOne(ItemStack stack) {
             processed++;
+            String key = stackKey(stack);
 
             try {
-                String key = stackKey(stack);
                 String filename = safeName(stack) + "-" + sha1(key).substring(0, 12) + ".png";
                 File outFile = new File(outDir, filename);
 
+                resetTessellator();
                 drawRect(0, 0, ICON_SIZE, ICON_SIZE, BACKGROUND_COLOR);
                 RenderHelper.enableGUIStandardItemLighting();
                 GL11.glEnable(GL12.GL_RESCALE_NORMAL);
@@ -171,6 +176,7 @@ public final class ClientItemStackIconRenderer {
                 RENDER_ITEM.renderItemIntoGUI(fontRenderer, mc.getTextureManager(), stack, 8, 8);
                 RenderHelper.disableStandardItemLighting();
                 GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+                resetTessellator();
                 GL11.glFlush();
 
                 BufferedImage image = readGuiRegion(0, 0, ICON_SIZE, ICON_SIZE);
@@ -184,7 +190,12 @@ public final class ClientItemStackIconRenderer {
                 ICONS_BY_STACK_KEY.put(key, filename);
                 exported++;
             } catch (Throwable t) {
-                RecipeExporterMod.log.warn("GTNH 1.7.10 icon exporter failed for " + stack + ": " + t.toString());
+                ICONS_BY_STACK_KEY.put(key, "");
+                warnRenderFailure(stack, t);
+            } finally {
+                RenderHelper.disableStandardItemLighting();
+                GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+                resetTessellator();
             }
         }
 
@@ -280,6 +291,35 @@ public final class ClientItemStackIconRenderer {
             return new File(configured);
         }
         return new File(Minecraft.getMinecraft().mcDataDir, "RecEx-Rendered-Icons");
+    }
+
+    private static void resetTessellator() {
+        String[] fieldNames = new String[] { "isDrawing", "field_78415_z" };
+        for (String fieldName : fieldNames) {
+            try {
+                Field isDrawing = Tessellator.class.getDeclaredField(fieldName);
+                isDrawing.setAccessible(true);
+                if (isDrawing.getBoolean(Tessellator.instance)) {
+                    isDrawing.setBoolean(Tessellator.instance, false);
+                }
+                return;
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static void warnRenderFailure(ItemStack stack, Throwable throwable) {
+        renderWarnings++;
+        if (renderWarnings <= MAX_RENDER_WARNINGS || renderWarnings % 1000 == 0) {
+            RecipeExporterMod.log.warn(
+                "GTNH 1.7.10 icon exporter failed for "
+                    + stack
+                    + " ("
+                    + renderWarnings
+                    + " failures): "
+                    + throwable.toString()
+            );
+        }
     }
 
     private static void writeIconMap() {

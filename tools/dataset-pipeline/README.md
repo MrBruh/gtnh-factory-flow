@@ -80,7 +80,7 @@ icons opportunistically inside the recipe loop.
 Useful knobs:
 
 - `GTNH_RENDER_STACK_ICONS=true|false` enables the Forge 1.7.10 exporter.
-- `GTNH_ICON_EXPORT_BATCH_SIZE=64` controls how many icons are rendered per client frame.
+- `GTNH_ICON_EXPORT_BATCH_SIZE=16` controls how many icons are rendered per client frame.
 - `GTNH_RENDERED_ICON_DIR` is set by the runner and receives PNGs plus `icon-map.json`.
 
 The scripts do not synthesize missing icons. If a stack cannot be rendered by the GTNH
