@@ -22,12 +22,6 @@ const sizeClasses = {
   lg: "h-14 w-14",
 };
 
-const imageSizes = {
-  sm: 24,
-  md: 32,
-  lg: 38,
-};
-
 export function ResourceIcon({
   resource,
   size = "md",
@@ -57,9 +51,9 @@ export function ResourceIcon({
         <Image
           src={resource.iconPath}
           alt={resource.displayName ?? resource.id}
-          width={imageSizes[size]}
-          height={imageSizes[size]}
-          className="max-h-[78%] max-w-[78%] object-contain"
+          width={32}
+          height={32}
+          className="pixelated-image h-[calc(100%-4px)] w-[calc(100%-4px)] object-contain"
           style={{ imageRendering: "pixelated" }}
           unoptimized
         />

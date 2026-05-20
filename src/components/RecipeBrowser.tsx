@@ -175,7 +175,7 @@ function RecipeResultCard({
         </button>
       </div>
       <div className="mt-2 overflow-x-auto pb-1">
-        <NeiRecipeWindow recipe={recipe} scale={1.25} compact className="mx-auto" />
+        <NeiRecipeWindow recipe={recipe} scale={2} compact className="mx-auto" />
       </div>
       {primary ? (
         <p className="mt-2 truncate text-[11px] text-neutral-400">
