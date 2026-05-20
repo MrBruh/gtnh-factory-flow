@@ -16,7 +16,7 @@ import {
   type Node,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, type MouseEvent } from "react";
 import { formatRate } from "@/lib/model";
 import type { FactoryEdge, FactoryProject, ResourceAmount } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
@@ -58,6 +58,7 @@ export function FactoryFlow() {
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
+  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
 
   const nodes = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
@@ -113,14 +114,16 @@ export function FactoryFlow() {
           : targetStorage
             ? `${targetStorage.kind}:${targetStorage.resourceId}`
             : undefined;
-        const isStorageEdgeActive =
-          !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
         const edgeColor = edgeResult?.isLimited
           ? "#dc2626"
           : edge.resourceKind === "fluid"
             ? "#0284c7"
             : "#0f766e";
         const resource = getEdgeResource(project, edge);
+        const isStorageEdgeActive =
+          !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
+        const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
+        const showStorageEdge = isStorageEdgeActive || isSearchEdgeActive;
 
         return {
           id: edge.id,
@@ -138,7 +141,7 @@ export function FactoryFlow() {
             unit,
             isLimited: edgeResult?.isLimited === true,
             isStorageEdge,
-            showLabel: isStorageEdgeActive,
+            showLabel: isStorageEdge ? showStorageEdge : true,
           },
           markerEnd: {
             type: MarkerType.ArrowClosed,
@@ -147,12 +150,12 @@ export function FactoryFlow() {
           style: {
             stroke: edgeColor,
             strokeDasharray: edgeResult?.isLimited ? "7 4" : undefined,
-            strokeOpacity: isStorageEdge ? (isStorageEdgeActive ? 0.9 : 0.16) : 1,
-            strokeWidth: isStorageEdge ? (isStorageEdgeActive ? 2 : 1) : edgeResult?.isLimited ? 3 : 2,
+            strokeOpacity: isStorageEdge ? (showStorageEdge ? 0.9 : 0.14) : 1,
+            strokeWidth: isStorageEdge ? (showStorageEdge ? 2 : 1) : edgeResult?.isLimited ? 3 : 2,
           },
         };
       }),
-    [hoveredStorageResourceKey, project, result.edges],
+    [hoveredStorageResourceKey, project, recipeSearch, result.edges],
   );
 
   const handleConnect = (connection: Connection) => {
@@ -233,6 +236,7 @@ export function FactoryFlow() {
           maskStrokeWidth={1}
           nodeBorderRadius={3}
           nodeStrokeWidth={3}
+          nodeComponent={FlowMiniMapNode}
           nodeStrokeColor={(node) => {
             if (node.type === "storageNode") return "#111827";
             const status = result.nodes[node.id]?.status;
@@ -261,6 +265,52 @@ export function FactoryFlow() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function FlowMiniMapNode({
+  id,
+  x,
+  y,
+  width,
+  height,
+  color,
+  strokeColor,
+  strokeWidth,
+  borderRadius,
+  selected,
+  onClick,
+}: {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  color?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  borderRadius: number;
+  selected: boolean;
+  onClick?: (event: MouseEvent, id: string) => void;
+}) {
+  const visibleWidth = Math.max(width, 96);
+  const visibleHeight = Math.max(height, 64);
+  const visibleX = x - (visibleWidth - width) / 2;
+  const visibleY = y - (visibleHeight - height) / 2;
+
+  return (
+    <rect
+      x={visibleX}
+      y={visibleY}
+      width={visibleWidth}
+      height={visibleHeight}
+      rx={borderRadius}
+      ry={borderRadius}
+      fill={color ?? "#94a3b8"}
+      stroke={selected ? "#0e7490" : strokeColor ?? "#334155"}
+      strokeWidth={selected ? Math.max(strokeWidth ?? 2, 6) : strokeWidth}
+      onClick={onClick ? (event) => onClick(event, id) : undefined}
+    />
   );
 }
 
@@ -338,4 +388,19 @@ function getEdgeResource(
     displayName: output?.displayName ?? storage?.displayName ?? edge.label,
     iconPath: output?.iconPath ?? storage?.iconPath,
   };
+}
+
+function edgeMatchesSearch(
+  edge: FactoryEdge,
+  resource: Pick<ResourceAmount, "id" | "displayName">,
+  query: string,
+) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length < 2) {
+    return false;
+  }
+
+  return `${resource.displayName ?? ""} ${resource.id} ${edge.resourceId}`
+    .toLowerCase()
+    .includes(normalizedQuery);
 }

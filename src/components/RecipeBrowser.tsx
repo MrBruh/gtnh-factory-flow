@@ -5,7 +5,8 @@ import { useDeferredValue, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
 import type { DatasetResource, DatasetResourceIndexEntry } from "@/lib/datasets/types";
-import { getResourceKey, primaryOutput, resourceLabel } from "@/lib/model";
+import { getRecipePowerTier, getResourceKey, GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
+import type { MachineTier } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
@@ -28,6 +29,7 @@ export function RecipeBrowser() {
   const addResourceStorage = useFactoryStore((state) => state.addResourceStorage);
   const datasetRecipes = dataset?.recipes;
   const [selectedRecipeMap, setSelectedRecipeMap] = useState("all");
+  const [maxTier, setMaxTier] = useState<TierFilter>("all");
   const deferredRecipeSearch = useDeferredValue(recipeSearch);
 
   const recipes = useMemo(
@@ -88,13 +90,18 @@ export function RecipeBrowser() {
       .slice(0, 96);
   }, [activeResource, deferredRecipeSearch, resourceIndex]);
 
-  const scopedRecipes = useMemo(() => {
+  const resourceScopedRecipes = useMemo(() => {
     if (!activeResource) {
       return recipes;
     }
 
     return recipes.filter((recipe) => recipeHasResource(recipe, activeResource, browserMode));
   }, [activeResource, browserMode, recipes]);
+
+  const scopedRecipes = useMemo(
+    () => resourceScopedRecipes.filter((recipe) => recipeMatchesTier(recipe, maxTier)),
+    [maxTier, resourceScopedRecipes],
+  );
 
   const recipeMaps = useMemo(() => {
     const maps = dataset?.recipeMaps?.length
@@ -173,6 +180,22 @@ export function RecipeBrowser() {
                 <X className="h-4 w-4" />
               </button>
             ) : null}
+          </label>
+
+          <label className="mt-2 grid gap-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+            Max tier
+            <select
+              value={maxTier}
+              onChange={(event) => setMaxTier(event.target.value as TierFilter)}
+              className="h-8 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm normal-case tracking-normal text-neutral-100 outline-none"
+            >
+              <option value="all">All tiers</option>
+              {GT_VOLTAGE_TIERS.map((entry) => (
+                <option key={entry.tier} value={entry.tier}>
+                  {entry.tier} and lower
+                </option>
+              ))}
+            </select>
           </label>
 
           {activeResource ? (
@@ -318,6 +341,8 @@ interface RecipeMapTab {
   label: string;
   icon?: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath">;
 }
+
+type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
 function ResourceResult({
   resource,
@@ -801,6 +826,34 @@ function resourceMatchesQuery(resource: IndexedResource, query: string): boolean
   return [resource.displayName, resource.id, resource.kind]
     .filter(Boolean)
     .some((value) => value?.toLowerCase().includes(query));
+}
+
+function recipeMatchesTier(recipe: Recipe, maxTier: TierFilter) {
+  if (maxTier === "all") {
+    return true;
+  }
+
+  const maxIndex = getTierIndex(maxTier);
+  const recipeIndex = getTierIndex(getRecipeTier(recipe));
+  return recipeIndex <= maxIndex;
+}
+
+function getRecipeTier(recipe: Recipe): Exclude<MachineTier, "DEMO"> {
+  const declaredTier = recipe.minimumTier;
+  if (isKnownTier(declaredTier)) {
+    return declaredTier;
+  }
+
+  return getRecipePowerTier(recipe);
+}
+
+function isKnownTier(tier: string): tier is Exclude<MachineTier, "DEMO"> {
+  return GT_VOLTAGE_TIERS.some((entry) => entry.tier === tier);
+}
+
+function getTierIndex(tier: Exclude<MachineTier, "DEMO">) {
+  const index = GT_VOLTAGE_TIERS.findIndex((entry) => entry.tier === tier);
+  return index === -1 ? GT_VOLTAGE_TIERS.length - 1 : index;
 }
 
 function recipeHasResource(

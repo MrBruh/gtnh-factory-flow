@@ -17,12 +17,14 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 
 export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
+  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const autoRouteStorage = useFactoryStore((state) => state.autoRouteStorage);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const setHoveredStorageResourceKey = useFactoryStore((state) => state.setHoveredStorageResourceKey);
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   const isHighlighted = hoveredStorageResourceKey === resourceKey;
+  const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
   const produced = result?.producedPerSecond ?? 0;
   const consumed = result?.consumedPerSecond ?? 0;
   const net = result?.netPerSecond ?? 0;
@@ -38,6 +40,7 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           ? "bg-[#aeb7cc] shadow-[inset_2px_2px_0_#eef2ff,inset_-2px_-2px_0_#586174]"
           : "bg-[#76552b] shadow-[inset_3px_3px_0_#a67a3e,inset_-3px_-3px_0_#3b2915]",
         isHighlighted ? "ring-4 ring-cyan-300" : "",
+        isSearchHighlighted ? "ring-4 ring-sky-300" : "",
       ].join(" ")}
       title={`${storage.displayName ?? storage.resourceId}\nIn ${formatRate(produced, 3)}${unit}\nOut ${formatRate(consumed, 3)}${unit}\nNet ${net >= 0 ? "+" : ""}${formatRate(net, 3)}${unit}`}
     >
@@ -125,6 +128,15 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
       </div>
     </div>
   );
+}
+
+function storageMatchesSearch(storage: FactoryStorage, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (normalizedQuery.length < 2) {
+    return false;
+  }
+
+  return `${storage.displayName ?? ""} ${storage.resourceId}`.toLowerCase().includes(normalizedQuery);
 }
 
 function StorageStat({ label, value }: { label: string; value: string }) {

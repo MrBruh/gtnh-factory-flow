@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { Cable } from "lucide-react";
 import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
-import { formatRate, isRecipeInputConsumed } from "@/lib/model";
+import { formatRate, isRecipeInputConsumed, resourceLabel } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
@@ -19,6 +19,7 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const browseResource = useFactoryStore((state) => state.browseResource);
+  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
@@ -29,12 +30,14 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
   const status = result?.status ?? "underutilized";
   const color = getStatusColor(status);
+  const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
 
   return (
     <div
       className={[
         "group w-[368px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
         selected ? "ring-2 ring-cyan-300" : "",
+        isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         color.ring,
       ].join(" ")}
     >
@@ -156,6 +159,21 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
       </div>
     </div>
   );
+}
+
+function recipeContainsSearchResource(recipe: Recipe, query: string) {
+  const normalizedQuery = normalizeSearch(query);
+  if (normalizedQuery.length < 2) {
+    return false;
+  }
+
+  return [...recipe.inputs, ...recipe.outputs].some((resource) =>
+    normalizeSearch(`${resourceLabel(resource)} ${resource.id}`).includes(normalizedQuery),
+  );
+}
+
+function normalizeSearch(value: string) {
+  return value.trim().toLowerCase();
 }
 
 type ConnectionSlotState = "idle" | "selected" | "compatible";
