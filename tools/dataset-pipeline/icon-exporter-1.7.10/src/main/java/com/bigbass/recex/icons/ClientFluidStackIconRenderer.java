@@ -166,6 +166,8 @@ public final class ClientFluidStackIconRenderer {
             Graphics2D graphics = combined.createGraphics();
             try {
                 graphics.drawImage(base, 0, 0, null);
+                int scale = Math.max(1, fluidOverlay.getWidth() / GUI_ICON_CANVAS_SIZE);
+                graphics.setClip(14 * scale, 10 * scale, 4 * scale, 13 * scale);
                 graphics.drawImage(fluidOverlay, 0, 0, null);
             } finally {
                 graphics.dispose();
