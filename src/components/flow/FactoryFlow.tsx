@@ -2,23 +2,45 @@
 
 import {
   Background,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
   MarkerType,
   MiniMap,
   ReactFlow,
+  getSmoothStepPath,
   type Connection,
   type Edge,
+  type EdgeProps,
+  type EdgeTypes,
   type NodeTypes,
 } from "@xyflow/react";
 import { useEffect, useMemo } from "react";
 import { formatRate } from "@/lib/model";
+import type { FactoryEdge, FactoryProject, ResourceAmount } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
+import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { parseResourceHandleId } from "./resource-handles";
 
 const nodeTypes = {
   recipeNode: RecipeNode,
 } satisfies NodeTypes;
+
+const edgeTypes = {
+  resourceEdge: ResourceEdge,
+} satisfies EdgeTypes;
+
+type ResourceEdgeData = {
+  resource: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath">;
+  color: string;
+  demand: string;
+  transferred?: string;
+  unit: string;
+  isLimited: boolean;
+};
+
+type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
 export function FactoryFlow() {
   const project = useFactoryStore((state) => state.project);
@@ -59,7 +81,7 @@ export function FactoryFlow() {
     [project.nodes, project.recipes, result.nodes],
   );
 
-  const edges = useMemo<Edge[]>(
+  const edges = useMemo<ResourceFlowEdge[]>(
     () =>
       project.edges.map((edge) => {
         const edgeResult = result.edges[edge.id];
@@ -71,11 +93,7 @@ export function FactoryFlow() {
           : edge.resourceKind === "fluid"
             ? "#0284c7"
             : "#0f766e";
-        const prefix = edge.resourceKind === "fluid" ? "F" : "I";
-        const label =
-          edgeResult?.isLimited === true
-            ? `${prefix} ${edge.label ?? edge.resourceId} ${formatRate(transferred)}/${formatRate(demand)}${unit}`
-            : `${prefix} ${edge.label ?? edge.resourceId} ${formatRate(demand)}${unit}`;
+        const resource = getEdgeResource(project, edge);
 
         return {
           id: edge.id,
@@ -84,8 +102,15 @@ export function FactoryFlow() {
           target: edge.target,
           sourceHandle: edge.sourceHandle,
           targetHandle: edge.targetHandle,
-          type: "smoothstep",
-          label,
+          type: "resourceEdge",
+          data: {
+            resource,
+            color: edgeColor,
+            demand: formatRate(demand),
+            transferred: edgeResult?.isLimited === true ? formatRate(transferred) : undefined,
+            unit,
+            isLimited: edgeResult?.isLimited === true,
+          },
           markerEnd: {
             type: MarkerType.ArrowClosed,
             color: edgeColor,
@@ -95,16 +120,9 @@ export function FactoryFlow() {
             strokeDasharray: edgeResult?.isLimited ? "7 4" : undefined,
             strokeWidth: edgeResult?.isLimited ? 3 : 2,
           },
-          labelBgPadding: [6, 3],
-          labelBgBorderRadius: 4,
-          labelStyle: {
-            fill: edgeResult?.isLimited ? "#991b1b" : "#262626",
-            fontSize: 12,
-            fontWeight: 700,
-          },
         };
       }),
-    [project.edges, result.edges],
+    [project, result.edges],
   );
 
   const handleConnect = (connection: Connection) => {
@@ -152,6 +170,7 @@ export function FactoryFlow() {
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         onConnect={handleConnect}
         onNodeClick={(_, node) => selectNode(node.id)}
         onPaneClick={() => {
@@ -189,4 +208,77 @@ export function FactoryFlow() {
       ) : null}
     </div>
   );
+}
+
+function ResourceEdge({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  markerEnd,
+  style,
+  data,
+}: EdgeProps<ResourceFlowEdge>) {
+  const [edgePath, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+
+  const rate = data?.isLimited
+    ? `${data.transferred}/${data.demand}${data.unit}`
+    : `${data?.demand}${data?.unit}`;
+
+  return (
+    <>
+      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      {data ? (
+        <EdgeLabelRenderer>
+          <div
+            className="nodrag nopan absolute flex items-center gap-1 border border-[#252525] bg-[#2b2d32] px-1.5 py-1 text-[11px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)]"
+            style={{
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+              pointerEvents: "all",
+              color: data.isLimited ? "#fecaca" : "#f8fafc",
+              borderColor: data.color,
+            }}
+            title={`${data.resource.displayName ?? data.resource.id}: ${rate}`}
+          >
+            <ResourceIcon
+              resource={data.resource}
+              size="sm"
+              showAmount={false}
+              bare
+              className="!h-6 !w-6"
+            />
+            <span className="leading-none">{rate}</span>
+          </div>
+        </EdgeLabelRenderer>
+      ) : null}
+    </>
+  );
+}
+
+function getEdgeResource(
+  project: FactoryProject,
+  edge: FactoryEdge,
+): Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath"> {
+  const sourceNode = project.nodes.find((node) => node.id === edge.source);
+  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
+  const output = sourceRecipe?.outputs.find(
+    (resource) => resource.kind === edge.resourceKind && resource.id === edge.resourceId,
+  );
+
+  return {
+    kind: edge.resourceKind,
+    id: edge.resourceId,
+    amount: 1,
+    displayName: output?.displayName ?? edge.label,
+    iconPath: output?.iconPath,
+  };
 }

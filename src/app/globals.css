@@ -50,9 +50,23 @@ textarea {
   z-index: 20;
 }
 
+.factory-flow-board .react-flow__edgelabel-renderer {
+  z-index: 35;
+}
+
+.factory-flow-board .react-flow__panel {
+  z-index: 60;
+}
+
 .factory-flow-board .react-flow__edge-path,
 .factory-flow-board .react-flow__edge-text {
   pointer-events: auto;
+}
+
+.factory-flow-board .react-flow__minimap {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d4d4d4;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
 
 .nei-tab-scroll {
