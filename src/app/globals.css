@@ -67,3 +67,13 @@ textarea {
 .nei-tab-strip::-webkit-scrollbar {
   display: none;
 }
+
+.minecraft-title {
+  font-family: var(--font-minecraft), var(--font-geist-mono), monospace;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #ffffff;
+  text-shadow:
+    1px 1px 0 #3f3f3f,
+    2px 2px 0 #3f3f3f;
+}

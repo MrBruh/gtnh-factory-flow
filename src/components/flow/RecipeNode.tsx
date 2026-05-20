@@ -32,7 +32,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
       ].join(" ")}
     >
       <div className="px-2 pb-2 pt-1">
-        <div className="truncate pb-1 text-[12px] font-bold">
+        <div className="minecraft-title mb-1 h-6 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]">
           {recipe.source?.recipeMap ?? recipe.machineType}
         </div>
         <NeiRecipeWindow
