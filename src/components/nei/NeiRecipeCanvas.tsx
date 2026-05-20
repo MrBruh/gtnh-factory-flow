@@ -39,7 +39,7 @@ export function NeiRecipeCanvas({
         imageRendering: "pixelated",
       }}
     >
-      {layout.progressBars.map((bar, index) => (
+      {layout.progressBars.slice(0, 1).map((bar, index) => (
         <ProgressTexture key={`${bar.x}-${bar.y}-${index}`} bar={bar} scale={scale} />
       ))}
 
@@ -128,8 +128,9 @@ function ProgressTexture({
         top: bar.y * scale,
         width: bar.width * scale,
         height: bar.height * scale,
-        backgroundImage: `url('${getProgressTexture(bar.texture)}')`,
-        backgroundSize: "100% 100%",
+        backgroundImage: "url('/nei/gregtech/gui/progressbar/arrow.png')",
+        backgroundPosition: "top left",
+        backgroundSize: "100% 200%",
         imageRendering: "pixelated",
       }}
     />
@@ -138,8 +139,4 @@ function ProgressTexture({
 
 function getSlotTexture(frame: NeiSlotFrame) {
   return `/nei/modularui/gui/slot/${frame.kind}.png`;
-}
-
-function getProgressTexture(texture: NeiProgressTexture) {
-  return `/nei/gregtech/gui/progressbar/${texture}.png`;
 }

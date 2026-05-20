@@ -2,9 +2,8 @@
 
 import { AlertTriangle } from "lucide-react";
 import type { Recipe } from "@/lib/model/types";
-import { formatRate } from "@/lib/model";
+import { formatRate, getRecipePowerTier } from "@/lib/model";
 import { NeiRecipeCanvas } from "./nei/NeiRecipeCanvas";
-import { ResourceIcon } from "./nei/ResourceIcon";
 
 interface NeiRecipeCardProps {
   recipe: Recipe;
@@ -14,12 +13,11 @@ interface NeiRecipeCardProps {
 export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
   const durationSeconds = recipe.durationTicks / 20;
   const totalEu = recipe.eut * recipe.durationTicks;
+  const powerTier = getRecipePowerTier(recipe);
 
   return (
     <article className="mx-auto w-full max-w-[390px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
       <div className="relative px-2 pb-2 pt-1">
-        <NeiTabs recipe={recipe} />
-
         <div className="mt-1 grid grid-cols-[24px_minmax(0,1fr)_24px] items-center">
           <NeiButton label="<" />
           <div className="h-7 border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[24px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
@@ -42,7 +40,7 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
           <footer className="mt-2 px-1 text-[18px] leading-[22px] text-black">
             <div>Total: {formatRate(totalEu, 0)} EU</div>
             <div>
-              Usage: {formatRate(recipe.eut, 0)} EU/t ({recipe.minimumTier})
+              Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
             </div>
             <div>Time: {formatRate(durationSeconds, 2)} seconds</div>
             {recipe.programmedCircuit ? <div>Circuit: {recipe.programmedCircuit}</div> : null}
@@ -62,26 +60,6 @@ export function NeiRecipeCard({ recipe, compact = false }: NeiRecipeCardProps) {
         ) : null}
       </div>
     </article>
-  );
-}
-
-function NeiTabs({ recipe }: { recipe: Recipe }) {
-  const tabs = [recipe, ...recipe.inputs.slice(0, 3)].slice(0, 4);
-
-  return (
-    <div className="ml-12 flex h-10 items-end gap-1">
-      {tabs.map((entry, index) => {
-        const resource = "kind" in entry ? entry : undefined;
-        return (
-          <div
-            key={`${resource?.kind ?? "machine"}-${resource?.id ?? recipe.id}-${index}`}
-            className="grid h-10 w-[43px] place-items-center border-2 border-[#222] bg-[#bdbdbd] shadow-[inset_2px_2px_0_#f4f4f4,inset_-2px_-2px_0_#5a5a5a]"
-          >
-            <ResourceIcon resource={resource} size="sm" showAmount={false} className="!h-8 !w-8" />
-          </div>
-        );
-      })}
-    </div>
   );
 }
 

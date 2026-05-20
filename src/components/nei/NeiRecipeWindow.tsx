@@ -1,11 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { Recipe, ResourceAmount } from "@/lib/model/types";
-import { formatRate, primaryOutput } from "@/lib/model";
+import type { Recipe } from "@/lib/model/types";
+import { formatRate, getRecipePowerTier } from "@/lib/model";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import { NeiRecipeCanvas } from "./NeiRecipeCanvas";
-import { ResourceIcon } from "./ResourceIcon";
 
 interface NeiRecipeWindowProps {
   recipe: Recipe;
@@ -25,6 +24,7 @@ export function NeiRecipeWindow({
   const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
   const totalEu = recipe.eut * recipe.durationTicks;
   const seconds = recipe.durationTicks / 20;
+  const powerTier = getRecipePowerTier(recipe);
 
   return (
     <div
@@ -35,8 +35,6 @@ export function NeiRecipeWindow({
       ].join(" ")}
       style={{ imageRendering: "pixelated" }}
     >
-      <NeiTabs recipe={recipe} compact={compact} />
-
       <div className="border-2 border-[#f7f7f7] bg-[#c6c6c6] shadow-[inset_-2px_-2px_0_#6f6f6f]">
         <NeiTitleBar label={recipeMap} compact={compact} />
         <NeiPageBar compact={compact} />
@@ -52,33 +50,10 @@ export function NeiRecipeWindow({
       >
         <div>Total: {formatRate(totalEu, 0)} EU</div>
         <div>
-          Usage: {formatRate(recipe.eut, 0)} EU/t ({recipe.minimumTier})
+          Usage: {formatRate(recipe.eut, 0)} EU/t ({powerTier})
         </div>
         <div>Time: {formatRate(seconds, seconds >= 10 ? 0 : 1)} seconds</div>
       </div>
-    </div>
-  );
-}
-
-function NeiTabs({ recipe, compact }: { recipe: Recipe; compact: boolean }) {
-  const tabResources = [
-    primaryOutput(recipe),
-    recipe.inputs.find((resource) => resource.iconPath),
-    recipe.outputs.find((resource) => resource.iconPath),
-  ].filter((resource): resource is ResourceAmount => Boolean(resource));
-  const tabSize = compact ? 26 : 38;
-
-  return (
-    <div className={["mb-[-2px] flex items-end gap-1 pl-2", compact ? "h-6" : "h-9"].join(" ")}>
-      {tabResources.slice(0, 4).map((resource, index) => (
-        <div
-          key={`${resource.kind}:${resource.id}:${index}`}
-          className="flex items-center justify-center border-2 border-[#f7f7f7] bg-[#9b9b9b] shadow-[inset_-2px_-2px_0_#555]"
-          style={{ width: tabSize, height: tabSize }}
-        >
-          <ResourceIcon resource={resource} size={compact ? "sm" : "md"} showAmount={false} bare />
-        </div>
-      ))}
     </div>
   );
 }

@@ -126,7 +126,7 @@ const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
     itemOutputPositions: (count) => gridPositions(count, 106, 6, 2),
     fluidInputPositions: (count) => gridPositions(count, 7, 41, Math.max(count, 1), 1),
     fluidOutputPositions: (count) => gridPositions(count, 142, 6, 1, Math.max(count, 1)),
-    progressBars: [{ ...DEFAULT_PROGRESS_BARS[0], texture: "arrow_multiple" }],
+    progressBars: DEFAULT_PROGRESS_BARS,
   },
   "Distillation Tower": {
     id: "distillation-tower",
@@ -143,7 +143,7 @@ const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
       }
       return results;
     },
-    progressBars: [{ ...DEFAULT_PROGRESS_BARS[0], texture: "arrow_multiple" }],
+    progressBars: DEFAULT_PROGRESS_BARS,
   },
   "Zhuhai - Fishing Port": {
     id: "zhuhai-fishing-port",
@@ -239,11 +239,7 @@ function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLa
       itemInputPositions: (count) => gridPositions(count, 16, 8, 4),
       itemOutputPositions: (count) => (count > 0 ? [{ x: 142, y: 8 }] : []),
       fluidInputPositions: (count) => gridPositions(count, 106, 8, 1),
-      progressBars: [
-        { x: 88, y: 8, width: 17, height: 72, direction: "right", texture: "assemblyline_1" },
-        { x: 124, y: 8, width: 18, height: 72, direction: "right", texture: "assemblyline_2" },
-        { x: 146, y: 26, width: 10, height: 18, direction: "up", texture: "assemblyline_3" },
-      ],
+      progressBars: DEFAULT_PROGRESS_BARS,
     };
   }
 
@@ -277,7 +273,7 @@ function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLa
       itemOutputPositions: largeItemOutputPositions,
       fluidInputPositions: largeFluidInputPositions,
       fluidOutputPositions: largeFluidOutputPositions,
-      progressBars: [{ ...DEFAULT_PROGRESS_BARS[0], texture: "arrow_multiple" }],
+      progressBars: DEFAULT_PROGRESS_BARS,
     };
   }
 
@@ -341,7 +337,7 @@ function exportedGridLayout(recipe: Recipe): RecipeMapLayoutDefinition | undefin
         Math.max(fluidOutputWidth, 1),
         fluidOutputHeight,
       ),
-    progressBars: [{ ...DEFAULT_PROGRESS_BARS[0], texture: "arrow_multiple" }],
+    progressBars: DEFAULT_PROGRESS_BARS,
   };
 }
 
