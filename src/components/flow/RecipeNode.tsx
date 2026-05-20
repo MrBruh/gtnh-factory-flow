@@ -20,6 +20,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const browseResource = useFactoryStore((state) => state.browseResource);
   const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
+  const deleteNode = useFactoryStore((state) => state.deleteNode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const selectResourceConnectionSlot = useFactoryStore(
     (state) => state.selectResourceConnectionSlot,
@@ -39,7 +40,18 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     >
       <div className="px-2 pb-2 pt-1">
         <div className="mb-1 grid grid-cols-[24px_minmax(0,1fr)_24px] items-center">
-          <div />
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              deleteNode(projectNode.id);
+            }}
+            className="nodrag h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-red-700"
+            title="Delete node"
+            aria-label="Delete node"
+          >
+            -
+          </button>
           <div className="minecraft-title h-6 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]">
             {recipe.source?.recipeMap ?? recipe.machineType}
           </div>
