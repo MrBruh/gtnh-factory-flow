@@ -200,7 +200,55 @@ exporterSource = exporterSource.replace(
   ].join("\n") + "\n",
 );
 
+exporterSource = exporterSource.replace(
+  "                // item outputs\n",
+  [
+    "                // non-consumed item inputs / special items",
+    "                if (rec.mSpecialItems != null) {",
+    "                    if (rec.mSpecialItems instanceof ItemStack) {",
+    "                        Item item = RecipeUtil.formatGregtechItemStack((ItemStack) rec.mSpecialItems);",
+    "                        if (item != null) gtr.iNC.add(item);",
+    "                    } else if (rec.mSpecialItems instanceof Object[]) {",
+    "                        for (Object special : (Object[]) rec.mSpecialItems) {",
+    "                            if (!(special instanceof ItemStack)) continue;",
+    "                            Item item = RecipeUtil.formatGregtechItemStack((ItemStack) special);",
+    "                            if (item != null) gtr.iNC.add(item);",
+    "                        }",
+    "                    } else if (rec.mSpecialItems instanceof Iterable) {",
+    "                        for (Object special : (Iterable<?>) rec.mSpecialItems) {",
+    "                            if (!(special instanceof ItemStack)) continue;",
+    "                            Item item = RecipeUtil.formatGregtechItemStack((ItemStack) special);",
+    "                            if (item != null) gtr.iNC.add(item);",
+    "                        }",
+    "                    }",
+    "                }",
+    "",
+    "                // item outputs",
+  ].join("\n") + "\n",
+);
+
 await fs.writeFile(exporterPath, exporterSource);
+
+const gregtechRecipePath = path.join(
+  repoDir,
+  "src/main/java/com/bigbass/recex/recipes/gregtech/GregtechRecipe.java",
+);
+let gregtechRecipeSource = await fs.readFile(gregtechRecipePath, "utf8");
+gregtechRecipeSource = gregtechRecipeSource.replace(
+  "    /** itemOutputs */\n    public List<Item> iO;\n",
+  [
+    "    /** non-consumed itemInputs */",
+    "    public List<Item> iNC;",
+    "",
+    "    /** itemOutputs */",
+    "    public List<Item> iO;",
+  ].join("\n") + "\n",
+);
+gregtechRecipeSource = gregtechRecipeSource.replace(
+  "        iO = new ArrayList<Item>();\n",
+  "        iNC = new ArrayList<Item>();\n        iO = new ArrayList<Item>();\n",
+);
+await fs.writeFile(gregtechRecipePath, gregtechRecipeSource);
 
 const itemPath = path.join(
   repoDir,

@@ -2,13 +2,12 @@
 
 import Image from "next/image";
 import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
-import { formatRate } from "@/lib/model";
 
 interface ResourceIconProps {
   resource?: Pick<
     ResourceAmount,
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "tooltip"
-  >;
+  > & { consumed?: boolean };
   size?: "sm" | "md" | "lg";
   showAmount?: boolean;
   showName?: boolean;
@@ -60,8 +59,12 @@ export function ResourceIcon({
       ) : null}
 
       {resource && showAmount ? (
-        <span className="absolute bottom-0 right-0.5 max-w-[90%] truncate font-mono text-[10px] font-black leading-none text-white drop-shadow-[1px_1px_0_#000]">
-          {formatAmount(resource.amount, resource.kind)}
+        <AmountLabel resource={resource} />
+      ) : null}
+
+      {resource?.consumed === false ? (
+        <span className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]">
+          NC
         </span>
       ) : null}
 
@@ -74,10 +77,47 @@ export function ResourceIcon({
   );
 }
 
-function formatAmount(amount: number, kind: ResourceKind): string {
-  if (kind === "fluid") {
-    return `${formatRate(amount, amount >= 100 ? 0 : 1)}L`;
+function AmountLabel({
+  resource,
+}: {
+  resource: Pick<ResourceAmount, "kind" | "amount">;
+}) {
+  const label = formatMinecraftAmount(resource.amount, resource.kind);
+  if (!label) {
+    return null;
   }
 
-  return formatRate(amount, amount >= 10 ? 0 : 2);
+  const position =
+    resource.kind === "fluid" ? "bottom-0 left-0.5" : "bottom-0 right-0.5 text-right";
+
+  return (
+    <span
+      className={[
+        "absolute max-w-[95%] truncate font-mono text-[10px] font-black leading-none text-white drop-shadow-[1px_1px_0_#000]",
+        position,
+      ].join(" ")}
+    >
+      {label}
+    </span>
+  );
+}
+
+function formatMinecraftAmount(amount: number, kind: ResourceKind): string | undefined {
+  if (kind === "item") {
+    if (amount === 1) {
+      return undefined;
+    }
+
+    return Number.isInteger(amount) ? String(amount) : trimAmount(amount);
+  }
+
+  return `${trimAmount(amount)}L`;
+}
+
+function trimAmount(amount: number): string {
+  if (Number.isInteger(amount)) {
+    return String(amount);
+  }
+
+  return amount.toFixed(2).replace(/\.?0+$/, "");
 }

@@ -41,6 +41,7 @@ export interface ResourceAmount {
 
 export interface RecipeInput extends ResourceAmount {
   optional?: boolean;
+  consumed?: boolean;
 }
 
 export interface RecipeOutput extends ResourceAmount {

@@ -124,4 +124,46 @@ describe("calculateThroughput", () => {
     expect(result.nodes.source.utilization).toBeCloseTo(1);
     expect(result.resources["fluid:water"].netPerSecond).toBeCloseTo(0);
   });
+
+  it("does not consume non-consumed recipe inputs", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "non-consumed-project",
+      name: "Non-consumed input test",
+      recipes: [
+        {
+          id: "catalyst-recipe",
+          name: "Catalyst recipe",
+          machineType: "Chemical Reactor",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [
+            { kind: "item", id: "catalyst", amount: 1, consumed: false },
+            { kind: "item", id: "dust", amount: 2 },
+          ],
+          outputs: [{ kind: "item", id: "product", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node",
+          recipeId: "catalyst-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.node.inputs["item:catalyst"]).toBeUndefined();
+    expect(result.resources["item:catalyst"]).toBeUndefined();
+    expect(result.resources["item:dust"].consumedPerSecond).toBeCloseTo(2);
+  });
 });

@@ -36,7 +36,10 @@ for (const machine of gregtechSource.machines) {
     }
 
     const inputs = [
-      ...(rawRecipe.iI ?? []).map(itemAmount),
+      ...(rawRecipe.iI ?? []).map((item) => itemAmount(item, { consumed: !isNonConsumedInput(item) })),
+      ...(rawRecipe.iNC ?? []).map((item) => itemAmount(item, { consumed: false })),
+      ...(rawRecipe.nCI ?? []).map((item) => itemAmount(item, { consumed: false })),
+      ...(rawRecipe.ncI ?? []).map((item) => itemAmount(item, { consumed: false })),
       ...(rawRecipe.fI ?? []).map(fluidAmount),
     ].filter(Boolean);
     const outputs = [
@@ -117,7 +120,7 @@ await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(outputPath, `${JSON.stringify(dataset, null, 2)}\n`);
 console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
 
-function itemAmount(item) {
+function itemAmount(item, options = {}) {
   if (!item?.id || !Number.isFinite(item.a) || item.a <= 0) {
     return undefined;
   }
@@ -131,7 +134,12 @@ function itemAmount(item) {
     displayName: text(item.lN, id),
     tooltip: item.nbt ? [`NBT: ${item.nbt}`] : undefined,
     iconPath,
+    consumed: options.consumed === false ? false : undefined,
   };
+}
+
+function isNonConsumedInput(item) {
+  return Boolean(item?.nc || item?.nC || item?.notConsumed || item?.nonConsumed || item?.consumed === false);
 }
 
 function fluidAmount(fluid) {

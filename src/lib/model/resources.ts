@@ -62,3 +62,7 @@ export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {
 export function getChanceMultiplier(output: RecipeOutput): number {
   return output.chance ?? 1;
 }
+
+export function isRecipeInputConsumed(input: Pick<ResourceAmount, "id"> & { consumed?: boolean }): boolean {
+  return input.consumed !== false;
+}

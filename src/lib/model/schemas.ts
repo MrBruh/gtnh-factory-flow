@@ -21,6 +21,7 @@ export const resourceAmountSchema = z.object({
 
 export const recipeInputSchema = resourceAmountSchema.extend({
   optional: z.boolean().optional(),
+  consumed: z.boolean().optional(),
 });
 
 export const recipeOutputSchema = resourceAmountSchema.extend({

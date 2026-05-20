@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
-import { formatRate } from "@/lib/model";
+import { formatRate, isRecipeInputConsumed } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { makeResourceHandleId } from "./resource-handles";
 
@@ -36,6 +36,10 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           scale={2}
           renderHandle={(slot) => {
             const isInput = slot.side === "input";
+            if (isInput && !isRecipeInputConsumed(slot.resource)) {
+              return null;
+            }
+
             return (
               <Handle
                 id={makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex)}

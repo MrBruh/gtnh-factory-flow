@@ -1,5 +1,6 @@
 import {
   getChanceMultiplier,
+  isRecipeInputConsumed,
   makeResourceKey,
   primaryOutput,
   resourceLabel,
@@ -80,6 +81,10 @@ export function calculateThroughput(
     const outputs: FlowRecord = {};
 
     for (const input of recipe.inputs) {
+      if (!isRecipeInputConsumed(input)) {
+        continue;
+      }
+
       const amountPerSecond = input.amount * operationRatePerSecond;
       addFlow(inputs, input, amountPerSecond);
       addBalanceConsumption(balances, input, amountPerSecond);
