@@ -1,6 +1,6 @@
 "use client";
 
-import { GitBranchPlus, PlusCircle, Search, X } from "lucide-react";
+import { GitBranchPlus, Plus, Search, X } from "lucide-react";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
@@ -431,8 +431,9 @@ function RecipeBookOverlay({
   onSelectRecipe: (recipeId: string) => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
+  const initialPanelSize = getInitialRecipeBookSize();
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [panelSize, setPanelSize] = useState({ width: 620, height: 760 });
+  const [panelSize, setPanelSize] = useState(initialPanelSize);
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -538,7 +539,17 @@ function RecipeBookOverlay({
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
-          <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center px-2 pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute -right-8 top-0 z-20 h-8 w-8 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]"
+            title="Close"
+            aria-label="Close recipe book"
+          >
+            x
+          </button>
+
+          <div className="grid grid-cols-[24px_minmax(0,1fr)_24px] items-center px-2 pt-2">
             <div />
             <div
               onPointerDown={handlePointerDown}
@@ -549,15 +560,7 @@ function RecipeBookOverlay({
             >
               {activeRecipeMap || filteredRecipes[0]?.machineType || resourceLabel(activeResource)}
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="h-8 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]"
-              title="Close"
-              aria-label="Close recipe book"
-            >
-              x
-            </button>
+            <div />
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -566,7 +569,7 @@ function RecipeBookOverlay({
                 No matching recipes.
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-[repeat(auto-fit,minmax(360px,1fr))] items-start gap-2">
                 {filteredRecipes.map((recipe) => (
                   <RecipeResultCard
                     key={recipe.id}
@@ -623,8 +626,8 @@ function RecipeResultCard({
     <article
       onClick={onSelect}
       className={[
-        "cursor-pointer rounded-[4px] border bg-[#303238] p-2 shadow-sm transition hover:border-neutral-500",
-        selected ? "border-cyan-400 ring-1 ring-cyan-400" : "border-neutral-700",
+        "relative cursor-pointer transition",
+        selected ? "ring-1 ring-cyan-400" : "",
       ].join(" ")}
     >
       <div className="flex items-start justify-end gap-2">
@@ -649,16 +652,12 @@ function RecipeResultCard({
               onAdd();
             }
           }}
-          className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-neutral-600 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400 hover:text-cyan-100"
+          className="absolute right-1 top-1 z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center border border-neutral-600 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400 hover:text-cyan-100"
         >
-          {onAddConnected ? (
-            <GitBranchPlus className="h-4 w-4" />
-          ) : (
-            <PlusCircle className="h-4 w-4" />
-          )}
+          {onAddConnected ? <GitBranchPlus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
         </button>
       </div>
-      <div className="mt-2 overflow-x-auto pb-1">
+      <div className="overflow-x-auto pb-1 pr-9">
         <NeiRecipeWindow
           recipe={recipe}
           scale={2}
@@ -703,6 +702,17 @@ function clampPanelSize(size: { width: number; height: number }) {
   return {
     width: clamp(size.width, 420, maxWidth),
     height: clamp(size.height, 360, maxHeight),
+  };
+}
+
+function getInitialRecipeBookSize() {
+  if (typeof window === "undefined") {
+    return { width: 760, height: 760 };
+  }
+
+  return {
+    width: Math.min(920, Math.max(420, window.innerWidth - 360 - 440 - 48)),
+    height: Math.min(760, Math.max(360, window.innerHeight - 32)),
   };
 }
 
