@@ -8,7 +8,7 @@ import {
 } from "@/lib/datasets";
 import { loadRecipeDatasetVersion } from "@/lib/datasets/browser-loader";
 import { parseFactoryProjectJson, serializeFactoryProject } from "@/lib/import-export";
-import { LOCAL_STORAGE_KEY, useFactoryStore } from "@/store/factory-store";
+import { LOCAL_STORAGE_KEY, loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { InspectorPanel } from "./InspectorPanel";
 import { RecipeBrowser } from "./RecipeBrowser";
@@ -17,6 +17,7 @@ import { TopBar } from "./TopBar";
 export function FactoryPlannerApp() {
   const project = useFactoryStore((state) => state.project);
   const markHydratedProject = useFactoryStore((state) => state.markHydratedProject);
+  const hydrateResourceHistory = useFactoryStore((state) => state.hydrateResourceHistory);
   const setDatasetManifest = useFactoryStore((state) => state.setDatasetManifest);
   const setDataset = useFactoryStore((state) => state.setDataset);
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
@@ -54,6 +55,8 @@ export function FactoryPlannerApp() {
   );
 
   useEffect(() => {
+    hydrateResourceHistory(loadResourceHistory());
+
     const storedProject = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (storedProject) {
       try {
@@ -64,7 +67,7 @@ export function FactoryPlannerApp() {
       }
     }
     hydratedRef.current = true;
-  }, [markHydratedProject]);
+  }, [hydrateResourceHistory, markHydratedProject]);
 
   useEffect(() => {
     let cancelled = false;

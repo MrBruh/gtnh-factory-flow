@@ -17,6 +17,7 @@ import type {
 } from "@/lib/model/types";
 
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
+export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
 
 interface FactoryStore {
   project: FactoryProject;
@@ -42,6 +43,7 @@ interface FactoryStore {
   setDatasetLoading: (isLoading: boolean) => void;
   setDatasetError: (error?: string) => void;
   setRecipeSearch: (query: string) => void;
+  hydrateResourceHistory: (history: RecipeBrowserResource[]) => void;
   browseResource: (resource: RecipeBrowserResource, mode?: RecipeBrowserMode) => void;
   clearResourceBrowser: () => void;
   cleanBoard: () => void;
@@ -172,13 +174,21 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   setRecipeSearch: (query) => {
     set({ recipeSearch: query });
   },
+  hydrateResourceHistory: (history) => {
+    set({ recipeResourceHistory: normalizeResourceHistory(history) });
+  },
   browseResource: (resource, mode = "recipes") => {
-    set((state) => ({
-      recipeBrowserResource: resource,
-      recipeBrowserMode: mode,
-      recipeResourceHistory: updateResourceHistory(state.recipeResourceHistory, resource),
-      selectedNodeId: resource.anchorNodeId,
-    }));
+    set((state) => {
+      const recipeResourceHistory = updateResourceHistory(state.recipeResourceHistory, resource);
+      saveResourceHistory(recipeResourceHistory);
+
+      return {
+        recipeBrowserResource: resource,
+        recipeBrowserMode: mode,
+        recipeResourceHistory,
+        selectedNodeId: resource.anchorNodeId,
+      };
+    });
   },
   clearResourceBrowser: () => {
     set({
@@ -648,6 +658,87 @@ function updateResourceHistory(
   const key = getResourceKey(entry);
 
   return [entry, ...history.filter((item) => getResourceKey(item) !== key)].slice(0, 80);
+}
+
+export function loadResourceHistory(): RecipeBrowserResource[] {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const rawHistory = window.localStorage.getItem(RESOURCE_HISTORY_STORAGE_KEY);
+    if (!rawHistory) {
+      return [];
+    }
+
+    return normalizeResourceHistory(JSON.parse(rawHistory));
+  } catch {
+    return [];
+  }
+}
+
+function saveResourceHistory(history: RecipeBrowserResource[]) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      RESOURCE_HISTORY_STORAGE_KEY,
+      JSON.stringify(normalizeResourceHistory(history)),
+    );
+  } catch {
+    // Best effort cache: failing to persist quick access should not block browsing.
+  }
+}
+
+function normalizeResourceHistory(value: unknown): RecipeBrowserResource[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const history: RecipeBrowserResource[] = [];
+
+  for (const item of value) {
+    if (!isStoredRecipeBrowserResource(item)) {
+      continue;
+    }
+
+    const entry: RecipeBrowserResource = {
+      kind: item.kind,
+      id: item.id,
+      displayName: item.displayName,
+      iconPath: item.iconPath,
+    };
+    const key = getResourceKey(entry);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    history.push(entry);
+    if (history.length >= 80) {
+      break;
+    }
+  }
+
+  return history;
+}
+
+function isStoredRecipeBrowserResource(value: unknown): value is RecipeBrowserResource {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const resource = value as Partial<RecipeBrowserResource>;
+  return (
+    (resource.kind === "item" || resource.kind === "fluid") &&
+    typeof resource.id === "string" &&
+    resource.id.length > 0 &&
+    (resource.displayName === undefined || typeof resource.displayName === "string") &&
+    (resource.iconPath === undefined || typeof resource.iconPath === "string")
+  );
 }
 
 function createId(prefix: string): string {
