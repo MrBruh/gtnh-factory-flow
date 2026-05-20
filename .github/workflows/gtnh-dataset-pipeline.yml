@@ -105,14 +105,14 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: gtnh-export-logs-${{ matrix.id }}
           path: |
             .pipeline/raw-export/${{ matrix.id }}/*.log
-            .pipeline/raw-export/${{ matrix.id }}/recex-export.json
-            .pipeline/raw-export/${{ matrix.id }}/rendered-icons/*.png
             .pipeline/raw-export/${{ matrix.id }}/rendered-icons/*.json
             .pipeline/${{ matrix.id }}.pipeline.json
+          if-no-files-found: warn
 
       - name: Stage dataset artifact
         run: |
