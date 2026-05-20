@@ -6,7 +6,7 @@ import { gunzipSync } from "node:zlib";
 
 const rootDir = path.join("public", "datasets", "gtnh");
 const entries = existsSync(rootDir) ? await fs.readdir(rootDir, { withFileTypes: true }) : [];
-const versions = [];
+const discoveredVersions = [];
 
 for (const entry of entries) {
   if (!entry.isDirectory()) {
@@ -26,7 +26,7 @@ for (const entry of entries) {
     .update(await fs.readFile(recipesPath))
     .digest("hex");
 
-  versions.push({
+  discoveredVersions.push({
     id: dataset.datasetVersionId,
     gtnhVersion: dataset.gtnhVersion,
     channel: inferChannel(dataset.datasetVersionId),
@@ -38,10 +38,21 @@ for (const entry of entries) {
   });
 }
 
+const latestDailyVersion = newestVersion(discoveredVersions, "daily")?.id;
+
+for (const version of discoveredVersions) {
+  if (version.channel === "daily" && version.id !== latestDailyVersion) {
+    await fs.rm(path.join(rootDir, version.id), { recursive: true, force: true });
+  }
+}
+
+const versions = discoveredVersions.filter(
+  (version) => version.channel !== "daily" || version.id === latestDailyVersion,
+);
+
 versions.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt));
 
 const latestStableVersion = versions.find((version) => version.channel === "stable")?.id;
-const latestDailyVersion = versions.find((version) => version.channel === "daily")?.id;
 const manifest = {
   schemaVersion: 1,
   ...(latestStableVersion ? { latestStableVersion } : {}),
@@ -91,4 +102,10 @@ async function readRecipeDataset(filePath) {
     ? gunzipSync(data).toString("utf8")
     : data.toString("utf8");
   return JSON.parse(source);
+}
+
+function newestVersion(versions, channel) {
+  return versions
+    .filter((version) => version.channel === channel)
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0];
 }
