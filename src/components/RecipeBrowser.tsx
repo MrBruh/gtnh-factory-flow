@@ -17,6 +17,7 @@ export function RecipeBrowser() {
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const browserResource = useFactoryStore((state) => state.recipeBrowserResource);
   const browserMode = useFactoryStore((state) => state.recipeBrowserMode);
+  const resourceHistory = useFactoryStore((state) => state.recipeResourceHistory);
   const selectedRecipeId = useFactoryStore((state) => state.selectedRecipeId);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
   const browseResource = useFactoryStore((state) => state.browseResource);
@@ -48,6 +49,15 @@ export function RecipeBrowser() {
       anchorNodeId: browserResource.anchorNodeId,
     };
   }, [browserResource, resourceIndex]);
+
+  const historyResources = useMemo(
+    () =>
+      resourceHistory.map((resource) => {
+        const indexed = resourceIndex.get(`${resource.kind}:${resource.id}` as ResourceKey);
+        return indexed ?? resource;
+      }),
+    [resourceHistory, resourceIndex],
+  );
 
   const resourceResults = useMemo(() => {
     if (activeResource) {
@@ -138,7 +148,7 @@ export function RecipeBrowser() {
 
   return (
     <>
-      <aside className="flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
+      <aside className="relative flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
         <div className="border-b border-neutral-800 px-3 py-3">
           <label className="flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
             <Search className="h-4 w-4 text-neutral-500" />
@@ -205,6 +215,7 @@ export function RecipeBrowser() {
             </div>
           )}
         </div>
+        <ResourceHistoryPanel resources={historyResources} onBrowse={browseResource} />
       </aside>
 
       {activeResource ? (
@@ -244,6 +255,50 @@ export function RecipeBrowser() {
         />
       ) : null}
     </>
+  );
+}
+
+function ResourceHistoryPanel({
+  resources,
+  onBrowse,
+}: {
+  resources: Array<Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath">>;
+  onBrowse: (
+    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath">,
+    mode: "recipes" | "uses",
+  ) => void;
+}) {
+  if (resources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-auto absolute bottom-3 left-3 right-3 z-20 max-h-[116px] overflow-hidden border border-neutral-700 bg-[#111317] p-2 shadow-xl">
+      <div className="flex flex-wrap gap-2">
+        {resources.map((resource) => (
+          <button
+            key={`${resource.kind}:${resource.id}`}
+            type="button"
+            onClick={() => onBrowse(resource, "recipes")}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              onBrowse(resource, "uses");
+            }}
+            title={resourceLabel(resource)}
+            aria-label={resourceLabel(resource)}
+            className="h-10 w-10 shrink-0 border border-neutral-600 bg-[#2b2d32] p-0 hover:border-cyan-400"
+          >
+            <ResourceIcon
+              resource={{ ...resource, amount: 1 }}
+              size="sm"
+              showAmount={false}
+              bare
+              className="!h-full !w-full"
+            />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

@@ -29,6 +29,7 @@ interface FactoryStore {
   recipeSearch: string;
   recipeBrowserResource?: RecipeBrowserResource;
   recipeBrowserMode: RecipeBrowserMode;
+  recipeResourceHistory: RecipeBrowserResource[];
   selectedNodeId?: string;
   selectedRecipeId?: string;
   lastResult: ThroughputResult;
@@ -92,6 +93,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   recipeSearch: "",
   recipeBrowserResource: undefined,
   recipeBrowserMode: "recipes",
+  recipeResourceHistory: [],
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
   lastResult: calculateThroughput(initialProject),
@@ -156,11 +158,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set({ recipeSearch: query });
   },
   browseResource: (resource, mode = "recipes") => {
-    set({
+    set((state) => ({
       recipeBrowserResource: resource,
       recipeBrowserMode: mode,
+      recipeResourceHistory: updateResourceHistory(state.recipeResourceHistory, resource),
       selectedNodeId: resource.anchorNodeId,
-    });
+    }));
   },
   clearResourceBrowser: () => {
     set({
@@ -431,6 +434,21 @@ function touchProject(project: FactoryProject): FactoryProject {
       updatedAt: new Date().toISOString(),
     },
   };
+}
+
+function updateResourceHistory(
+  history: RecipeBrowserResource[],
+  resource: RecipeBrowserResource,
+): RecipeBrowserResource[] {
+  const entry: RecipeBrowserResource = {
+    kind: resource.kind,
+    id: resource.id,
+    displayName: resource.displayName,
+    iconPath: resource.iconPath,
+  };
+  const key = getResourceKey(entry);
+
+  return [entry, ...history.filter((item) => getResourceKey(item) !== key)].slice(0, 80);
 }
 
 function createId(prefix: string): string {
