@@ -111,6 +111,7 @@ jobs:
             .pipeline/raw-export/${{ matrix.id }}/*.log
             .pipeline/raw-export/${{ matrix.id }}/recex-export.json
             .pipeline/raw-export/${{ matrix.id }}/rendered-icons/*.png
+            .pipeline/raw-export/${{ matrix.id }}/rendered-icons/*.json
             .pipeline/${{ matrix.id }}.pipeline.json
 
       - name: Stage dataset artifact

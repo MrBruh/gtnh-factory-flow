@@ -67,7 +67,10 @@ if (!existsSync(recipeDatasetPath)) {
   );
 }
 
-const dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
+let dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
+validateDataset(dataset);
+await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
+dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
 validateDataset(dataset);
 
 const compactDatasetJson = JSON.stringify(dataset);
@@ -122,6 +125,31 @@ async function writePipelineRecord(record) {
     path.join(pipelineDir, `${versionId}.pipeline.json`),
     `${JSON.stringify(record, null, 2)}\n`,
   );
+}
+
+async function pruneRenderedIcons(datasetPath, renderedDir) {
+  if (!existsSync(renderedDir)) {
+    return;
+  }
+
+  const exitCode = await new Promise((resolve) => {
+    const child = spawn(
+      "node",
+      ["tools/dataset-pipeline/scripts/prune-blank-rendered-icons.mjs", datasetPath, renderedDir],
+      {
+        stdio: "inherit",
+        env: {
+          ...process.env,
+          PRUNE_ATLAS_LIKE_ICONS: "true",
+        },
+      },
+    );
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+
+  if (exitCode !== 0) {
+    throw new Error(`Rendered icon pruning failed with exit code ${exitCode}.`);
+  }
 }
 
 function requiredEnv(name) {

@@ -31,8 +31,8 @@ It currently:
 - Installs a headless runtime with Xvfb for exporters that need a Minecraft client GUI.
 - Runs `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh` by default.
 - Expects the exporter to write `recipes.json` to `$GTNH_DATASET_OUT_DIR`.
-- Launches the GTNH client by default, patches RecEx to render real `ItemStack` PNGs,
-  and stores them in `$GTNH_DATASET_OUT_DIR/textures/rendered`.
+- Launches the GTNH client by default, patches RecEx with a Forge 1.7.10 icon exporter,
+  and stores real `ItemStack` PNGs in `$GTNH_DATASET_OUT_DIR/textures/rendered`.
 - Extracts matched real PNG textures from the selected GTNH mods for any remaining
   resources into `$GTNH_DATASET_OUT_DIR/textures`.
 - Rebuilds `public/datasets/gtnh/datasets.manifest.json` from generated datasets.
@@ -68,10 +68,20 @@ the existing exporter entry point, launches the selected GTNH build, then normal
 assets from `assets/<modid>/textures/items`, `blocks`, and `fluids`. Matched icons are
 copied under `/datasets/gtnh/<version>/textures/` and referenced through `iconPath`.
 
-Before the static scan runs, the default RecEx patch renders item icons from the real GTNH
-client with `RenderItem.renderItemIntoGUI` when `GTNH_RENDER_STACK_ICONS=true`. Rendered
-icons are copied under `/datasets/gtnh/<version>/textures/rendered/` and are preserved by
-the static texture pass.
+Before the static scan runs, the default RecEx patch installs
+`tools/dataset-pipeline/icon-exporter-1.7.10`, a small Forge 1.7.10 client-side exporter
+inspired by IconExporter. When `GTNH_RENDER_STACK_ICONS=true`, it opens a temporary GUI
+screen after the GTNH client has loaded, enumerates the item registry and creative-tab
+variants, renders their actual in-game GUI icons, filters blank and Minecraft
+missing-texture outputs, and builds an in-memory `ItemStack` key to PNG filename map.
+RecEx then references this precomputed map while exporting recipes instead of rendering
+icons opportunistically inside the recipe loop.
+
+Useful knobs:
+
+- `GTNH_RENDER_STACK_ICONS=true|false` enables the Forge 1.7.10 exporter.
+- `GTNH_ICON_EXPORT_BATCH_SIZE=64` controls how many icons are rendered per client frame.
+- `GTNH_RENDERED_ICON_DIR` is set by the runner and receives PNGs plus `icon-map.json`.
 
 The scripts do not synthesize missing icons. If a stack cannot be rendered by the GTNH
 client and no exact texture exists in the mods, that resource stays iconless.

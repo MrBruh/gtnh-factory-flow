@@ -1,10 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const repoDir = process.argv[2];
 if (!repoDir) {
   throw new Error("Usage: patch-recex-autorun.mjs <RecEx checkout>");
 }
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const iconExporterTemplateDir = path.join(scriptDir, "..", "icon-exporter-1.7.10", "src", "main", "java");
 
 const modPath = path.join(repoDir, "src/main/java/com/bigbass/recex/RecipeExporterMod.java");
 let source = await fs.readFile(modPath, "utf8");
@@ -46,7 +50,9 @@ source = source.replace(
         if (Boolean.getBoolean("recex.autorun") && FMLCommonHandler.instance().getSide().isClient()) {
             log.info("RecEx autorun registering mod event handler.");
             FMLCommonHandler.instance().bus().register(this);
-            startDelayedClientAutorunThread();
+            if (!Boolean.getBoolean("recex.renderIcons")) {
+                startDelayedClientAutorunThread();
+            }
         }
     }
 
@@ -175,41 +181,9 @@ await fs.writeFile(clientProxyPath, clientProxySource);
 
 const autorunPackageDir = path.join(repoDir, "src/main/java/com/bigbass/recex/autorun");
 await fs.mkdir(autorunPackageDir, { recursive: true });
-await fs.writeFile(
+await copyIconExporterTemplate(
+  "com/bigbass/recex/autorun/ClientAutorunExportHandler.java",
   path.join(autorunPackageDir, "ClientAutorunExportHandler.java"),
-  `package com.bigbass.recex.autorun;
-
-import com.bigbass.recex.RecipeExporterMod;
-
-import cpw.mods.fml.common.eventhandler.SubscribeEvent;
-import cpw.mods.fml.common.gameevent.TickEvent;
-import net.minecraft.client.Minecraft;
-
-public final class ClientAutorunExportHandler {
-
-    private int ticks;
-
-    @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.END) {
-            return;
-        }
-
-        ticks++;
-        if (ticks < Integer.getInteger("recex.autorunDelayTicks", 220)) {
-            return;
-        }
-
-        Minecraft minecraft = Minecraft.getMinecraft();
-        if (minecraft == null || minecraft.getTextureManager() == null || minecraft.fontRenderer == null) {
-            return;
-        }
-
-        RecipeExporterMod.log.info("RecEx autorun client tick handler is ready after " + ticks + " ticks.");
-        RecipeExporterMod.requestAutorunExport("client-proxy-tick");
-    }
-}
-`,
 );
 
 const exporterPath = path.join(
@@ -272,50 +246,13 @@ const iconPackageDir = path.join(repoDir, "src/main/java/com/bigbass/recex/icons
 await fs.mkdir(iconPackageDir, { recursive: true });
 await fs.writeFile(
   path.join(iconPackageDir, "ItemStackIconExporter.java"),
-  `package com.bigbass.recex.icons;
-
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-
-import net.minecraft.item.ItemStack;
-
-import com.bigbass.recex.RecipeExporterMod;
-
-public final class ItemStackIconExporter {
-
-    private static boolean warned;
-
-    private ItemStackIconExporter() {}
-
-    public static String captureIcon(ItemStack stack) {
-        if (stack == null || !Boolean.getBoolean("recex.renderIcons")) {
-            return null;
-        }
-
-        try {
-            Class<?> renderer = Class.forName("com.bigbass.recex.icons.ClientItemStackIconRenderer");
-            Method method = renderer.getMethod("captureIcon", ItemStack.class);
-            Object value = method.invoke(null, stack);
-            return value instanceof String ? (String) value : null;
-        } catch (InvocationTargetException e) {
-            warnOnce(e.getCause());
-        } catch (Throwable t) {
-            warnOnce(t);
-        }
-
-        return null;
-    }
-
-    private static void warnOnce(Throwable t) {
-        if (warned) {
-            return;
-        }
-
-        warned = true;
-        RecipeExporterMod.log.warn("RecEx rendered stack icons are unavailable; continuing without rendered icons.", t);
-    }
-}
-`,
+  await fs.readFile(
+    path.join(
+      iconExporterTemplateDir,
+      "com/bigbass/recex/icons/ItemStackIconExporter.java",
+    ),
+    "utf8",
+  ),
 );
 
 await fs.writeFile(
@@ -694,3 +631,12 @@ public final class ClientItemStackIconRenderer {
 }
 `,
 );
+
+await copyIconExporterTemplate(
+  "com/bigbass/recex/icons/ClientItemStackIconRenderer.java",
+  path.join(iconPackageDir, "ClientItemStackIconRenderer.java"),
+);
+
+async function copyIconExporterTemplate(relativePath, destinationPath) {
+  await fs.copyFile(path.join(iconExporterTemplateDir, relativePath), destinationPath);
+}
