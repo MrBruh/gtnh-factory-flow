@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Database, Download, FileJson, Upload } from "lucide-react";
+import { Calculator, Download, FileJson, Upload } from "lucide-react";
 import { useRef } from "react";
 import {
   cloneImportedProject,
@@ -18,10 +18,8 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
-  const dataset = useFactoryStore((state) => state.dataset);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
   const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
-  const datasetError = useFactoryStore((state) => state.datasetError);
   const setProject = useFactoryStore((state) => state.setProject);
   const recalculate = useFactoryStore((state) => state.recalculate);
 
@@ -57,14 +55,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
         <FileJson className="h-5 w-5 text-cyan-700" />
         <div className="min-w-0">
           <h1 className="truncate text-lg font-semibold text-neutral-950">GTNH Factory Flow</h1>
-          <p className="truncate text-xs text-neutral-500">
-            {datasetError ??
-              (dataset
-                ? `Dataset ${dataset.gtnhVersion} from ${dataset.sourceInfo.sourceId}`
-                : isDatasetLoading
-                  ? "Loading GTNH dataset..."
-                  : "No recipe dataset loaded")}
-          </p>
         </div>
       </div>
 
@@ -89,17 +79,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
       </label>
 
       <div className="flex flex-wrap gap-2">
-        <ToolbarButton
-          icon={Database}
-          label="Reload dataset"
-          onClick={() => {
-            if (selectedDatasetVersionId) {
-              onLoadDatasetVersion(selectedDatasetVersionId);
-            } else {
-              onNotice("No GTNH dataset version is available yet.");
-            }
-          }}
-        />
         <ToolbarButton
           icon={Calculator}
           label="Calculate"
