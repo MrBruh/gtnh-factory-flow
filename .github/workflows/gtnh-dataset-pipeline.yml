@@ -168,4 +168,5 @@ jobs:
             exit 0
           fi
           git commit -m "Update GTNH datasets"
+          git pull --rebase origin main
           git push
