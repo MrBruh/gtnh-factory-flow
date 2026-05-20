@@ -111,6 +111,8 @@ if (dataset.recipes.length === 0) {
   throw new Error("RecEx normalization produced zero recipes.");
 }
 
+await pruneUnusedRenderedIcons(dataset, outDir);
+
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(outputPath, `${JSON.stringify(dataset, null, 2)}\n`);
 console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
@@ -217,4 +219,51 @@ function renderedIconPath(fileName) {
   }
 
   return `/datasets/gtnh/${datasetVersionId}/textures/rendered/${safeFileName}`;
+}
+
+async function pruneUnusedRenderedIcons(dataset, datasetOutDir) {
+  const renderedDir = path.join(datasetOutDir, "textures", "rendered");
+  const usedFiles = new Set();
+
+  for (const resource of dataset.resources ?? []) {
+    addRenderedFile(resource.iconPath, usedFiles);
+  }
+  for (const recipe of dataset.recipes ?? []) {
+    for (const resource of [...(recipe.inputs ?? []), ...(recipe.outputs ?? [])]) {
+      addRenderedFile(resource.iconPath, usedFiles);
+    }
+  }
+
+  let entries;
+  try {
+    entries = await fs.readdir(renderedDir, { withFileTypes: true });
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return;
+    }
+    throw error;
+  }
+
+  let removed = 0;
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".png")) {
+      continue;
+    }
+    if (usedFiles.has(entry.name)) {
+      continue;
+    }
+    await fs.rm(path.join(renderedDir, entry.name), { force: true });
+    removed += 1;
+  }
+
+  if (removed > 0) {
+    console.log(`Removed ${removed} unreferenced rendered icons.`);
+  }
+}
+
+function addRenderedFile(iconPath, usedFiles) {
+  if (!iconPath || !String(iconPath).includes("/textures/rendered/")) {
+    return;
+  }
+  usedFiles.add(path.basename(String(iconPath)));
 }
