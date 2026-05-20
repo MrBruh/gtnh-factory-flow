@@ -4,7 +4,9 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.LinkedHashMap;
@@ -242,10 +244,8 @@ public final class ClientItemStackIconRenderer {
     }
 
     private static void applyMissingItemTint(ItemStack stack, BufferedImage image) {
-        int color;
-        try {
-            color = stack.getItem().getColorFromItemStack(stack, 0);
-        } catch (Throwable ignored) {
+        int color = stackTintColor(stack);
+        if (color < 0) {
             return;
         }
 
@@ -297,6 +297,93 @@ public final class ClientItemStackIconRenderer {
         }
 
         return visiblePixels > 0 && (double) neutralPixels / (double) visiblePixels > 0.85D;
+    }
+
+    private static int stackTintColor(ItemStack stack) {
+        int gregTechColor = gregTechMaterialColor(stack);
+        if (gregTechColor >= 0) {
+            return gregTechColor;
+        }
+
+        try {
+            return stack.getItem().getColorFromItemStack(stack, 0) & 0x00FFFFFF;
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    private static int gregTechMaterialColor(ItemStack stack) {
+        Object item = stack.getItem();
+        Class<?> type = item.getClass();
+        while (type != null) {
+            int methodColor = gregTechMaterialColorFromMethod(item, type, stack);
+            if (methodColor >= 0) {
+                return methodColor;
+            }
+
+            int fieldColor = gregTechMaterialColorFromField(item, type, stack.getItemDamage());
+            if (fieldColor >= 0) {
+                return fieldColor;
+            }
+            type = type.getSuperclass();
+        }
+
+        return -1;
+    }
+
+    private static int gregTechMaterialColorFromMethod(Object item, Class<?> type, ItemStack stack) {
+        String[] methodNames = new String[] { "getRGBa", "getRGBA" };
+        for (String methodName : methodNames) {
+            try {
+                Method method = type.getDeclaredMethod(methodName, ItemStack.class);
+                method.setAccessible(true);
+                int color = colorFromRgbArray(method.invoke(item, stack));
+                if (color >= 0) {
+                    return color;
+                }
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return -1;
+    }
+
+    private static int gregTechMaterialColorFromField(Object item, Class<?> type, int meta) {
+        try {
+            Field field = type.getDeclaredField("mRGBa");
+            field.setAccessible(true);
+            Object table = field.get(item);
+            if (table == null || !table.getClass().isArray() || meta < 0 || meta >= Array.getLength(table)) {
+                return -1;
+            }
+
+            return colorFromRgbArray(Array.get(table, meta));
+        } catch (Throwable ignored) {
+            return -1;
+        }
+    }
+
+    private static int colorFromRgbArray(Object value) {
+        if (value == null || !value.getClass().isArray() || Array.getLength(value) < 3) {
+            return -1;
+        }
+
+        int red = colorChannel(Array.get(value, 0));
+        int green = colorChannel(Array.get(value, 1));
+        int blue = colorChannel(Array.get(value, 2));
+        if (red < 0 || green < 0 || blue < 0) {
+            return -1;
+        }
+
+        return (red << 16) | (green << 8) | blue;
+    }
+
+    private static int colorChannel(Object value) {
+        if (!(value instanceof Number)) {
+            return -1;
+        }
+        int channel = ((Number) value).intValue();
+        return Math.max(0, Math.min(255, channel));
     }
 
     static File iconDir() {
