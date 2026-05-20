@@ -59,3 +59,11 @@ textarea {
   border: 2px solid #d0d0d0;
   border-radius: 8px;
 }
+
+.nei-tab-strip {
+  scrollbar-width: none;
+}
+
+.nei-tab-strip::-webkit-scrollbar {
+  display: none;
+}

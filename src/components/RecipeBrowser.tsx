@@ -326,6 +326,66 @@ function ResourceResult({
   );
 }
 
+function RecipeMapTabBar({
+  activeRecipeMap,
+  tabs,
+  onRecipeMapChange,
+}: {
+  activeRecipeMap: string;
+  tabs: RecipeMapTab[];
+  onRecipeMapChange: (recipeMap: string) => void;
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const scrollTabs = (direction: -1 | 1) => {
+    scrollRef.current?.scrollBy({ left: direction * 184, behavior: "smooth" });
+  };
+
+  return (
+    <div className="absolute left-1 right-1 top-0 grid h-[42px] grid-cols-[24px_minmax(0,1fr)_24px] items-start">
+      <NeiTabArrow direction="left" onClick={() => scrollTabs(-1)} />
+      <div
+        ref={scrollRef}
+        className="nei-tab-strip flex h-[42px] gap-1 overflow-x-auto overflow-y-hidden px-1"
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onRecipeMapChange(tab.id)}
+            title={tab.label}
+            aria-label={tab.label}
+            className={neiTabClass(activeRecipeMap === tab.id)}
+          >
+            {tab.icon ? (
+              <ResourceIcon resource={tab.icon} size="sm" showAmount={false} bare />
+            ) : (
+              <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
+                ?
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+      <NeiTabArrow direction="right" onClick={() => scrollTabs(1)} />
+    </div>
+  );
+}
+
+function NeiTabArrow({ direction, onClick }: { direction: "left" | "right"; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
+      aria-label={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
+      className="mt-1 h-9 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000] hover:bg-[#9b9b9b]"
+    >
+      {direction === "left" ? "<" : ">"}
+    </button>
+  );
+}
+
 function RecipeBookOverlay({
   activeRecipeMap,
   activeResource,
@@ -405,36 +465,19 @@ function RecipeBookOverlay({
     <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:left-[360px] lg:right-[440px]">
       <section
         ref={panelRef}
-        className="pointer-events-auto relative flex max-h-[calc(100vh-32px)] w-full max-w-[620px] flex-col pt-[42px] font-mono"
+        className="pointer-events-auto relative flex h-[min(760px,calc(100vh-32px))] w-full max-w-[620px] flex-col pt-[42px] font-mono"
         aria-label="Recipe book"
         style={{
           transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
         }}
       >
-        <div className="absolute left-2 right-2 top-0">
-          <div className="nei-tab-scroll flex gap-1 overflow-x-auto bg-[#17191d] p-1 pb-2">
-            {recipeMapTabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onRecipeMapChange(tab.id)}
-                title={tab.label}
-                aria-label={tab.label}
-                className={neiTabClass(activeRecipeMap === tab.id)}
-              >
-                {tab.icon ? (
-                  <ResourceIcon resource={tab.icon} size="sm" showAmount={false} bare />
-                ) : (
-                  <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
-                    ?
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+        <RecipeMapTabBar
+          activeRecipeMap={activeRecipeMap}
+          tabs={recipeMapTabs}
+          onRecipeMapChange={onRecipeMapChange}
+        />
 
-        <div className="flex min-h-0 max-h-[calc(100vh-74px)] flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+        <div className="flex min-h-0 flex-1 flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center px-2 pt-2">
             <button
               type="button"
@@ -479,7 +522,7 @@ function RecipeBookOverlay({
             <div className="h-8 border-x-2 border-b-2 border-[#252525] bg-[#5d5d5d] shadow-[inset_2px_0_0_#9f9f9f,inset_-2px_-2px_0_#303030]" />
           </div>
 
-          <div className="min-h-[260px] flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {filteredRecipes.length === 0 ? (
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 No matching recipes.
@@ -659,10 +702,7 @@ function recipeIconScore(recipe: Recipe): number {
   );
 }
 
-function buildRecipeMapTabs(
-  recipeMaps: string[],
-  resources: DatasetResource[],
-): RecipeMapTab[] {
+function buildRecipeMapTabs(recipeMaps: string[], resources: DatasetResource[]): RecipeMapTab[] {
   return recipeMaps.map((recipeMap) => {
     const resource = findRecipeMapIcon(recipeMap, resources);
     return {
@@ -742,15 +782,16 @@ function tokenizeRecipeMap(value: string): string[] {
 }
 
 function normalizeText(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function neiTabClass(active: boolean): string {
   return [
     "flex h-10 w-10 shrink-0 items-center justify-center border-2 p-0 shadow-[inset_2px_2px_0_rgba(255,255,255,0.35),inset_-2px_-2px_0_rgba(0,0,0,0.45)]",
-    active
-      ? "border-[#f4f4f4] bg-[#c6c6c6]"
-      : "border-[#252525] bg-[#7d7d7d] hover:bg-[#9b9b9b]",
+    active ? "border-[#f4f4f4] bg-[#c6c6c6]" : "border-[#252525] bg-[#7d7d7d] hover:bg-[#9b9b9b]",
   ].join(" ");
 }
 
