@@ -8,15 +8,17 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  applyNodeChanges,
   getSmoothStepPath,
   type Connection,
   type Edge,
   type EdgeProps,
   type EdgeTypes,
   type Node,
+  type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, useMemo, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { formatRate } from "@/lib/model";
 import type { FactoryEdge, FactoryProject, ResourceAmount } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
@@ -60,7 +62,7 @@ export function FactoryFlow() {
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
 
-  const nodes = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
+  const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
       ...project.nodes.map((node) => {
         const recipe = project.recipes.find((entry) => entry.id === node.recipeId);
@@ -98,6 +100,24 @@ export function FactoryFlow() {
     ],
     [project.nodes, project.recipes, project.storages, result.nodes, result.storages],
   );
+  const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
+    () => nodesFromProject,
+  );
+  const draggingNodeRef = useRef(false);
+
+  useEffect(() => {
+    if (draggingNodeRef.current) {
+      return;
+    }
+
+    setFlowNodes(nodesFromProject);
+  }, [nodesFromProject]);
+
+  const handleNodesChange = (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
+    setFlowNodes((currentNodes) =>
+      applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
+    );
+  };
 
   const edges = useMemo<ResourceFlowEdge[]>(
     () =>
@@ -200,23 +220,33 @@ export function FactoryFlow() {
   return (
     <div className="factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
       <ReactFlow
-        nodes={nodes}
+        nodes={flowNodes}
         edges={edges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onConnect={handleConnect}
         onNodeClick={(_, node) => selectNode(node.id)}
+        onNodesChange={handleNodesChange}
         onPaneClick={() => {
           selectNode(undefined);
           cancelResourceConnection();
         }}
+        onNodeDragStart={() => {
+          draggingNodeRef.current = true;
+        }}
         onNodeDragStop={(_, node: Node) => {
           if (node.type === "storageNode") {
             setStoragePosition(node.id, node.position);
-            return;
+          } else {
+            setNodePosition(node.id, node.position);
           }
 
-          setNodePosition(node.id, node.position);
+          draggingNodeRef.current = false;
+          setFlowNodes((currentNodes) =>
+            currentNodes.map((entry) =>
+              entry.id === node.id ? ({ ...entry, position: node.position } as typeof entry) : entry,
+            ),
+          );
         }}
         onEdgesDelete={(deletedEdges) => deletedEdges.forEach((edge) => deleteEdge(edge.id))}
         fitView

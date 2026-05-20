@@ -529,12 +529,20 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
 
       return {
         project,
-        lastResult: calculateThroughput(project),
       };
     });
   },
   setNodePosition: (nodeId, position) => {
-    get().updateNode(nodeId, { position });
+    set((state) => {
+      const project = touchProject({
+        ...state.project,
+        nodes: state.project.nodes.map((node) =>
+          node.id === nodeId ? { ...node, position } : node,
+        ),
+      });
+
+      return { project };
+    });
   },
   connectNodes: (sourceNodeId, targetNodeId, resource) => {
     set((state) => {

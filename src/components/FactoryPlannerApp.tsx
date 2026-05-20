@@ -7,7 +7,7 @@ import {
   pickDefaultDatasetVersion,
 } from "@/lib/datasets";
 import { loadRecipeDatasetVersion } from "@/lib/datasets/browser-loader";
-import { parseFactoryProjectJson, serializeFactoryProject } from "@/lib/import-export";
+import { parseFactoryProjectJson } from "@/lib/import-export";
 import { LOCAL_STORAGE_KEY, loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { FactoryFlow } from "./flow/FactoryFlow";
 import { InspectorPanel } from "./InspectorPanel";
@@ -24,6 +24,7 @@ export function FactoryPlannerApp() {
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
   const skipInitialSaveRef = useRef(true);
+  const saveTimeoutRef = useRef<number | undefined>(undefined);
   const [notice, setNotice] = useState<string | undefined>();
 
   const loadDatasetVersion = useCallback(
@@ -55,18 +56,23 @@ export function FactoryPlannerApp() {
   );
 
   useEffect(() => {
-    hydrateResourceHistory(loadResourceHistory());
+    const cancelHydration = scheduleIdleWork(() => {
+      hydrateResourceHistory(loadResourceHistory());
 
-    const storedProject = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (storedProject) {
-      try {
-        markHydratedProject(parseFactoryProjectJson(storedProject));
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Stored plan could not be loaded.";
-        window.setTimeout(() => setNotice(message), 0);
+      const storedProject = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (storedProject) {
+        try {
+          markHydratedProject(parseFactoryProjectJson(storedProject));
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Stored plan could not be loaded.";
+          window.setTimeout(() => setNotice(message), 0);
+        }
       }
-    }
-    hydratedRef.current = true;
+      hydratedRef.current = true;
+    }, 800);
+
+    return cancelHydration;
   }, [hydrateResourceHistory, markHydratedProject]);
 
   useEffect(() => {
@@ -118,12 +124,27 @@ export function FactoryPlannerApp() {
       return;
     }
 
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, serializeFactoryProject(project));
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Plan could not be saved locally.";
-      window.setTimeout(() => setNotice(message), 0);
+    if (saveTimeoutRef.current !== undefined) {
+      window.clearTimeout(saveTimeoutRef.current);
     }
+
+    saveTimeoutRef.current = window.setTimeout(() => {
+      scheduleIdleWork(() => {
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, `${JSON.stringify(project)}\n`);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : "Plan could not be saved locally.";
+          window.setTimeout(() => setNotice(message), 0);
+        }
+      }, 1200);
+    }, 350);
+
+    return () => {
+      if (saveTimeoutRef.current !== undefined) {
+        window.clearTimeout(saveTimeoutRef.current);
+      }
+    };
   }, [project]);
 
   useEffect(() => {
@@ -150,4 +171,20 @@ export function FactoryPlannerApp() {
       </main>
     </div>
   );
+}
+
+function scheduleIdleWork(callback: () => void, timeout: number) {
+  const browserWindow = window as Window &
+    typeof globalThis & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+
+  if (browserWindow.requestIdleCallback && browserWindow.cancelIdleCallback) {
+    const idleId = browserWindow.requestIdleCallback(callback, { timeout });
+    return () => browserWindow.cancelIdleCallback?.(idleId);
+  }
+
+  const timeoutId = globalThis.setTimeout(callback, 0);
+  return () => globalThis.clearTimeout(timeoutId);
 }
