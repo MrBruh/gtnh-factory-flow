@@ -5,14 +5,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.ByteBuffer;
 import java.security.MessageDigest;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 
 import javax.imageio.ImageIO;
 
@@ -21,11 +17,10 @@ import com.bigbass.recex.RecipeExporterMod;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.entity.RenderItem;
-import net.minecraft.creativetab.CreativeTabs;
+import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import org.lwjgl.BufferUtils;
@@ -35,8 +30,6 @@ import org.lwjgl.opengl.GL12;
 public final class ClientItemStackIconRenderer {
 
     private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 32);
-    private static final int BACKGROUND_COLOR = 0xFFFEFFFF;
-    private static final int EXPORT_BATCH_SIZE = Integer.getInteger("recex.iconExportBatchSize", 16);
     private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_STACK_KEY = new LinkedHashMap<String, String>();
     private static final RenderItem RENDER_ITEM = new RenderItem();
@@ -45,12 +38,52 @@ public final class ClientItemStackIconRenderer {
     private ClientItemStackIconRenderer() {}
 
     public static String lookupIcon(ItemStack stack) {
-        if (stack == null || stack.getItem() == null) {
+        return captureIcon(stack);
+    }
+
+    public static String captureIcon(ItemStack stack) {
+        if (stack == null || stack.getItem() == null || stack.stackSize <= 0) {
             return null;
         }
 
-        String value = ICONS_BY_STACK_KEY.get(stackKey(stack));
-        return value != null && value.length() > 0 ? value : null;
+        String key = stackKey(stack);
+        if (ICONS_BY_STACK_KEY.containsKey(key)) {
+            String value = ICONS_BY_STACK_KEY.get(key);
+            return value != null && value.length() > 0 ? value : null;
+        }
+
+        File outDir = iconDir();
+        if (!outDir.exists() && !outDir.mkdirs()) {
+            ICONS_BY_STACK_KEY.put(key, "");
+            return null;
+        }
+
+        try {
+            ItemStack renderStack = stack.copy();
+            renderStack.stackSize = 1;
+            String filename = safeName(renderStack) + "-" + sha1(key).substring(0, 12) + ".png";
+            File outFile = new File(outDir, filename);
+
+            if (!outFile.isFile()) {
+                BufferedImage image = renderStackToImage(renderStack);
+                if (!imageHasVisiblePixels(image) || missingTextureRatio(image) > 0.5D) {
+                    ICONS_BY_STACK_KEY.put(key, "");
+                    return null;
+                }
+                ImageIO.write(image, "png", outFile);
+            }
+
+            ICONS_BY_STACK_KEY.put(key, filename);
+            return filename;
+        } catch (Throwable t) {
+            ICONS_BY_STACK_KEY.put(key, "");
+            warnRenderFailure(stack, t);
+            return null;
+        } finally {
+            RenderHelper.disableStandardItemLighting();
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            resetTessellator();
+        }
     }
 
     public static void exportRegistryIconsThen(Runnable afterExport) {
@@ -60,173 +93,108 @@ public final class ClientItemStackIconRenderer {
             return;
         }
 
-        Queue<ItemStack> stacks = collectExportStacks();
-        RecipeExporterMod.log.info("GTNH 1.7.10 icon exporter queued " + stacks.size() + " item stacks.");
-        minecraft.displayGuiScreen(new IconExportScreen(stacks, afterExport));
+        RecipeExporterMod.log.info("GTNH 1.7.10 icon exporter is ready for on-demand ItemStack rendering.");
+        minecraft.displayGuiScreen(new IconExportScreen(afterExport));
     }
 
-    private static Queue<ItemStack> collectExportStacks() {
-        Map<Item, Boolean> seenItems = new IdentityHashMap<Item, Boolean>();
-        Map<String, ItemStack> uniqueStacks = new LinkedHashMap<String, ItemStack>();
-
-        for (Object value : Item.itemRegistry) {
-            if (value instanceof Item) {
-                addItemVariants((Item) value, seenItems, uniqueStacks);
-            }
+    private static BufferedImage renderStackToImage(ItemStack stack) throws Exception {
+        Minecraft minecraft = Minecraft.getMinecraft();
+        if (minecraft == null || minecraft.getTextureManager() == null) {
+            throw new IllegalStateException("Minecraft client is not ready.");
         }
 
-        return new ArrayDeque<ItemStack>(uniqueStacks.values());
-    }
+        Framebuffer framebuffer = new Framebuffer(ICON_SIZE, ICON_SIZE, true);
+        ByteBuffer buffer;
+        boolean projectionPushed = false;
+        boolean modelViewPushed = false;
 
-    @SuppressWarnings({ "rawtypes", "unchecked" })
-    private static void addItemVariants(Item item, Map<Item, Boolean> seenItems, Map<String, ItemStack> stacks) {
-        if (item == null || seenItems.put(item, Boolean.TRUE) != null) {
-            return;
+        try {
+            resetTessellator();
+            framebuffer.bindFramebuffer(true);
+
+            GL11.glViewport(0, 0, ICON_SIZE, ICON_SIZE);
+            GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPushMatrix();
+            projectionPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, 1000.0D, 3000.0D);
+
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPushMatrix();
+            modelViewPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+
+            RenderHelper.enableGUIStandardItemLighting();
+            GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+            FontRenderer fontRenderer = stack.getItem().getFontRenderer(stack);
+            if (fontRenderer == null) {
+                fontRenderer = minecraft.fontRenderer;
+            }
+            RENDER_ITEM.renderItemIntoGUI(
+                fontRenderer,
+                minecraft.getTextureManager(),
+                stack,
+                (ICON_SIZE - 16) / 2,
+                (ICON_SIZE - 16) / 2
+            );
+            RenderHelper.disableStandardItemLighting();
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            resetTessellator();
+            GL11.glFlush();
+
+            buffer = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * 4);
+            GL11.glReadPixels(0, 0, ICON_SIZE, ICON_SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
+        } finally {
+            RenderHelper.disableStandardItemLighting();
+            GL11.glDisable(GL12.GL_RESCALE_NORMAL);
+            resetTessellator();
+            if (modelViewPushed) {
+                GL11.glMatrixMode(GL11.GL_MODELVIEW);
+                GL11.glPopMatrix();
+            }
+            if (projectionPushed) {
+                GL11.glMatrixMode(GL11.GL_PROJECTION);
+                GL11.glPopMatrix();
+            }
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            framebuffer.unbindFramebuffer();
+            framebuffer.deleteFramebuffer();
         }
 
-        List variants = new ArrayList();
-        for (CreativeTabs tab : CreativeTabs.creativeTabArray) {
-            if (tab == null) {
-                continue;
-            }
-
-            try {
-                item.getSubItems(item, tab, variants);
-            } catch (Throwable ignored) {
-            }
-        }
-
-        if (variants.isEmpty()) {
-            try {
-                variants.add(new ItemStack(item, 1, 0));
-            } catch (Throwable ignored) {
-            }
-        }
-
-        for (Object variant : variants) {
-            if (!(variant instanceof ItemStack)) {
-                continue;
-            }
-
-            ItemStack stack = ((ItemStack) variant).copy();
-            stack.stackSize = 1;
-            if (stack.getItem() == null) {
-                continue;
-            }
-            stacks.put(stackKey(stack), stack);
-        }
+        return imageFromRgbaBuffer(buffer);
     }
 
     private static final class IconExportScreen extends GuiScreen {
 
-        private final Queue<ItemStack> stacks;
         private final Runnable afterExport;
-        private final File outDir;
-        private int processed;
-        private int exported;
         private boolean done;
 
-        private IconExportScreen(Queue<ItemStack> stacks, Runnable afterExport) {
-            this.stacks = stacks;
+        private IconExportScreen(Runnable afterExport) {
             this.afterExport = afterExport;
-            this.outDir = iconDir();
-        }
-
-        @Override
-        public void initGui() {
-            if (!outDir.exists() && !outDir.mkdirs()) {
-                RecipeExporterMod.log.warn("GTNH 1.7.10 icon exporter could not create " + outDir);
-                done = true;
-            }
         }
 
         @Override
         public void drawScreen(int mouseX, int mouseY, float partialTicks) {
             if (done) {
-                finish();
                 return;
             }
-
-            for (int i = 0; i < EXPORT_BATCH_SIZE && !stacks.isEmpty(); i++) {
-                exportOne(stacks.poll());
-            }
-
-            if (stacks.isEmpty()) {
-                done = true;
-                finish();
-            }
-        }
-
-        private void exportOne(ItemStack stack) {
-            processed++;
-            String key = stackKey(stack);
-
-            try {
-                String filename = safeName(stack) + "-" + sha1(key).substring(0, 12) + ".png";
-                File outFile = new File(outDir, filename);
-
-                resetTessellator();
-                drawRect(0, 0, ICON_SIZE, ICON_SIZE, BACKGROUND_COLOR);
-                RenderHelper.enableGUIStandardItemLighting();
-                GL11.glEnable(GL12.GL_RESCALE_NORMAL);
-                FontRenderer fontRenderer = stack.getItem().getFontRenderer(stack);
-                if (fontRenderer == null) {
-                    fontRenderer = mc.fontRenderer;
-                }
-                RENDER_ITEM.renderItemIntoGUI(fontRenderer, mc.getTextureManager(), stack, 8, 8);
-                RenderHelper.disableStandardItemLighting();
-                GL11.glDisable(GL12.GL_RESCALE_NORMAL);
-                resetTessellator();
-                GL11.glFlush();
-
-                BufferedImage image = readGuiRegion(0, 0, ICON_SIZE, ICON_SIZE);
-                makeBackgroundTransparent(image);
-                if (!imageHasVisiblePixels(image) || missingTextureRatio(image) > 0.5D) {
-                    ICONS_BY_STACK_KEY.put(key, "");
-                    return;
-                }
-
-                ImageIO.write(image, "png", outFile);
-                ICONS_BY_STACK_KEY.put(key, filename);
-                exported++;
-            } catch (Throwable t) {
-                ICONS_BY_STACK_KEY.put(key, "");
-                warnRenderFailure(stack, t);
-            } finally {
-                RenderHelper.disableStandardItemLighting();
-                GL11.glDisable(GL12.GL_RESCALE_NORMAL);
-                resetTessellator();
-            }
-        }
-
-        private void finish() {
+            done = true;
             writeIconMap();
-            RecipeExporterMod.log.info(
-                "GTNH 1.7.10 icon exporter finished: " + exported + " icons exported from " + processed + " stacks."
-            );
+            RecipeExporterMod.log.info("GTNH 1.7.10 icon exporter finished initialisation.");
             mc.displayGuiScreen(null);
             afterExport.run();
         }
     }
 
-    private static BufferedImage readGuiRegion(int guiX, int guiY, int guiWidth, int guiHeight) {
-        Minecraft minecraft = Minecraft.getMinecraft();
-        ScaledResolution scaled = new ScaledResolution(minecraft, minecraft.displayWidth, minecraft.displayHeight);
-        int scaleFactor = Math.max(1, scaled.getScaleFactor());
-        int pixelX = guiX * scaleFactor;
-        int pixelY = minecraft.displayHeight - ((guiY + guiHeight) * scaleFactor);
-        int pixelWidth = guiWidth * scaleFactor;
-        int pixelHeight = guiHeight * scaleFactor;
-
-        java.nio.ByteBuffer buffer = BufferUtils.createByteBuffer(pixelWidth * pixelHeight * 4);
-        GL11.glReadPixels(pixelX, pixelY, pixelWidth, pixelHeight, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
-
-        BufferedImage image = new BufferedImage(guiWidth, guiHeight, BufferedImage.TYPE_INT_ARGB);
-        for (int y = 0; y < guiHeight; y++) {
-            for (int x = 0; x < guiWidth; x++) {
-                int sourceX = Math.min(pixelWidth - 1, x * scaleFactor + scaleFactor / 2);
-                int sourceY = Math.min(pixelHeight - 1, (guiHeight - 1 - y) * scaleFactor + scaleFactor / 2);
-                int index = (sourceX + sourceY * pixelWidth) * 4;
+    static BufferedImage imageFromRgbaBuffer(ByteBuffer buffer) {
+        BufferedImage image = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < ICON_SIZE; y++) {
+            for (int x = 0; x < ICON_SIZE; x++) {
+                int index = (x + (ICON_SIZE - 1 - y) * ICON_SIZE) * 4;
                 int red = buffer.get(index) & 255;
                 int green = buffer.get(index + 1) & 255;
                 int blue = buffer.get(index + 2) & 255;
@@ -234,23 +202,10 @@ public final class ClientItemStackIconRenderer {
                 image.setRGB(x, y, (alpha << 24) | (red << 16) | (green << 8) | blue);
             }
         }
-
         return image;
     }
 
-    private static void makeBackgroundTransparent(BufferedImage image) {
-        int background = BACKGROUND_COLOR & 0x00FFFFFF;
-        for (int y = 0; y < image.getHeight(); y++) {
-            for (int x = 0; x < image.getWidth(); x++) {
-                int value = image.getRGB(x, y);
-                if ((value & 0x00FFFFFF) == background) {
-                    image.setRGB(x, y, 0);
-                }
-            }
-        }
-    }
-
-    private static boolean imageHasVisiblePixels(BufferedImage image) {
+    static boolean imageHasVisiblePixels(BufferedImage image) {
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
                 if (((image.getRGB(x, y) >>> 24) & 255) > 0) {
@@ -285,7 +240,7 @@ public final class ClientItemStackIconRenderer {
         return visiblePixels > 0 ? (double) missingTexturePixels / (double) visiblePixels : 0.0D;
     }
 
-    private static File iconDir() {
+    static File iconDir() {
         String configured = System.getProperty("recex.iconDir");
         if (configured != null && configured.trim().length() > 0) {
             return new File(configured);
@@ -293,7 +248,7 @@ public final class ClientItemStackIconRenderer {
         return new File(Minecraft.getMinecraft().mcDataDir, "RecEx-Rendered-Icons");
     }
 
-    private static void resetTessellator() {
+    static void resetTessellator() {
         String[] fieldNames = new String[] { "isDrawing", "field_78415_z" };
         for (String fieldName : fieldNames) {
             try {
@@ -322,7 +277,7 @@ public final class ClientItemStackIconRenderer {
         }
     }
 
-    private static void writeIconMap() {
+    static void writeIconMap() {
         File file = new File(iconDir(), "icon-map.json");
         FileWriter writer = null;
         try {
@@ -367,7 +322,7 @@ public final class ClientItemStackIconRenderer {
         return safe.length() > 0 ? safe.substring(0, Math.min(safe.length(), 60)) : "item";
     }
 
-    private static String sha1(String value) throws Exception {
+    static String sha1(String value) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-1");
         byte[] bytes = digest.digest(value.getBytes("UTF-8"));
         StringBuilder builder = new StringBuilder();

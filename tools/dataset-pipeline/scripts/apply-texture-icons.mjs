@@ -137,6 +137,10 @@ async function buildTextureIndex(root) {
 }
 
 function findTexture(resource, textureIndex) {
+  if (requiresRenderedStackIcon(resource)) {
+    return undefined;
+  }
+
   const parsed = parseResourceId(resource.id);
   const candidates = textureCandidates(resource, parsed);
 
@@ -164,6 +168,11 @@ function findTexture(resource, textureIndex) {
   }
 
   return undefined;
+}
+
+function requiresRenderedStackIcon(resource) {
+  const id = String(resource.id ?? "").toLowerCase();
+  return resource.kind === "item" && id.includes("@") && /^gregtech:gt\.metaitem\./.test(id);
 }
 
 function textureCandidates(resource, parsed) {

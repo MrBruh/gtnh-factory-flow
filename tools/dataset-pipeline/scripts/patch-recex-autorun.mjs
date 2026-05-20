@@ -8,7 +8,14 @@ if (!repoDir) {
 }
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-const iconExporterTemplateDir = path.join(scriptDir, "..", "icon-exporter-1.7.10", "src", "main", "java");
+const iconExporterTemplateDir = path.join(
+  scriptDir,
+  "..",
+  "icon-exporter-1.7.10",
+  "src",
+  "main",
+  "java",
+);
 
 const modPath = path.join(repoDir, "src/main/java/com/bigbass/recex/RecipeExporterMod.java");
 let source = await fs.readFile(modPath, "utf8");
@@ -172,7 +179,7 @@ clientProxySource = clientProxySource.replace(
   "        KeyBindings.getInstance();\n",
   [
     "        KeyBindings.getInstance();",
-    "        if (Boolean.getBoolean(\"recex.autorun\")) {",
+    '        if (Boolean.getBoolean("recex.autorun")) {',
     "            FMLCommonHandler.instance().bus().register(new ClientAutorunExportHandler());",
     "        }",
   ].join("\n") + "\n",
@@ -276,6 +283,7 @@ let recipeUtilSource = await fs.readFile(recipeUtilPath, "utf8");
 recipeUtilSource = recipeUtilSource.replace(
   "import com.bigbass.recex.recipes.ingredients.Fluid;",
   [
+    "import com.bigbass.recex.icons.FluidStackIconExporter;",
     "import com.bigbass.recex.icons.ItemStackIconExporter;",
     "import com.bigbass.recex.recipes.ingredients.Fluid;",
   ].join("\n"),
@@ -288,17 +296,52 @@ recipeUtilSource = recipeUtilSource.replace(
   "\n        return item;\n    }\n\n    /**\n     * Might return null!",
   "\n        item.ic = ItemStackIconExporter.captureIcon(stack);\n        return item;\n    }\n\n    /**\n     * Might return null!",
 );
+recipeUtilSource = recipeUtilSource.replace(
+  "\n        return fluid;\n    }\n\n    /**\n     * Retrieves all items",
+  "\n        fluid.ic = FluidStackIconExporter.captureIcon(stack);\n        return fluid;\n    }\n\n    /**\n     * Retrieves all items",
+);
 await fs.writeFile(recipeUtilPath, recipeUtilSource);
+
+const fluidPath = path.join(
+  repoDir,
+  "src/main/java/com/bigbass/recex/recipes/ingredients/Fluid.java",
+);
+let fluidSource = await fs.readFile(fluidPath, "utf8");
+fluidSource = fluidSource.replace(
+  "    /** localizedName */\n    public String lN;\n",
+  [
+    "    /** localizedName */",
+    "    public String lN;",
+    "",
+    "    /** rendered fluid icon filename */",
+    "    public String ic;",
+    "",
+  ].join("\n"),
+);
+await fs.writeFile(fluidPath, fluidSource);
 
 const iconPackageDir = path.join(repoDir, "src/main/java/com/bigbass/recex/icons");
 await fs.mkdir(iconPackageDir, { recursive: true });
 await fs.writeFile(
   path.join(iconPackageDir, "ItemStackIconExporter.java"),
   await fs.readFile(
-    path.join(
-      iconExporterTemplateDir,
-      "com/bigbass/recex/icons/ItemStackIconExporter.java",
-    ),
+    path.join(iconExporterTemplateDir, "com/bigbass/recex/icons/ItemStackIconExporter.java"),
+    "utf8",
+  ),
+);
+
+await fs.writeFile(
+  path.join(iconPackageDir, "FluidStackIconExporter.java"),
+  await fs.readFile(
+    path.join(iconExporterTemplateDir, "com/bigbass/recex/icons/FluidStackIconExporter.java"),
+    "utf8",
+  ),
+);
+
+await fs.writeFile(
+  path.join(iconPackageDir, "ClientFluidStackIconRenderer.java"),
+  await fs.readFile(
+    path.join(iconExporterTemplateDir, "com/bigbass/recex/icons/ClientFluidStackIconRenderer.java"),
     "utf8",
   ),
 );

@@ -3,24 +3,24 @@ package com.bigbass.recex.icons;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
-import net.minecraft.item.ItemStack;
+import net.minecraftforge.fluids.FluidStack;
 
 import com.bigbass.recex.RecipeExporterMod;
 
-public final class ItemStackIconExporter {
+public final class FluidStackIconExporter {
 
     private static boolean warned;
 
-    private ItemStackIconExporter() {}
+    private FluidStackIconExporter() {}
 
-    public static String captureIcon(ItemStack stack) {
+    public static String captureIcon(FluidStack stack) {
         if (stack == null || !Boolean.getBoolean("recex.renderIcons")) {
             return null;
         }
 
         try {
-            Class<?> renderer = Class.forName("com.bigbass.recex.icons.ClientItemStackIconRenderer");
-            Method method = renderer.getMethod("captureIcon", ItemStack.class);
+            Class<?> renderer = Class.forName("com.bigbass.recex.icons.ClientFluidStackIconRenderer");
+            Method method = renderer.getMethod("captureIcon", FluidStack.class);
             Object value = method.invoke(null, stack);
             return value instanceof String ? (String) value : null;
         } catch (InvocationTargetException e) {
@@ -38,6 +38,6 @@ public final class ItemStackIconExporter {
         }
 
         warned = true;
-        RecipeExporterMod.log.warn("GTNH 1.7.10 icon exporter is unavailable; continuing without item icons.", t);
+        RecipeExporterMod.log.warn("GTNH 1.7.10 fluid icon exporter is unavailable; continuing without fluid icons.", t);
     }
 }

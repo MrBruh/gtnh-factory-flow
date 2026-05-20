@@ -36,7 +36,9 @@ for (const machine of gregtechSource.machines) {
     }
 
     const inputs = [
-      ...(rawRecipe.iI ?? []).map((item) => itemAmount(item, { consumed: !isNonConsumedInput(item) })),
+      ...(rawRecipe.iI ?? []).map((item) =>
+        itemAmount(item, { consumed: !isNonConsumedInput(item) }),
+      ),
       ...(rawRecipe.iNC ?? []).map((item) => itemAmount(item, { consumed: false })),
       ...(rawRecipe.nCI ?? []).map((item) => itemAmount(item, { consumed: false })),
       ...(rawRecipe.ncI ?? []).map((item) => itemAmount(item, { consumed: false })),
@@ -139,7 +141,9 @@ function itemAmount(item, options = {}) {
 }
 
 function isNonConsumedInput(item) {
-  return Boolean(item?.nc || item?.nC || item?.notConsumed || item?.nonConsumed || item?.consumed === false);
+  return Boolean(
+    item?.nc || item?.nC || item?.notConsumed || item?.nonConsumed || item?.consumed === false,
+  );
 }
 
 function fluidAmount(fluid) {
@@ -152,6 +156,7 @@ function fluidAmount(fluid) {
     id: fluid.id,
     amount: fluid.a,
     displayName: text(fluid.lN, fluid.id),
+    iconPath: renderedIconPath(fluid.ic),
   };
 }
 
