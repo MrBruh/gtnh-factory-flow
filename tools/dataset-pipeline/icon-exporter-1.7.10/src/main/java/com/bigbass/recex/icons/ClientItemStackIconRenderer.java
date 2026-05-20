@@ -31,7 +31,9 @@ import org.lwjgl.opengl.GL12;
 
 public final class ClientItemStackIconRenderer {
 
-    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 32);
+    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 64);
+    private static final int GUI_ICON_CANVAS_SIZE = 32;
+    private static final int GUI_ITEM_SIZE = 16;
     private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_STACK_KEY = new LinkedHashMap<String, String>();
     private static final RenderItem RENDER_ITEM = new RenderItem();
@@ -123,7 +125,7 @@ public final class ClientItemStackIconRenderer {
             GL11.glPushMatrix();
             projectionPushed = true;
             GL11.glLoadIdentity();
-            GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, 1000.0D, 3000.0D);
+            GL11.glOrtho(0.0D, GUI_ICON_CANVAS_SIZE, GUI_ICON_CANVAS_SIZE, 0.0D, 1000.0D, 3000.0D);
 
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glPushMatrix();
@@ -141,8 +143,8 @@ public final class ClientItemStackIconRenderer {
                 fontRenderer,
                 minecraft.getTextureManager(),
                 stack,
-                (ICON_SIZE - 16) / 2,
-                (ICON_SIZE - 16) / 2
+                (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2,
+                (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2
             );
             RenderHelper.disableStandardItemLighting();
             GL11.glDisable(GL12.GL_RESCALE_NORMAL);

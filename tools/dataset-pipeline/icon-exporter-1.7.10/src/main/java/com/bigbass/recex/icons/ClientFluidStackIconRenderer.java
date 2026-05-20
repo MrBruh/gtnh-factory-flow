@@ -23,7 +23,9 @@ import org.lwjgl.opengl.GL11;
 
 public final class ClientFluidStackIconRenderer {
 
-    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 32);
+    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 64);
+    private static final int GUI_ICON_CANVAS_SIZE = 32;
+    private static final int GUI_ITEM_SIZE = 16;
     private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxFluidIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_FLUID_KEY = new LinkedHashMap<String, String>();
     private static int renderWarnings;
@@ -99,7 +101,7 @@ public final class ClientFluidStackIconRenderer {
             GL11.glPushMatrix();
             projectionPushed = true;
             GL11.glLoadIdentity();
-            GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, -1.0D, 1.0D);
+            GL11.glOrtho(0.0D, GUI_ICON_CANVAS_SIZE, GUI_ICON_CANVAS_SIZE, 0.0D, -1.0D, 1.0D);
 
             GL11.glMatrixMode(GL11.GL_MODELVIEW);
             GL11.glPushMatrix();
@@ -117,8 +119,8 @@ public final class ClientFluidStackIconRenderer {
             }
             GL11.glColor4f(red, green, blue, alpha);
 
-            double min = (ICON_SIZE - 16) / 2.0D;
-            double max = min + 16.0D;
+            double min = (GUI_ICON_CANVAS_SIZE - GUI_ITEM_SIZE) / 2.0D;
+            double max = min + GUI_ITEM_SIZE;
             Tessellator tessellator = Tessellator.instance;
             tessellator.startDrawingQuads();
             tessellator.addVertexWithUV(min, max, 0.0D, icon.getMinU(), icon.getMaxV());
