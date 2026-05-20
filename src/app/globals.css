@@ -9,14 +9,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-minecraft), var(--font-geist-sans);
-  --font-mono: var(--font-minecraft), var(--font-geist-mono);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-minecraft), var(--font-geist-sans), sans-serif;
+  font-family: var(--font-geist-sans), sans-serif;
 }
 
 .pixelated-image,
@@ -70,7 +70,8 @@ textarea {
 }
 
 .minecraft-title {
-  font-weight: 600;
+  font-family: var(--font-minecraft), var(--font-geist-sans), sans-serif;
+  font-weight: 400;
   letter-spacing: 0;
   color: #ffffff;
   text-shadow:

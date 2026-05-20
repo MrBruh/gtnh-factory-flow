@@ -180,7 +180,7 @@ export function FactoryFlow() {
         />
       </ReactFlow>
       {pendingResourceConnection ? (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center font-mono text-xs font-bold text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
           {pendingResourceConnection.displayName ?? pendingResourceConnection.resourceId}
           <span className="ml-2 font-normal">click matching slot, Esc to cancel</span>

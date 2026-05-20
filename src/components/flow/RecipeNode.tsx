@@ -180,7 +180,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
       <div className="truncate text-[9px] uppercase text-[#424242]">{label}</div>
-      <div className="truncate font-bold">{value}</div>
+      <div className="truncate font-medium">{value}</div>
     </div>
   );
 }
