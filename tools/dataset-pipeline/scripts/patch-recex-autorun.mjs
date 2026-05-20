@@ -316,6 +316,7 @@ await fs.writeFile(
 
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.util.Map;
@@ -325,7 +326,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.imageio.ImageIO;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.client.renderer.texture.TextureMap;
+import net.minecraft.client.shader.Framebuffer;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.util.IIcon;
@@ -333,6 +339,7 @@ import net.minecraft.util.ResourceLocation;
 
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 import com.bigbass.recex.RecipeExporterMod;
 
@@ -342,6 +349,7 @@ public final class ClientItemStackIconRenderer {
     private static final int MAX_RENDER_FAILURES = Integer.getInteger("recex.maxIconRenderFailures", 200);
     private static final Map<String, String> CACHE = new ConcurrentHashMap<String, String>();
     private static final AtomicInteger RENDER_FAILURES = new AtomicInteger(0);
+    private static final RenderItem RENDER_ITEM = new RenderItem();
 
     private ClientItemStackIconRenderer() {}
 
@@ -389,7 +397,10 @@ public final class ClientItemStackIconRenderer {
     private static void renderToPng(ItemStack stack, File outFile) throws Exception {
         BufferedImage image = renderFromLoadedTextureAtlas(stack);
         if (image == null) {
-            throw new IllegalStateException("No loaded atlas icon is available for " + stack);
+            image = renderWithMinecraftItemRenderer(stack);
+        }
+        if (image == null) {
+            throw new IllegalStateException("No icon renderer is available for " + stack);
         }
 
         ImageIO.write(image, "png", outFile);
@@ -426,6 +437,89 @@ public final class ClientItemStackIconRenderer {
         }
 
         return renderedAnyPass ? output : null;
+    }
+
+    private static BufferedImage renderWithMinecraftItemRenderer(ItemStack stack) throws Exception {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.getTextureManager() == null) {
+            throw new IllegalStateException("Minecraft client is not ready.");
+        }
+
+        Framebuffer framebuffer = new Framebuffer(ICON_SIZE, ICON_SIZE, true);
+        ByteBuffer buffer;
+        boolean projectionPushed = false;
+        boolean modelViewPushed = false;
+
+        try {
+            resetTessellator();
+            framebuffer.bindFramebuffer(true);
+
+            GL11.glViewport(0, 0, ICON_SIZE, ICON_SIZE);
+            GL11.glClearColor(0.0F, 0.0F, 0.0F, 0.0F);
+            GL11.glClear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT);
+
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPushMatrix();
+            projectionPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glOrtho(0.0D, ICON_SIZE, ICON_SIZE, 0.0D, 1000.0D, 3000.0D);
+
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPushMatrix();
+            modelViewPushed = true;
+            GL11.glLoadIdentity();
+            GL11.glTranslatef(0.0F, 0.0F, -2000.0F);
+
+            RenderHelper.enableGUIStandardItemLighting();
+            GL11.glEnable(GL12.GL_RESCALE_NORMAL);
+            FontRenderer fontRenderer = stack.getItem().getFontRenderer(stack);
+            if (fontRenderer == null) {
+                fontRenderer = mc.fontRenderer;
+            }
+            resetTessellator();
+            RENDER_ITEM.renderItemIntoGUI(fontRenderer, mc.getTextureManager(), stack, (ICON_SIZE - 16) / 2, (ICON_SIZE - 16) / 2);
+            resetTessellator();
+            RenderHelper.disableStandardItemLighting();
+
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            GL11.glPopMatrix();
+            modelViewPushed = false;
+            GL11.glMatrixMode(GL11.GL_PROJECTION);
+            GL11.glPopMatrix();
+            projectionPushed = false;
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+
+            buffer = BufferUtils.createByteBuffer(ICON_SIZE * ICON_SIZE * 4);
+            GL11.glReadPixels(0, 0, ICON_SIZE, ICON_SIZE, GL11.GL_RGBA, GL11.GL_UNSIGNED_BYTE, buffer);
+        } finally {
+            RenderHelper.disableStandardItemLighting();
+            resetTessellator();
+            if (modelViewPushed) {
+                GL11.glMatrixMode(GL11.GL_MODELVIEW);
+                GL11.glPopMatrix();
+            }
+            if (projectionPushed) {
+                GL11.glMatrixMode(GL11.GL_PROJECTION);
+                GL11.glPopMatrix();
+            }
+            GL11.glMatrixMode(GL11.GL_MODELVIEW);
+            framebuffer.unbindFramebuffer();
+            framebuffer.deleteFramebuffer();
+        }
+
+        BufferedImage image = new BufferedImage(ICON_SIZE, ICON_SIZE, BufferedImage.TYPE_INT_ARGB);
+        for (int y = 0; y < ICON_SIZE; y++) {
+            for (int x = 0; x < ICON_SIZE; x++) {
+                int index = (x + (ICON_SIZE - 1 - y) * ICON_SIZE) * 4;
+                int r = buffer.get(index) & 255;
+                int g = buffer.get(index + 1) & 255;
+                int b = buffer.get(index + 2) & 255;
+                int a = buffer.get(index + 3) & 255;
+                image.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
+            }
+        }
+
+        return imageHasVisiblePixels(image) ? image : null;
     }
 
     private static IIcon iconForPass(ItemStack stack, int pass) {
@@ -529,6 +623,32 @@ public final class ClientItemStackIconRenderer {
 
     private static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static boolean imageHasVisiblePixels(BufferedImage image) {
+        for (int y = 0; y < image.getHeight(); y++) {
+            for (int x = 0; x < image.getWidth(); x++) {
+                if (((image.getRGB(x, y) >>> 24) & 255) > 0) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static void resetTessellator() {
+        String[] fieldNames = new String[] { "isDrawing", "field_78415_z" };
+        for (String fieldName : fieldNames) {
+            try {
+                Field isDrawing = Tessellator.class.getDeclaredField(fieldName);
+                isDrawing.setAccessible(true);
+                if (isDrawing.getBoolean(Tessellator.instance)) {
+                    isDrawing.setBoolean(Tessellator.instance, false);
+                }
+                return;
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private static File iconDir() {
