@@ -118,8 +118,24 @@ function NeiSlotFrameView({
           className="!h-full !w-full"
           bare
         />
-      ) : null}
+      ) : (
+        <EmptySlotFrame kind={frame.kind} />
+      )}
     </button>
+  );
+}
+
+function EmptySlotFrame({ kind }: { kind: NeiSlotFrame["kind"] }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="pointer-events-none absolute inset-0"
+      style={{
+        backgroundColor: kind === "fluid" ? "#3d3d3d" : "#8d8d8d",
+        boxShadow: "inset 2px 2px 0 rgba(255,255,255,0.5), inset -2px -2px 0 rgba(0,0,0,0.45)",
+        imageRendering: "pixelated",
+      }}
+    />
   );
 }
 
