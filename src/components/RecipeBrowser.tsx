@@ -37,9 +37,12 @@ export function RecipeBrowser() {
       return undefined;
     }
 
+    const indexed = resourceIndex.get(
+      `${browserResource.kind}:${browserResource.id}` as ResourceKey,
+    );
+
     return {
-      ...(resourceIndex.get(`${browserResource.kind}:${browserResource.id}` as ResourceKey) ??
-        browserResource),
+      ...(indexed ?? { ...browserResource, recipeCount: 0 }),
       anchorNodeId: browserResource.anchorNodeId,
     };
   }, [browserResource, resourceIndex]);
@@ -134,53 +137,53 @@ export function RecipeBrowser() {
   };
 
   return (
-    <aside className="flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
-      <div className="border-b border-neutral-800 px-3 py-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-neutral-50">NEI recipe browser</h2>
-            <p className="mt-1 text-xs text-neutral-400">
-              {dataset
-                ? `${dataset.gtnhVersion} / ${dataset.recipes.length.toLocaleString()} recipes`
-                : "Import a normalized NESQL/RecEx/NERD dataset"}
-            </p>
+    <>
+      <aside className="flex h-full min-h-[360px] flex-col border-r border-neutral-800 bg-[#25272c] text-neutral-100">
+        <div className="border-b border-neutral-800 px-3 py-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold text-neutral-50">NEI recipe browser</h2>
+              <p className="mt-1 text-xs text-neutral-400">
+                {dataset
+                  ? `${dataset.gtnhVersion} / ${dataset.recipes.length.toLocaleString()} recipes`
+                  : "Import a normalized NESQL/RecEx/NERD dataset"}
+              </p>
+            </div>
+            {activeResource ? (
+              <button
+                type="button"
+                onClick={clearResourceBrowser}
+                title="Back to resource search"
+                aria-label="Back to resource search"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-neutral-700 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+            ) : null}
           </div>
-          {activeResource ? (
-            <button
-              type="button"
-              onClick={clearResourceBrowser}
-              title="Back to resource search"
-              aria-label="Back to resource search"
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[3px] border border-neutral-700 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </button>
-          ) : null}
-        </div>
-        <label className="mt-3 flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
-          <Search className="h-4 w-4 text-neutral-500" />
-          <input
-            value={recipeSearch}
-            onChange={(event) => setRecipeSearch(event.target.value)}
-            placeholder="Search item or fluid..."
-            className="min-w-0 flex-1 bg-transparent outline-none"
-          />
-          {recipeSearch ? (
-            <button
-              type="button"
-              onClick={() => setRecipeSearch("")}
-              title="Clear search"
-              aria-label="Clear search"
-              className="text-neutral-500 hover:text-neutral-200"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          ) : null}
-        </label>
+          <label className="mt-3 flex h-9 items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#17191d] px-2 text-sm text-neutral-200 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]">
+            <Search className="h-4 w-4 text-neutral-500" />
+            <input
+              value={recipeSearch}
+              onChange={(event) => setRecipeSearch(event.target.value)}
+              placeholder="Search item or fluid..."
+              className="min-w-0 flex-1 bg-transparent outline-none"
+            />
+            {recipeSearch ? (
+              <button
+                type="button"
+                onClick={() => setRecipeSearch("")}
+                title="Clear search"
+                aria-label="Clear search"
+                className="text-neutral-500 hover:text-neutral-200"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            ) : null}
+          </label>
 
-        {activeResource ? (
-          <>
-            <div className="mt-3 flex items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#303238] p-2">
+          {activeResource ? (
+            <div className="mt-3 flex items-center gap-2 rounded-[4px] border border-cyan-500 bg-[#303238] p-2">
               <ResourceIcon
                 resource={{ ...activeResource, amount: 1 }}
                 size="sm"
@@ -190,90 +193,72 @@ export function RecipeBrowser() {
                 <div className="truncate text-sm font-semibold text-neutral-50">
                   {resourceLabel(activeResource)}
                 </div>
-                <div className="truncate text-[11px] text-neutral-400">{activeResource.id}</div>
+                <div className="truncate text-[11px] text-neutral-400">
+                  {browserMode === "recipes" ? "Recipes" : "Uses"} / {filteredRecipes.length} shown
+                </div>
               </div>
             </div>
-            <div className="mt-3 grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => setMode("recipes")}
-                className={modeButtonClass(browserMode === "recipes")}
-              >
-                Recipes
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode("uses")}
-                className={modeButtonClass(browserMode === "uses")}
-              >
-                Uses
-              </button>
+          ) : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {recipes.length === 0 ? (
+            <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
+              The selected GTNH version is loaded automatically, but its real recipe export is not
+              published yet. No manual recipe entry is available.
             </div>
-            <div className="mt-3 flex gap-1 overflow-x-auto pb-1">
-              {recipeMaps.map((recipeMap) => (
-                <button
-                  key={recipeMap}
-                  type="button"
-                  onClick={() => setSelectedRecipeMap(recipeMap)}
-                  title={recipeMap === "all" ? "All recipe maps" : recipeMap}
-                  className={[
-                    "h-8 shrink-0 rounded-[3px] border px-2 text-xs font-semibold",
-                    activeRecipeMap === recipeMap
-                      ? "border-cyan-400 bg-cyan-400/15 text-cyan-100"
-                      : "border-neutral-700 bg-[#1b1d21] text-neutral-300 hover:border-neutral-500",
-                  ].join(" ")}
-                >
-                  {recipeMap === "all" ? "All" : recipeMap}
-                </button>
+          ) : (
+            <div className="grid grid-cols-1 gap-2">
+              {(activeResource
+                ? [...resourceIndex.values()]
+                    .filter((resource) =>
+                      resourceMatchesQuery(resource, deferredRecipeSearch.trim().toLowerCase()),
+                    )
+                    .slice(0, 96)
+                : resourceResults
+              ).map((resource) => (
+                <ResourceResult
+                  key={`${resource.kind}:${resource.id}`}
+                  resource={resource}
+                  active={
+                    activeResource?.kind === resource.kind && activeResource.id === resource.id
+                  }
+                  onRecipes={() => browseResource(resource, "recipes")}
+                  onUses={() => browseResource(resource, "uses")}
+                />
               ))}
             </div>
-          </>
-        ) : null}
-      </div>
+          )}
+        </div>
+      </aside>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        {recipes.length === 0 ? (
-          <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
-            The selected GTNH version is loaded automatically, but its real recipe export is not
-            published yet. No manual recipe entry is available.
-          </div>
-        ) : !activeResource ? (
-          <div className="grid grid-cols-1 gap-2">
-            {resourceResults.map((resource) => (
-              <ResourceResult
-                key={`${resource.kind}:${resource.id}`}
-                resource={resource}
-                onRecipes={() => browseResource(resource, "recipes")}
-                onUses={() => browseResource(resource, "uses")}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-2">
-            {filteredRecipes.map((recipe) => (
-              <RecipeResultCard
-                key={recipe.id}
-                recipe={recipe}
-                selected={selectedRecipeId === recipe.id}
-                onSelect={() => selectRecipe(recipe.id)}
-                onAdd={() => addNodeForRecipe(recipe.id)}
-                onAddConnected={
-                  activeResource.anchorNodeId
-                    ? () =>
-                        addConnectedNodeForRecipe(recipe.id, activeResource.anchorNodeId!, {
-                          kind: activeResource.kind,
-                          id: activeResource.id,
-                          displayName: activeResource.displayName,
-                          mode: browserMode,
-                        })
-                    : undefined
-                }
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </aside>
+      {activeResource ? (
+        <RecipeBookOverlay
+          activeRecipeMap={activeRecipeMap}
+          activeResource={activeResource}
+          browserMode={browserMode}
+          filteredRecipes={filteredRecipes}
+          recipeMaps={recipeMaps}
+          selectedRecipeId={selectedRecipeId}
+          onAdd={addNodeForRecipe}
+          onAddConnected={
+            activeResource.anchorNodeId
+              ? (recipeId) =>
+                  addConnectedNodeForRecipe(recipeId, activeResource.anchorNodeId!, {
+                    kind: activeResource.kind,
+                    id: activeResource.id,
+                    displayName: activeResource.displayName,
+                    mode: browserMode,
+                  })
+              : undefined
+          }
+          onClose={clearResourceBrowser}
+          onModeChange={setMode}
+          onRecipeMapChange={setSelectedRecipeMap}
+          onSelectRecipe={selectRecipe}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -283,15 +268,22 @@ interface IndexedResource extends Pick<ResourceAmount, "kind" | "id" | "displayN
 
 function ResourceResult({
   resource,
+  active,
   onRecipes,
   onUses,
 }: {
   resource: IndexedResource;
+  active?: boolean;
   onRecipes: () => void;
   onUses: () => void;
 }) {
   return (
-    <article className="flex items-center gap-2 rounded-[4px] border border-neutral-700 bg-[#303238] p-2">
+    <article
+      className={[
+        "flex items-center gap-2 rounded-[4px] border bg-[#303238] p-2",
+        active ? "border-cyan-400 ring-1 ring-cyan-400" : "border-neutral-700",
+      ].join(" ")}
+    >
       <ResourceIcon resource={{ ...resource, amount: 1 }} size="sm" showAmount={false} />
       <button type="button" onClick={onRecipes} className="min-w-0 flex-1 text-left">
         <div className="truncate text-sm font-semibold text-neutral-50">
@@ -316,6 +308,120 @@ function ResourceResult({
         U
       </button>
     </article>
+  );
+}
+
+function RecipeBookOverlay({
+  activeRecipeMap,
+  activeResource,
+  browserMode,
+  filteredRecipes,
+  recipeMaps,
+  selectedRecipeId,
+  onAdd,
+  onAddConnected,
+  onClose,
+  onModeChange,
+  onRecipeMapChange,
+  onSelectRecipe,
+}: {
+  activeRecipeMap: string;
+  activeResource: IndexedResource & { anchorNodeId?: string };
+  browserMode: "recipes" | "uses";
+  filteredRecipes: Recipe[];
+  recipeMaps: string[];
+  selectedRecipeId?: string;
+  onAdd: (recipeId: string) => void;
+  onAddConnected?: (recipeId: string) => void;
+  onClose: () => void;
+  onModeChange: (mode: "recipes" | "uses") => void;
+  onRecipeMapChange: (recipeMap: string) => void;
+  onSelectRecipe: (recipeId: string) => void;
+}) {
+  return (
+    <div className="pointer-events-none fixed inset-x-3 top-[186px] z-30 flex justify-center lg:left-[360px] lg:right-[440px]">
+      <section
+        className="pointer-events-auto relative w-full max-w-[640px] pt-[42px] font-mono"
+        aria-label="Recipe book"
+      >
+        <div className="absolute left-2 right-2 top-0">
+          <div className="nei-tab-scroll flex gap-1 overflow-x-auto bg-[#17191d] p-1 pb-2">
+            {recipeMaps.map((recipeMap) => (
+              <button
+                key={recipeMap}
+                type="button"
+                onClick={() => onRecipeMapChange(recipeMap)}
+                title={recipeMap === "all" ? "All recipe maps" : recipeMap}
+                className={neiTabClass(activeRecipeMap === recipeMap)}
+              >
+                {recipeMap === "all" ? "All" : recipeMap}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+          <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center px-2 pt-2">
+            <button
+              type="button"
+              onClick={() => onModeChange("recipes")}
+              className={bookModeButtonClass(browserMode === "recipes")}
+              title="Recipes"
+            >
+              R
+            </button>
+            <div className="h-8 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[18px] leading-[26px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+              {resourceLabel(activeResource)}
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="h-8 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]"
+              title="Close"
+              aria-label="Close recipe book"
+            >
+              x
+            </button>
+          </div>
+
+          <div className="grid grid-cols-[36px_minmax(0,1fr)_36px] items-center px-2">
+            <button
+              type="button"
+              onClick={() => onModeChange("uses")}
+              className={bookModeButtonClass(browserMode === "uses")}
+              title="Uses"
+            >
+              U
+            </button>
+            <div className="h-8 truncate border-x-2 border-b-2 border-[#555] bg-[#a7a7a7] px-2 text-center text-[18px] leading-[26px] text-white shadow-[inset_2px_0_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a] [text-shadow:2px_2px_0_#3f3f3f]">
+              {browserMode === "recipes" ? "Recipes" : "Uses"} / {filteredRecipes.length}
+            </div>
+            <div className="h-8 border-x-2 border-b-2 border-[#252525] bg-[#5d5d5d] shadow-[inset_2px_0_0_#9f9f9f,inset_-2px_-2px_0_#303030]" />
+          </div>
+
+          <div className="max-h-[calc(100vh-330px)] min-h-[420px] overflow-y-auto p-3">
+            {filteredRecipes.length === 0 ? (
+              <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+                No matching recipes.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {filteredRecipes.map((recipe) => (
+                  <RecipeResultCard
+                    key={recipe.id}
+                    recipe={recipe}
+                    selected={selectedRecipeId === recipe.id}
+                    onSelect={() => onSelectRecipe(recipe.id)}
+                    onAdd={() => onAdd(recipe.id)}
+                    onAddConnected={onAddConnected ? () => onAddConnected(recipe.id) : undefined}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -428,15 +534,6 @@ function recipeHasResource(
   return resources.some((entry) => entry.kind === resource.kind && entry.id === resource.id);
 }
 
-function modeButtonClass(active: boolean): string {
-  return [
-    "h-8 rounded-[3px] border text-xs font-semibold",
-    active
-      ? "border-cyan-400 bg-cyan-400/15 text-cyan-100"
-      : "border-neutral-700 bg-[#1b1d21] text-neutral-300 hover:border-neutral-500",
-  ].join(" ");
-}
-
 function recipeMatchesQuery(recipe: Recipe, query: string): boolean {
   return [
     recipe.name,
@@ -455,4 +552,20 @@ function recipeIconScore(recipe: Recipe): number {
     (score, resource) => score + (resource.iconPath ? 1 : 0),
     0,
   );
+}
+
+function neiTabClass(active: boolean): string {
+  return [
+    "h-8 shrink-0 rounded-[3px] border px-2 text-sm font-semibold text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.06)]",
+    active
+      ? "border-cyan-400 bg-cyan-700 text-cyan-50"
+      : "border-neutral-700 bg-[#202329] hover:border-neutral-500 hover:bg-[#2a2d34]",
+  ].join(" ");
+}
+
+function bookModeButtonClass(active: boolean): string {
+  return [
+    "h-8 border-2 border-[#252525] text-[16px] font-bold leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000]",
+    active ? "bg-[#00758a]" : "bg-[#5d5d5d]",
+  ].join(" ");
 }

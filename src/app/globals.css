@@ -40,3 +40,22 @@ textarea {
 .react-flow__edge-textbg {
   fill: #ffffff;
 }
+
+.nei-tab-scroll {
+  scrollbar-color: #8b8b8b #d0d0d0;
+  scrollbar-width: thin;
+}
+
+.nei-tab-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.nei-tab-scroll::-webkit-scrollbar-track {
+  background: #d0d0d0;
+}
+
+.nei-tab-scroll::-webkit-scrollbar-thumb {
+  background: #8b8b8b;
+  border: 2px solid #d0d0d0;
+  border-radius: 8px;
+}
