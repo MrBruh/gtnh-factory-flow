@@ -301,7 +301,7 @@ export function RecipeBrowser() {
         setAvailableRecipeMaps(result.recipeMaps);
         setRecipeQueryLoading(false);
         window.setTimeout(() => {
-          for (const recipeMap of result.recipeMaps.slice(0, 48)) {
+          for (const recipeMap of result.recipeMaps.slice(0, 3)) {
             if (recipeMap !== activeRecipeMap) {
               prefetchRecipeMap(recipeMap);
             }
