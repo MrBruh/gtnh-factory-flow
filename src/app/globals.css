@@ -170,25 +170,5 @@ textarea {
 }
 
 .storage-node-tinted .storage-node-card {
-  background: color-mix(in srgb, var(--storage-node-tint) 72%, var(--storage-node-base));
   border-color: var(--storage-node-tint-border);
-}
-
-.storage-node-tinted .storage-node-header {
-  background: color-mix(
-    in srgb,
-    var(--storage-node-tint-header) 70%,
-    var(--storage-node-header-base)
-  );
-  border-color: color-mix(in srgb, var(--storage-node-tint-border) 70%, #555);
-}
-
-.storage-node-tinted .storage-node-body {
-  background: color-mix(in srgb, var(--storage-node-tint) 55%, var(--storage-node-body-base));
-  border-color: color-mix(in srgb, var(--storage-node-tint-border) 58%, #777);
-}
-
-.storage-node-tinted .storage-node-stat {
-  background: color-mix(in srgb, var(--storage-node-tint) 64%, #bababa);
-  border-color: color-mix(in srgb, var(--storage-node-tint-border) 62%, #707070);
 }

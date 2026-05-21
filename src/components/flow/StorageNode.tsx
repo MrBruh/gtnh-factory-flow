@@ -54,8 +54,6 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
       style={
         storageColor
           ? ({
-              "--storage-node-tint": storageColor.panel,
-              "--storage-node-tint-header": storageColor.header,
               "--storage-node-tint-border": storageColor.border,
             } as CSSProperties)
           : undefined
@@ -110,25 +108,13 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
   );
 }
 
-function StorageHeader({
-  title,
-  variant,
-  storageColor,
-}: {
-  title: string;
-  variant: "tank" | "drawer";
-  storageColor: StorageColor;
-}) {
+function StorageHeader({ title, variant }: { title: string; variant: "tank" | "drawer" }) {
   return (
     <div
       className={[
         "storage-node-header flex h-6 items-center gap-1 border-b-2 px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.55)]",
         variant === "tank" ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
-      style={{
-        backgroundColor: storageColor?.header,
-        borderColor: storageColor?.border,
-      }}
     >
       <div className="minecraft-title min-w-0 flex-1 truncate text-center text-[13px] leading-4">
         {title}
@@ -170,19 +156,11 @@ function FluidStorageCard({
         {
           backgroundColor: storageColor?.panel,
           borderColor: storageColor?.border,
-          "--storage-node-base": "#b9c2d4",
-          "--storage-node-header-base": "#b8c1d9",
-          "--storage-node-body-base": "#9fa9bd",
         } as CSSProperties
       }
     >
-      <StorageHeader title="Super Tank" variant="tank" storageColor={storageColor} />
-      <div
-        className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_7px_7px_0_#1f2933,inset_-7px_-7px_0_#050505]"
-        style={{
-          borderColor: storageColor?.border,
-        }}
-      >
+      <StorageHeader title="Super Tank" variant="tank" />
+      <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_7px_7px_0_#1f2933,inset_-7px_-7px_0_#050505]">
         <div className="relative grid h-[64px] w-[64px] place-items-center bg-[#111]">
           <StorageEdgeAnchors
             nodeId={storage.id}
@@ -203,7 +181,7 @@ function FluidStorageCard({
         consumed={consumed}
         net={net}
         unit={unit}
-        storageColor={storageColor}
+        storageColor={undefined}
       />
     </div>
   );
@@ -240,20 +218,11 @@ function ItemStorageCard({
         {
           backgroundColor: storageColor?.panel,
           borderColor: storageColor?.border,
-          "--storage-node-base": "#8a6030",
-          "--storage-node-header-base": "#8a6030",
-          "--storage-node-body-base": "#7a5427",
         } as CSSProperties
       }
     >
-      <StorageHeader title="Drawer" variant="drawer" storageColor={storageColor} />
-      <div
-        className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]"
-        style={{
-          backgroundColor: storageColor?.panel,
-          borderColor: storageColor?.border,
-        }}
-      >
+      <StorageHeader title="Drawer" variant="drawer" />
+      <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]">
         <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <StorageEdgeAnchors
             nodeId={storage.id}
@@ -274,7 +243,7 @@ function ItemStorageCard({
         consumed={consumed}
         net={net}
         unit={unit}
-        storageColor={storageColor}
+        storageColor={undefined}
       />
     </div>
   );
