@@ -154,7 +154,6 @@ function FluidStorageCard({
       ].join(" ")}
       style={
         {
-          backgroundColor: storageColor?.panel,
           borderColor: storageColor?.border,
         } as CSSProperties
       }
@@ -176,13 +175,7 @@ function FluidStorageCard({
           />
         </div>
       </div>
-      <StorageStats
-        produced={produced}
-        consumed={consumed}
-        net={net}
-        unit={unit}
-        storageColor={undefined}
-      />
+      <StorageStats produced={produced} consumed={consumed} net={net} unit={unit} />
     </div>
   );
 }
@@ -216,7 +209,6 @@ function ItemStorageCard({
       ].join(" ")}
       style={
         {
-          backgroundColor: storageColor?.panel,
           borderColor: storageColor?.border,
         } as CSSProperties
       }
@@ -238,13 +230,7 @@ function ItemStorageCard({
           />
         </div>
       </div>
-      <StorageStats
-        produced={produced}
-        consumed={consumed}
-        net={net}
-        unit={unit}
-        storageColor={undefined}
-      />
+      <StorageStats produced={produced} consumed={consumed} net={net} unit={unit} />
     </div>
   );
 }
@@ -281,23 +267,17 @@ function StorageStats({
   consumed,
   net,
   unit,
-  storageColor,
 }: {
   produced: number;
   consumed: number;
   net: number;
   unit: string;
-  storageColor: StorageColor;
 }) {
   return (
     <div className="grid grid-cols-3 gap-1 pt-2">
-      <StorageStat label="In" value={formatCompact(produced, unit)} storageColor={storageColor} />
-      <StorageStat label="Out" value={formatCompact(consumed, unit)} storageColor={storageColor} />
-      <StorageStat
-        label="Net"
-        value={formatCompact(net, unit, { forceSign: true })}
-        storageColor={storageColor}
-      />
+      <StorageStat label="In" value={formatCompact(produced, unit)} />
+      <StorageStat label="Out" value={formatCompact(consumed, unit)} />
+      <StorageStat label="Net" value={formatCompact(net, unit, { forceSign: true })} />
     </div>
   );
 }
@@ -313,23 +293,9 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
     .includes(normalizedQuery);
 }
 
-function StorageStat({
-  label,
-  value,
-  storageColor,
-}: {
-  label: string;
-  value: string;
-  storageColor: StorageColor;
-}) {
+function StorageStat({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      className="storage-node-stat grid h-10 min-w-0 overflow-hidden border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]"
-      style={{
-        backgroundColor: storageColor?.panel,
-        borderColor: storageColor?.border,
-      }}
-    >
+    <div className="storage-node-stat grid h-10 min-w-0 overflow-hidden border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
       <div className="h-[11px] truncate text-[8px] uppercase leading-[11px] text-[#424242]">
         {label}
       </div>
