@@ -117,22 +117,27 @@ textarea {
 }
 
 .recipe-node-tinted-area {
-  background: color-mix(in srgb, var(--recipe-node-tint) 55%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 82%, #c6c6c6);
   box-shadow:
     inset 1px 1px 0 rgba(255, 255, 255, 0.45),
     inset -1px -1px 0 rgba(0, 0, 0, 0.25);
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint {
-  background: color-mix(in srgb, var(--recipe-node-tint) 72%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 88%, #c6c6c6);
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 42%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 72%, #c6c6c6);
 }
 
 .recipe-node-tinted-area .recipe-node-nei-tint > div > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 24%, #c6c6c6);
+  background: color-mix(in srgb, var(--recipe-node-tint) 58%, #c6c6c6);
+}
+
+.recipe-node-tinted-area .recipe-node-nei-tint > div:last-child {
+  background: color-mix(in srgb, var(--recipe-node-tint) 86%, #c6c6c6);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--recipe-node-tint-border) 35%, #777);
 }
 
 .recipe-node-canvas-tint::before {
@@ -140,14 +145,14 @@ textarea {
   pointer-events: none;
   position: absolute;
   inset: 0;
-  background: color-mix(in srgb, var(--recipe-node-tint-header) 28%, transparent);
+  background: color-mix(in srgb, var(--recipe-node-tint-header) 42%, transparent);
 }
 
 .recipe-node-stat-grid > div {
-  background: color-mix(in srgb, var(--recipe-node-tint) 54%, #b6b6b6);
-  border-color: color-mix(in srgb, var(--recipe-node-tint-border) 42%, #777);
+  background: color-mix(in srgb, var(--recipe-node-tint) 86%, #b6b6b6);
+  border-color: color-mix(in srgb, var(--recipe-node-tint-border) 62%, #777);
 }
 
 .recipe-node-stat-grid input {
-  background: color-mix(in srgb, var(--recipe-node-tint) 18%, #d8d8d8);
+  background: color-mix(in srgb, var(--recipe-node-tint) 42%, #d8d8d8);
 }
