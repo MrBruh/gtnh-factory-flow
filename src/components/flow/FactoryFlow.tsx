@@ -148,6 +148,7 @@ export function FactoryFlow() {
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const draggingNodeRef = useRef(false);
   const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
+  const lastConnectionPointerRef = useRef<{ x: number; y: number } | undefined>(undefined);
   const connectCompletedRef = useRef(false);
   const boardRef = useRef<HTMLDivElement>(null);
   const flowInstanceRef = useRef<ReactFlowInstance<
@@ -287,8 +288,9 @@ export function FactoryFlow() {
   );
 
   const handleConnectStart = useCallback(
-    (_: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null }) => {
+    (event: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null }) => {
       connectCompletedRef.current = false;
+      lastConnectionPointerRef.current = getClientPosition(event);
       draggedResourceRef.current =
         params.nodeId && params.handleId
           ? getDraggedResourceForHandle(project, params.nodeId, params.handleId)
@@ -301,8 +303,13 @@ export function FactoryFlow() {
     (event: MouseEvent | TouchEvent, connectionState: { toHandle: unknown | null }) => {
       const draggedResource = draggedResourceRef.current;
       draggedResourceRef.current = undefined;
+      const clientPosition = getClientPosition(event) ?? lastConnectionPointerRef.current;
+      lastConnectionPointerRef.current = undefined;
       const targetHandle =
-        getResourceHandleAtPointer(event) ?? getStorageHandleAtPointer(event, draggedResource);
+        getResourceHandleAtPosition(clientPosition) ??
+        getResourceHandleAtPointer(event) ??
+        getStorageHandleAtPosition(clientPosition, draggedResource) ??
+        getStorageHandleAtPointer(event, draggedResource);
 
       if (draggedResource && targetHandle) {
         if (
@@ -355,7 +362,6 @@ export function FactoryFlow() {
         return;
       }
 
-      const clientPosition = getClientPosition(event);
       if (!clientPosition) {
         return;
       }
@@ -371,6 +377,25 @@ export function FactoryFlow() {
     },
     [addStorageForConnection, connectNodes],
   );
+
+  useEffect(() => {
+    const updatePointerPosition = (event: PointerEvent | MouseEvent | TouchEvent) => {
+      if (!draggedResourceRef.current) {
+        return;
+      }
+
+      lastConnectionPointerRef.current = getClientPosition(event);
+    };
+
+    window.addEventListener("pointermove", updatePointerPosition, { passive: true });
+    window.addEventListener("mousemove", updatePointerPosition, { passive: true });
+    window.addEventListener("touchmove", updatePointerPosition, { passive: true });
+    return () => {
+      window.removeEventListener("pointermove", updatePointerPosition);
+      window.removeEventListener("mousemove", updatePointerPosition);
+      window.removeEventListener("touchmove", updatePointerPosition);
+    };
+  }, []);
 
   const handleReconnect = useCallback(
     (oldEdge: ResourceFlowEdge, connection: Connection) => {
@@ -780,6 +805,13 @@ function isEditableKeyboardTarget(target: EventTarget | null) {
 
 function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {
   const position = getClientPosition(event);
+  return getResourceHandleAtPosition(position, event);
+}
+
+function getResourceHandleAtPosition(
+  position: { x: number; y: number } | undefined,
+  fallbackEvent?: MouseEvent | TouchEvent,
+) {
   if (!position || typeof document === "undefined") {
     return undefined;
   }
@@ -789,12 +821,14 @@ function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {
     return geometricMatch;
   }
 
-  for (const element of document.elementsFromPoint(position.x, position.y)) {
-    const match = readResourceHandleElement(
-      element.closest<HTMLElement>("[data-resource-handle='true']"),
-    );
-    if (match) {
-      return match;
+  if (fallbackEvent) {
+    for (const element of document.elementsFromPoint(position.x, position.y)) {
+      const match = readResourceHandleElement(
+        element.closest<HTMLElement>("[data-resource-handle='true']"),
+      );
+      if (match) {
+        return match;
+      }
     }
   }
 
@@ -862,16 +896,26 @@ function getStorageHandleAtPointer(
   draggedResource: DraggedResourceConnection | undefined,
 ) {
   const position = getClientPosition(event);
+  return getStorageHandleAtPosition(position, draggedResource, event);
+}
+
+function getStorageHandleAtPosition(
+  position: { x: number; y: number } | undefined,
+  draggedResource: DraggedResourceConnection | undefined,
+  fallbackEvent?: MouseEvent | TouchEvent,
+) {
   if (!position || !draggedResource || typeof document === "undefined") {
     return undefined;
   }
 
   const storageElements = [
     ...document.querySelectorAll<HTMLElement>("[data-storage-node-id]"),
-    ...document
-      .elementsFromPoint(position.x, position.y)
-      .map((element) => element.closest<HTMLElement>("[data-storage-node-id]"))
-      .filter((element): element is HTMLElement => Boolean(element)),
+    ...(fallbackEvent
+      ? document
+          .elementsFromPoint(position.x, position.y)
+          .map((element) => element.closest<HTMLElement>("[data-storage-node-id]"))
+          .filter((element): element is HTMLElement => Boolean(element))
+      : []),
   ];
 
   for (const storageElement of storageElements) {

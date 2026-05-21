@@ -183,7 +183,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                     slot.resource.displayName ?? slot.resource.id
                   }`}
                   className={[
-                    "nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+                    "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
                     "!rounded-none !border-0 !bg-transparent !opacity-0",
                     "cursor-crosshair",
                   ].join(" ")}
