@@ -406,7 +406,7 @@ export function FactoryFlow() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
+      if (event.key === "Delete") {
         if (isEditableKeyboardTarget(event.target)) {
           return;
         }
@@ -428,6 +428,16 @@ export function FactoryFlow() {
             selectNode(undefined);
             return;
           }
+        }
+
+        cancelResourceConnection();
+        setNodeColorPaintMode(undefined);
+        return;
+      }
+
+      if (event.key === "Escape") {
+        if (isEditableKeyboardTarget(event.target)) {
+          return;
         }
 
         cancelResourceConnection();

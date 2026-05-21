@@ -538,8 +538,8 @@ function VirtualResourceResultList({
   }, [pageCount]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="grid min-h-0 flex-1 content-start grid-cols-1 gap-2 overflow-hidden">
+    <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
+      <div className="grid min-w-0 min-h-0 flex-1 content-start grid-cols-1 gap-2 overflow-hidden">
         {visibleResources.map((resource) => (
           <ResourceResult
             key={`${resource.kind}:${resource.id}`}
@@ -572,7 +572,7 @@ function ResourcePager({
   onNextPage: () => void;
 }) {
   return (
-    <div className="mt-2 grid h-8 shrink-0 grid-cols-[32px_minmax(0,1fr)_32px] items-center border border-neutral-700 bg-[#111317] text-center font-mono text-sm text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.45)]">
+    <div className="mt-2 grid h-8 w-full min-w-0 max-w-full shrink-0 grid-cols-[32px_minmax(0,1fr)_32px] items-center overflow-hidden border border-neutral-700 bg-[#111317] text-center font-mono text-sm text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.45)]">
       <button
         type="button"
         onClick={onPreviousPage}
