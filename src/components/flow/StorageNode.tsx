@@ -183,7 +183,7 @@ function FluidStorageCard({
           borderColor: storageColor?.border,
         }}
       >
-        <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#d8d8d8] bg-[#111] shadow-[inset_2px_2px_0_#4f5a6f,inset_-2px_-2px_0_#050505]">
+        <div className="relative grid h-[64px] w-[64px] place-items-center bg-[#111]">
           <StorageEdgeAnchors
             nodeId={storage.id}
             inputHandleId={inputHandleId}
@@ -326,7 +326,7 @@ function StorageStats({
       <StorageStat label="Out" value={formatCompact(consumed, unit)} storageColor={storageColor} />
       <StorageStat
         label="Net"
-        value={`${net >= 0 ? "+" : ""}${formatCompact(net, unit)}`}
+        value={formatCompact(net, unit, { forceSign: true })}
         storageColor={storageColor}
       />
     </div>
@@ -366,14 +366,8 @@ function StorageStat({
       </div>
       <div
         className={[
-          "block max-w-full overflow-hidden text-ellipsis whitespace-nowrap text-center font-medium leading-[18px] text-[#111] tabular-nums",
-          value.length > 11
-            ? "text-[6px]"
-            : value.length > 9
-              ? "text-[7px]"
-              : value.length > 7
-                ? "text-[8px]"
-                : "text-[10px]",
+          "block max-w-full overflow-hidden whitespace-nowrap text-center font-medium leading-[18px] text-[#111] tabular-nums",
+          getStorageStatTextSize(value),
         ].join(" ")}
         title={value}
       >
@@ -383,21 +377,31 @@ function StorageStat({
   );
 }
 
-function formatCompact(value: number, unit: string) {
+function getStorageStatTextSize(value: string) {
+  if (value.length > 13) return "text-[5px]";
+  if (value.length > 11) return "text-[6px]";
+  if (value.length > 9) return "text-[7px]";
+  if (value.length > 7) return "text-[8px]";
+  return "text-[10px]";
+}
+
+function formatCompact(value: number, unit: string, options?: { forceSign?: boolean }) {
   const abs = Math.abs(value);
+  const sign = options?.forceSign && value > 0 ? "+" : "";
+
   if (!Number.isFinite(value) || abs < 0.005) {
     return `0${unit}`;
   }
 
   if (abs >= 1_000_000) {
-    return `${trimFlow(value / 1_000_000)}M${unit}`;
+    return `${sign}${trimFlow(value / 1_000_000)}M${unit}`;
   }
 
   if (abs >= 1_000) {
-    return `${trimFlow(value / 1_000)}k${unit}`;
+    return `${sign}${trimFlow(value / 1_000)}k${unit}`;
   }
 
-  return `${trimFlow(value)}${unit}`;
+  return `${sign}${trimFlow(value)}${unit}`;
 }
 
 function trimFlow(value: number) {
