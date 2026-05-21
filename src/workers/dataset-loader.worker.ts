@@ -196,7 +196,7 @@ async function loadDataset(
   cacheKey: string,
 ): Promise<RecipeDataset> {
   const cached = await readCachedDataset(cacheKey).catch(() => undefined);
-  if (cached?.datasetVersionId === expectedVersionId) {
+  if (cached?.datasetVersionId === expectedVersionId && hasUsableIconAtlas(cached)) {
     return cached;
   }
 
@@ -222,6 +222,11 @@ async function loadDataset(
 
   await writeCachedDataset(cacheKey, dataset).catch(() => undefined);
   return dataset;
+}
+
+function hasUsableIconAtlas(dataset: RecipeDataset): boolean {
+  const indexedResources = dataset.resourceIndex ?? dataset.resources;
+  return indexedResources.some((resource) => Boolean(resource.iconAtlas));
 }
 
 function summarizeDataset(dataset: RecipeDataset): DatasetSummary {
