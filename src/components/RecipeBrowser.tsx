@@ -29,11 +29,6 @@ import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
-import {
-  getCachedResourceIconBitmap,
-  queueResourceIconPreload,
-  ResourceIconCanvas,
-} from "./nei/ResourceIconCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 6;
@@ -248,8 +243,7 @@ export function RecipeBrowser() {
   );
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => setRecipePage(0), 0);
-    return () => window.clearTimeout(timeout);
+    return deferStateUpdate(() => setRecipePage(0));
   }, [
     activeResource?.id,
     activeResource?.kind,
@@ -263,55 +257,50 @@ export function RecipeBrowser() {
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(queryTotal / RECIPE_QUERY_LIMIT) - 1);
     if (recipePage > maxPage) {
-      const timeout = window.setTimeout(() => setRecipePage(maxPage), 0);
-      return () => window.clearTimeout(timeout);
+      return deferStateUpdate(() => setRecipePage(maxPage));
     }
     return undefined;
   }, [queryTotal, recipePage]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
-      const timeout = window.setTimeout(() => {
+      return deferStateUpdate(() => {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
-      }, 0);
-      return () => window.clearTimeout(timeout);
+      });
     }
 
     const query = deferredRecipeSearch.trim();
     if (!activeResource && query.length < 2) {
-      const timeout = window.setTimeout(() => {
+      return deferStateUpdate(() => {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
-      }, 0);
-      return () => window.clearTimeout(timeout);
+      });
     }
 
     const cacheKey = getRecipeQueryKey(activeRecipeMap, recipePage);
     const cached = getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey);
     if (cached) {
-      const timeout = window.setTimeout(() => {
+      return deferStateUpdate(() => {
         setFilteredRecipes(cached.recipes);
         setQueryTotal(cached.total);
         setAvailableRecipeMaps(cached.recipeMaps);
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
-      }, 0);
-      return () => window.clearTimeout(timeout);
+      });
     }
 
     let cancelled = false;
-    window.setTimeout(() => {
-      if (cancelled) {
-        return;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setRecipeQueryLoading(true);
+        setRecipeQueryError(undefined);
       }
-      setRecipeQueryLoading(true);
-      setRecipeQueryError(undefined);
-    }, 0);
+    });
 
     queryRecipeDatasetRecipes(
       datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
@@ -541,7 +530,14 @@ function ResourceHistoryPanel({
             className="h-10 w-10 shrink-0 border border-neutral-600 bg-[#2b2d32] p-0 hover:border-cyan-400"
           >
             <span className="flex h-full w-full items-center justify-center">
-              <ResourceIconCanvas resource={resource} size={34} />
+              <ResourceIcon
+                resource={{ ...resource, amount: 1 }}
+                size="sm"
+                showAmount={false}
+                tooltip={false}
+                bare
+                iconPixelSize={34}
+              />
             </span>
           </button>
         ))}
@@ -594,6 +590,24 @@ interface RecipeQueryCacheEntry {
   expiresAt: number;
 }
 
+interface RecipeMapIconCandidate {
+  resource: DatasetResource | DatasetResourceIndexEntry;
+  label: string;
+  tokens: Set<string>;
+  exactMachineBonus: boolean;
+  prefixBonus: boolean;
+  penalty: boolean;
+}
+
+const recipeMapIconCandidateCache = new WeakMap<
+  Array<DatasetResource | DatasetResourceIndexEntry>,
+  RecipeMapIconCandidate[]
+>();
+const recipeMapIconResultCache = new WeakMap<
+  Array<DatasetResource | DatasetResourceIndexEntry>,
+  Map<string, DatasetResource | DatasetResourceIndexEntry | undefined>
+>();
+
 function VirtualResourceResultList({
   resources,
   activeResource,
@@ -609,13 +623,6 @@ function VirtualResourceResultList({
   const pageCount = Math.max(1, Math.ceil(resources.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
-  useEffect(() => {
-    const start = Math.max(0, currentPage - 1) * pageSize;
-    const end = Math.min(resources.length, (currentPage + 3) * pageSize);
-    resources.slice(start, end).forEach((resource) => {
-      queueResourceIconPreload(resource);
-    });
-  }, [currentPage, pageSize, resources]);
   const handlePreviousPage = useCallback(() => {
     startPageTransition(() => {
       setPage((current) => Math.max(0, current - 1));
@@ -629,7 +636,7 @@ function VirtualResourceResultList({
 
   return (
     <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
-      <ResourceCanvasPage
+      <ResourceResultPage
         resources={visibleResources}
         activeResource={activeResource}
         onBrowseResource={onBrowse}
@@ -684,7 +691,7 @@ function ResourcePager({
   );
 }
 
-function ResourceCanvasPage({
+function ResourceResultPage({
   resources,
   activeResource,
   onBrowseResource,
@@ -693,75 +700,9 @@ function ResourceCanvasPage({
   activeResource?: IndexedResource;
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const hitRegionsRef = useRef<ResourceCanvasHitRegion[]>([]);
   const [, startBrowseTransition] = useTransition();
-  const [, forceRedraw] = useState(0);
   const rowHeight = 62;
   const height = 6 * rowHeight;
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const width = canvas.clientWidth;
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = Math.max(1, Math.floor(width * dpr));
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.height = `${height}px`;
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
-    context.clearRect(0, 0, width, height);
-    context.imageSmoothingEnabled = false;
-    drawResourceCanvasPage(context, {
-      width,
-      rowHeight,
-      resources,
-      activeResource,
-      hitRegions: hitRegionsRef.current,
-    });
-  }, [activeResource, height, resources]);
-
-  useEffect(() => {
-    let cancelled = false;
-    let frame = 0;
-    const redraw = () => {
-      if (!cancelled) {
-        frame = 0;
-        forceRedraw((value) => value + 1);
-      }
-    };
-    const requestRedraw = () => {
-      if (!cancelled && frame === 0) {
-        frame = window.requestAnimationFrame(redraw);
-      }
-    };
-
-    resources.forEach((resource) => {
-      queueResourceIconPreload(resource, requestRedraw);
-    });
-
-    return () => {
-      cancelled = true;
-      if (frame !== 0) {
-        window.cancelAnimationFrame(frame);
-      }
-    };
-  }, [resources]);
-
-  const getHitResource = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    return hitRegionsRef.current.find((region) => pointInResourceRegion(x, y, region))?.resource;
-  }, []);
 
   const browse = useCallback(
     (resource: IndexedResource, mode: "recipes" | "uses") => {
@@ -771,149 +712,46 @@ function ResourceCanvasPage({
   );
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="block h-full min-h-0 w-full flex-1 cursor-pointer"
-      style={{ imageRendering: "pixelated" }}
+    <div
+      className="grid min-h-0 w-full content-start gap-2 overflow-hidden"
+      style={{ height }}
       aria-label="Resource results"
       role="listbox"
-      onClick={(event) => {
-        const resource = getHitResource(event);
-        if (resource) {
-          browse(resource, "recipes");
-        }
-      }}
-      onContextMenu={(event) => {
-        const resource = getHitResource(event);
-        if (!resource) {
-          return;
-        }
-        event.preventDefault();
-        browse(resource, "uses");
-      }}
-    />
+    >
+      {resources.map((resource) => {
+        const active =
+          activeResource?.kind === resource.kind && activeResource.id === resource.id;
+
+        return (
+          <button
+            key={`${resource.kind}:${resource.id}`}
+            type="button"
+            onClick={() => browse(resource, "recipes")}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              browse(resource, "uses");
+            }}
+            className={[
+              "flex h-[54px] w-full items-center gap-3 overflow-hidden rounded-[4px] border bg-[#303238] px-2 text-left text-sm text-neutral-50 shadow-[inset_1px_1px_0_rgba(255,255,255,0.08)]",
+              active ? "border-cyan-400" : "border-neutral-700 hover:border-neutral-500",
+            ].join(" ")}
+            role="option"
+            aria-selected={active}
+          >
+            <ResourceIcon
+              resource={{ ...resource, amount: 1 }}
+              size="sm"
+              showAmount={false}
+              tooltip={false}
+            />
+            <span className="min-w-0 flex-1 truncate [text-shadow:1px_1px_0_#000]">
+              {resourceLabel(resource)}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
-}
-
-interface ResourceCanvasHitRegion {
-  resource: IndexedResource;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function drawResourceCanvasPage(
-  context: CanvasRenderingContext2D,
-  options: {
-    width: number;
-    rowHeight: number;
-    resources: IndexedResource[];
-    activeResource?: IndexedResource;
-    hitRegions: ResourceCanvasHitRegion[];
-  },
-) {
-  options.hitRegions.length = 0;
-  context.font = '14px Monocraft, "Courier New", monospace';
-  context.textBaseline = "middle";
-
-  options.resources.forEach((resource, index) => {
-    const y = index * options.rowHeight;
-    const active =
-      options.activeResource?.kind === resource.kind && options.activeResource.id === resource.id;
-
-    options.hitRegions.push({
-      resource,
-      x: 0,
-      y,
-      width: options.width,
-      height: 54,
-    });
-
-    context.fillStyle = "#303238";
-    context.fillRect(0, y, options.width, 54);
-    context.strokeStyle = active ? "#22d3ee" : "#40444d";
-    context.lineWidth = active ? 2 : 1;
-    context.strokeRect(active ? 1 : 0.5, y + (active ? 1 : 0.5), options.width - (active ? 2 : 1), 54 - (active ? 2 : 1));
-
-    drawCanvasIconSlot(context, resource, 10, y + 9, 36);
-
-    context.fillStyle = "#f8fafc";
-    context.shadowColor = "#000";
-    context.shadowBlur = 0;
-    context.shadowOffsetX = 1;
-    context.shadowOffsetY = 1;
-    drawTruncatedCanvasText(context, resourceLabel(resource), 58, y + 28, options.width - 70);
-    context.shadowOffsetX = 0;
-    context.shadowOffsetY = 0;
-  });
-}
-
-function drawCanvasIconSlot(
-  context: CanvasRenderingContext2D,
-  resource: IndexedResource,
-  x: number,
-  y: number,
-  size: number,
-) {
-  context.fillStyle = "#8d8d8d";
-  context.fillRect(x, y, size, size);
-  context.strokeStyle = "#373737";
-  context.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-  drawCanvasBevel(context, x, y, size, size);
-
-  const bitmap = getCachedResourceIconBitmap(resource);
-  if (bitmap) {
-    context.imageSmoothingEnabled = false;
-    context.drawImage(bitmap, x + 2, y + 2, size - 4, size - 4);
-    return;
-  }
-
-  queueResourceIconPreload(resource);
-}
-
-function drawCanvasBevel(
-  context: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) {
-  context.strokeStyle = "#cfcfcf";
-  context.beginPath();
-  context.moveTo(x + 1, y + height - 1);
-  context.lineTo(x + 1, y + 1);
-  context.lineTo(x + width - 1, y + 1);
-  context.stroke();
-  context.strokeStyle = "#4d4d4d";
-  context.beginPath();
-  context.moveTo(x + width - 1, y + 1);
-  context.lineTo(x + width - 1, y + height - 1);
-  context.lineTo(x + 1, y + height - 1);
-  context.stroke();
-}
-
-function drawTruncatedCanvasText(
-  context: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-) {
-  if (context.measureText(text).width <= maxWidth) {
-    context.fillText(text, x, y);
-    return;
-  }
-
-  let nextText = text;
-  while (nextText.length > 1 && context.measureText(`${nextText}...`).width > maxWidth) {
-    nextText = nextText.slice(0, -1);
-  }
-  context.fillText(`${nextText}...`, x, y);
-}
-
-function pointInResourceRegion(x: number, y: number, region: ResourceCanvasHitRegion) {
-  return x >= region.x && x <= region.x + region.width && y >= region.y && y <= region.y + region.height;
 }
 
 function RecipeMapTabBar({
@@ -947,12 +785,6 @@ function RecipeMapTabBar({
     return () => resizeObserver.disconnect();
   }, [tabs]);
 
-  useEffect(() => {
-    tabs.forEach((tab) => {
-      queueResourceIconPreload(tab.icon);
-    });
-  }, [tabs]);
-
   const scrollTabs = (direction: -1 | 1) => {
     scrollRef.current?.scrollBy({ left: direction * 184, behavior: "smooth" });
   };
@@ -981,7 +813,14 @@ function RecipeMapTabBar({
             >
               {tab.icon ? (
                 <span className="flex h-9 w-9 items-center justify-center">
-                  <ResourceIconCanvas resource={tab.icon} size={30} />
+                  <ResourceIcon
+                    resource={tab.icon}
+                    size="sm"
+                    showAmount={false}
+                    tooltip={false}
+                    bare
+                    iconPixelSize={30}
+                  />
                 </span>
               ) : (
                 <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
@@ -1507,6 +1346,19 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
+function deferStateUpdate(callback: () => void) {
+  let cancelled = false;
+  queueMicrotask(() => {
+    if (!cancelled) {
+      callback();
+    }
+  });
+
+  return () => {
+    cancelled = true;
+  };
+}
+
 function clampPanelSize(size: { width: number; height: number }) {
   const maxWidth = typeof window === "undefined" ? 960 : Math.max(420, window.innerWidth - 24);
   const maxHeight = typeof window === "undefined" ? 900 : Math.max(360, window.innerHeight - 32);
@@ -1688,47 +1540,79 @@ function findRecipeMapIcon(
   recipeMap: string,
   resources: Array<DatasetResource | DatasetResourceIndexEntry>,
 ): DatasetResource | DatasetResourceIndexEntry | undefined {
+  let resultCache = recipeMapIconResultCache.get(resources);
+  if (!resultCache) {
+    resultCache = new Map();
+    recipeMapIconResultCache.set(resources, resultCache);
+  }
+  if (resultCache.has(recipeMap)) {
+    return resultCache.get(recipeMap);
+  }
+
+  const candidates = getRecipeMapIconCandidates(resources);
   const recipeMapTokens = tokenizeRecipeMap(recipeMap);
   const normalizedMap = normalizeText(recipeMap);
   let best: { resource: DatasetResource | DatasetResourceIndexEntry; score: number } | undefined;
 
-  for (const resource of resources) {
-    if (resource.kind !== "item" || (!resource.iconPath && !resource.iconAtlas)) {
-      continue;
-    }
-
-    const label = normalizeText(resource.displayName ?? resource.id);
-    const tokens = new Set(label.split(" ").filter(Boolean));
+  for (const candidate of candidates) {
     let score = 0;
 
-    if (label === normalizedMap) {
+    if (candidate.label === normalizedMap) {
       score += 120;
-    } else if (label.includes(normalizedMap)) {
+    } else if (candidate.label.includes(normalizedMap)) {
       score += 80;
     }
 
     for (const token of recipeMapTokens) {
-      if (tokens.has(token) || label.includes(token)) {
+      if (candidate.tokens.has(token) || candidate.label.includes(token)) {
         score += 14;
       }
     }
 
-    if (resource.id.startsWith("gregtech:gt.blockmachines@")) {
+    if (candidate.exactMachineBonus) {
       score += 35;
     }
-    if (/^(basic|steam|simple|large) /.test(label)) {
+    if (candidate.prefixBonus) {
       score += 12;
     }
-    if (/\b(pipe|cover|upgrade|part|component)\b/.test(label)) {
+    if (candidate.penalty) {
       score -= 30;
     }
 
     if (score > (best?.score ?? 0)) {
-      best = { resource, score };
+      best = { resource: candidate.resource, score };
     }
   }
 
-  return best && best.score >= 35 ? best.resource : undefined;
+  const result = best && best.score >= 35 ? best.resource : undefined;
+  resultCache.set(recipeMap, result);
+  return result;
+}
+
+function getRecipeMapIconCandidates(
+  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
+): RecipeMapIconCandidate[] {
+  const cached = recipeMapIconCandidateCache.get(resources);
+  if (cached) {
+    return cached;
+  }
+
+  const candidates = resources
+    .filter((resource) => resource.kind === "item" && (resource.iconPath || resource.iconAtlas))
+    .map((resource) => {
+      const label = normalizeText(resource.displayName ?? resource.id);
+      return {
+        resource,
+        label,
+        tokens: new Set(label.split(" ").filter(Boolean)),
+        exactMachineBonus: resource.id.startsWith("gregtech:gt.blockmachines@"),
+        prefixBonus: /^(basic|steam|simple|large) /.test(label),
+        penalty: /\b(pipe|cover|upgrade|part|component)\b/.test(label),
+      };
+    });
+
+  recipeMapIconCandidateCache.set(resources, candidates);
+  return candidates;
 }
 
 function tokenizeRecipeMap(value: string): string[] {
