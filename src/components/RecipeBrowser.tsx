@@ -39,6 +39,7 @@ export function RecipeBrowser() {
   const [maxTier, setMaxTier] = useState<TierFilter>("all");
   const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
   const [queryTotal, setQueryTotal] = useState(0);
+  const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [recipeQueryLoading, setRecipeQueryLoading] = useState(false);
   const [recipeQueryError, setRecipeQueryError] = useState<string | undefined>();
   const deferredRecipeSearch = useDeferredValue(recipeSearch);
@@ -96,10 +97,10 @@ export function RecipeBrowser() {
       .slice(0, 96);
   }, [activeResource, deferredRecipeSearch, resourceIndex]);
 
-  const recipeMaps = useMemo(() => {
-    const maps = dataset?.recipeMaps?.length ? dataset.recipeMaps : [];
-    return maps.filter(Boolean).sort((a, b) => a.localeCompare(b));
-  }, [dataset]);
+  const recipeMaps = useMemo(
+    () => availableRecipeMaps.filter(Boolean).sort((a, b) => a.localeCompare(b)),
+    [availableRecipeMaps],
+  );
 
   const recipeMapTabs = useMemo(
     () => buildRecipeMapTabs(recipeMaps, dataset?.resources ?? []),
@@ -108,7 +109,7 @@ export function RecipeBrowser() {
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
     ? selectedRecipeMap
-    : (recipeMaps[0] ?? "");
+    : "";
 
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -120,6 +121,7 @@ export function RecipeBrowser() {
       const timeout = window.setTimeout(() => {
         setFilteredRecipes([]);
         setQueryTotal(0);
+        setAvailableRecipeMaps([]);
       }, 0);
       return () => window.clearTimeout(timeout);
     }
@@ -129,6 +131,7 @@ export function RecipeBrowser() {
       const timeout = window.setTimeout(() => {
         setFilteredRecipes([]);
         setQueryTotal(0);
+        setAvailableRecipeMaps([]);
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
       }, 0);
@@ -167,6 +170,7 @@ export function RecipeBrowser() {
         }
         setFilteredRecipes(result.recipes);
         setQueryTotal(result.total);
+        setAvailableRecipeMaps(result.recipeMaps);
         setRecipeQueryLoading(false);
       })
       .catch((error) => {
@@ -175,6 +179,7 @@ export function RecipeBrowser() {
         }
         setFilteredRecipes([]);
         setQueryTotal(0);
+        setAvailableRecipeMaps([]);
         setRecipeQueryError(error instanceof Error ? error.message : "Recipe query failed.");
         setRecipeQueryLoading(false);
       });

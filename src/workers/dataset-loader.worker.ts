@@ -46,6 +46,7 @@ type WorkerResponse =
       type: "queryRecipes";
       recipes: Recipe[];
       total: number;
+      recipeMaps: string[];
     }
   | {
       id: number;
@@ -92,6 +93,7 @@ async function handleRequest(request: WorkerRequest) {
       type: "queryRecipes",
       recipes: result.recipes,
       total: result.total,
+      recipeMaps: result.recipeMaps,
     } satisfies WorkerResponse);
   } catch (error) {
     postMessage({
@@ -178,19 +180,16 @@ function summarizeDataset(dataset: RecipeDataset): DatasetSummary {
 function queryRecipes(
   recipes: Recipe[],
   request: Extract<WorkerRequest, { type: "queryRecipes" }>,
-): { recipes: Recipe[]; total: number } {
+): { recipes: Recipe[]; total: number; recipeMaps: string[] } {
   const query = normalizeText(request.query);
   const activeMap = request.recipeMap || undefined;
   const resultsWithIcons: Array<{ recipe: Recipe; iconScore: number }> = [];
   const resultsWithoutIcons: Recipe[] = [];
+  const recipeMaps = new Set<string>();
   let total = 0;
 
   for (const recipe of recipes) {
     const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
-    if (activeMap && recipeMap !== activeMap) {
-      continue;
-    }
-
     if (request.resource && !recipeHasResource(recipe, request.resource, request.mode)) {
       continue;
     }
@@ -200,6 +199,14 @@ function queryRecipes(
     }
 
     if (!request.resource && query && !recipeMatchesQuery(recipe, query)) {
+      continue;
+    }
+
+    if (recipeMap) {
+      recipeMaps.add(recipeMap);
+    }
+
+    if (activeMap && recipeMap !== activeMap) {
       continue;
     }
 
@@ -224,6 +231,7 @@ function queryRecipes(
       ...resultsWithoutIcons,
     ].slice(0, request.limit),
     total,
+    recipeMaps: [...recipeMaps].sort((a, b) => a.localeCompare(b)),
   };
 }
 

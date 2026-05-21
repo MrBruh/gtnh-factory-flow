@@ -18,6 +18,7 @@ export interface RecipeDatasetQuery {
 export interface RecipeDatasetQueryResult {
   recipes: Recipe[];
   total: number;
+  recipeMaps: string[];
 }
 
 type DatasetSummary = Omit<RecipeDataset, "recipes"> & {
@@ -54,6 +55,7 @@ type WorkerResponse =
       type: "queryRecipes";
       recipes: Recipe[];
       total: number;
+      recipeMaps: string[];
     }
   | {
       id: number;
@@ -106,6 +108,7 @@ export async function queryRecipeDatasetRecipes(
   return {
     recipes: response.recipes,
     total: response.total,
+    recipeMaps: response.recipeMaps,
   };
 }
 
