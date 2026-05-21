@@ -1,7 +1,8 @@
 import { parseRecipeDatasetJson } from "@/lib/import-export";
 import { enrichDatasetRecipes } from "@/lib/datasets/enrich";
-import type { DatasetResourceIndexEntry, RecipeDataset } from "@/lib/datasets";
+import type { DatasetResourceIndexEntry, RecipeDataset, RecipeSummary } from "@/lib/datasets";
 import { getRecipePowerTier, GT_VOLTAGE_TIERS } from "@/lib/model";
+import { getNeiRecipeLayout } from "@/lib/nei/layout";
 import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
@@ -26,6 +27,14 @@ type WorkerRequest =
       recipeMap?: string;
       maxTier: TierFilter;
       limit: number;
+    }
+  | {
+      id: number;
+      type: "getRecipe";
+      datasetUrl: string;
+      expectedVersionId: string;
+      cacheKey: string;
+      recipeId: string;
     };
 
 type DatasetSummary = Omit<RecipeDataset, "recipes"> & {
@@ -44,9 +53,15 @@ type WorkerResponse =
       id: number;
       ok: true;
       type: "queryRecipes";
-      recipes: Recipe[];
+      recipes: RecipeSummary[];
       total: number;
       recipeMaps: string[];
+    }
+  | {
+      id: number;
+      ok: true;
+      type: "getRecipe";
+      recipe: Recipe;
     }
   | {
       id: number;
@@ -105,8 +120,26 @@ async function handleRequest(request: WorkerRequest) {
       return;
     }
 
-    loadedDataset = await ensureDataset(request.datasetUrl, request.expectedVersionId, request.cacheKey);
+    loadedDataset = await ensureDataset(
+      request.datasetUrl,
+      request.expectedVersionId,
+      request.cacheKey,
+    );
     ensureRecipeIndexes(loadedDataset, request.cacheKey);
+
+    if (request.type === "getRecipe") {
+      const recipe = loadedDataset.recipes.find((entry) => entry.id === request.recipeId);
+      if (!recipe) {
+        throw new Error(`Recipe ${request.recipeId} was not found in dataset.`);
+      }
+      postMessage({
+        id: request.id,
+        ok: true,
+        type: "getRecipe",
+        recipe,
+      } satisfies WorkerResponse);
+      return;
+    }
 
     const result = queryRecipes(loadedDataset, request);
     postMessage({
@@ -203,7 +236,7 @@ function summarizeDataset(dataset: RecipeDataset): DatasetSummary {
 function queryRecipes(
   dataset: RecipeDataset,
   request: Extract<WorkerRequest, { type: "queryRecipes" }>,
-): { recipes: Recipe[]; total: number; recipeMaps: string[] } {
+): { recipes: RecipeSummary[]; total: number; recipeMaps: string[] } {
   const indexes = ensureRecipeIndexes(dataset, request.cacheKey);
   const cacheKey = getQueryCacheKey(request);
   const cached = indexes.queryCache.get(cacheKey);
@@ -277,13 +310,50 @@ function queryRecipes(
 function materializeQueryResult(
   dataset: RecipeDataset,
   result: CachedQueryResult,
-): { recipes: Recipe[]; total: number; recipeMaps: string[] } {
+): { recipes: RecipeSummary[]; total: number; recipeMaps: string[] } {
   return {
     recipes: result.recipeIndexes
       .map((recipeIndex) => dataset.recipes[recipeIndex])
-      .filter((recipe): recipe is Recipe => Boolean(recipe)),
+      .filter((recipe): recipe is Recipe => Boolean(recipe))
+      .map(summarizeRecipe),
     total: result.total,
     recipeMaps: result.recipeMaps,
+  };
+}
+
+function summarizeRecipe(recipe: Recipe): RecipeSummary {
+  const layout = getNeiRecipeLayout(recipe);
+  const visibleInputs = new Set<number>();
+  const visibleOutputs = new Set<number>();
+
+  for (const slot of layout.slots) {
+    if (slot.side === "input") {
+      visibleInputs.add(slot.resourceIndex);
+    } else {
+      visibleOutputs.add(slot.resourceIndex);
+    }
+  }
+
+  return {
+    id: recipe.id,
+    name: recipe.name,
+    recipeMap: recipe.source?.recipeMap ?? recipe.machineType,
+    machineType: recipe.machineType,
+    minimumTier: recipe.minimumTier,
+    durationTicks: recipe.durationTicks,
+    eut: recipe.eut,
+    programmedCircuit: recipe.programmedCircuit,
+    inputs: recipe.inputs.filter((_, index) => visibleInputs.has(index)),
+    outputs: recipe.outputs.filter((_, index) => visibleOutputs.has(index)),
+    source: recipe.source,
+    nei: recipe.nei,
+    slots: layout.slots.map((slot) => ({
+      side: slot.side,
+      kind: slot.kind,
+      resourceIndex: slot.resourceIndex,
+      x: slot.x,
+      y: slot.y,
+    })),
   };
 }
 
@@ -307,7 +377,9 @@ function getCandidateRecipeIndexes(
     return indexes.allRecipeIndexes;
   }
 
-  return indexes.recipeIndexesByResource.get(getResourceModeKey(request.resource, request.mode)) ?? [];
+  return (
+    indexes.recipeIndexesByResource.get(getResourceModeKey(request.resource, request.mode)) ?? []
+  );
 }
 
 function ensureRecipeIndexes(dataset: RecipeDataset, cacheKey: string): RecipeWorkerIndexes {
@@ -425,6 +497,7 @@ function buildDatasetResourceIndex(dataset: RecipeDataset): DatasetResourceIndex
           id: resource.id,
           displayName: resource.displayName ?? datasetResource?.displayName,
           iconPath: resource.iconPath ?? datasetResource?.iconPath,
+          iconAtlas: resource.iconAtlas ?? datasetResource?.iconAtlas,
           recipeCount: 1,
         });
       }
@@ -466,7 +539,7 @@ function getTierIndex(tier: Exclude<MachineTier, "DEMO">) {
 
 function recipeIconScore(recipe: Recipe): number {
   return [...recipe.inputs, ...recipe.outputs].reduce(
-    (score, resource) => score + (resource.iconPath ? 1 : 0),
+    (score, resource) => score + (resource.iconPath || resource.iconAtlas ? 1 : 0),
     0,
   );
 }
@@ -482,7 +555,10 @@ const DATASET_STORE = "recipe-datasets";
 async function readCachedDataset(cacheKey: string): Promise<RecipeDataset | undefined> {
   const db = await openDatasetCache();
   return new Promise((resolve, reject) => {
-    const request = db.transaction(DATASET_STORE, "readonly").objectStore(DATASET_STORE).get(cacheKey);
+    const request = db
+      .transaction(DATASET_STORE, "readonly")
+      .objectStore(DATASET_STORE)
+      .get(cacheKey);
     request.onsuccess = () => resolve(request.result as RecipeDataset | undefined);
     request.onerror = () => reject(request.error ?? new Error("Could not read dataset cache."));
   });

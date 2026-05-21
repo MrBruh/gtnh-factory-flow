@@ -231,7 +231,48 @@ exporterSource = exporterSource.replace(
     "                }",
     "",
     "                // item outputs",
+    "                int[] outputChances = getOutputChances(rec);",
+    "                int outputIndex = 0;",
   ].join("\n") + "\n",
+);
+
+exporterSource = exporterSource.replace(
+  "                    gtr.iO.add(item);\n",
+  [
+    "                    if (outputChances != null && outputIndex < outputChances.length) {",
+    "                        item.ch = Integer.valueOf(outputChances[outputIndex]);",
+    "                    }",
+    "                    outputIndex++;",
+    "",
+    "                    gtr.iO.add(item);",
+  ].join("\n") + "\n",
+);
+
+exporterSource = exporterSource.replace(
+  "\n    private List<ShapedRecipe> getShapedRecipes() {",
+  [
+    "",
+    "    private static int[] getOutputChances(GTRecipe recipe) {",
+    '        for (String fieldName : new String[] { "mChances", "mOutputChances", "mOutputChance" }) {',
+    "            try {",
+    "                Field field = GTRecipe.class.getDeclaredField(fieldName);",
+    "                field.setAccessible(true);",
+    "                Object value = field.get(recipe);",
+    "                if (value instanceof int[]) {",
+    "                    return (int[]) value;",
+    "                }",
+    "            } catch (NoSuchFieldException ignored) {",
+    "                // GTNH versions expose this under different names.",
+    "            } catch (IllegalAccessException ignored) {",
+    "                return null;",
+    "            }",
+    "        }",
+    "",
+    "        return null;",
+    "    }",
+    "",
+    "    private List<ShapedRecipe> getShapedRecipes() {",
+  ].join("\n"),
 );
 
 await fs.writeFile(exporterPath, exporterSource);
@@ -267,6 +308,9 @@ itemSource = itemSource.replace(
   [
     "    /** nbt tag */",
     "    public String nbt;",
+    "",
+    "    /** output chance, 10000 = 100% */",
+    "    public Integer ch;",
     "",
     "    /** rendered item stack icon filename */",
     "    public String ic;",

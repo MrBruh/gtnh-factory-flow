@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { recipeSchema } from "../model/schemas";
+import { recipeSchema, resourceIconAtlasRefSchema } from "../model/schemas";
 
 export const datasetSourceInfoSchema = z.object({
   sourceId: z.enum(["nesql", "recex", "nerd", "unknown"]),
@@ -14,6 +14,7 @@ export const datasetResourceSchema = z.object({
   kind: z.enum(["item", "fluid"]),
   displayName: z.string().min(1),
   iconPath: z.string().optional(),
+  iconAtlas: resourceIconAtlasRefSchema.optional(),
   modId: z.string().optional(),
   tooltip: z.array(z.string()).optional(),
   oreDictionary: z.array(z.string()).optional(),
@@ -24,6 +25,7 @@ export const datasetResourceIndexEntrySchema = z.object({
   kind: z.enum(["item", "fluid"]),
   displayName: z.string().optional(),
   iconPath: z.string().optional(),
+  iconAtlas: resourceIconAtlasRefSchema.optional(),
   recipeCount: z.number().int().min(0),
 });
 

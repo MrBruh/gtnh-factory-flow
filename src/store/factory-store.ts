@@ -76,7 +76,9 @@ interface FactoryStore {
   ) => void;
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   deleteNode: (nodeId: string) => void;
-  addResourceStorage: (resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath">) => void;
+  addResourceStorage: (
+    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
+  ) => void;
   deleteStorage: (storageId: string) => void;
   autoRouteStorage: (storageId: string) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
@@ -104,6 +106,7 @@ export interface RecipeBrowserResource {
   id: string;
   displayName?: string;
   iconPath?: string;
+  iconAtlas?: ResourceAmount["iconAtlas"];
   anchorNodeId?: string;
 }
 
@@ -114,6 +117,7 @@ export interface PendingResourceConnection {
   resourceId: string;
   displayName?: string;
   iconPath?: string;
+  iconAtlas?: ResourceAmount["iconAtlas"];
   handleId: string;
 }
 
@@ -402,6 +406,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         resourceId: resource.id,
         displayName: resource.displayName,
         iconPath: resource.iconPath,
+        iconAtlas: resource.iconAtlas,
         position: {
           x: 180 + (state.project.storages?.length ?? 0) * 80,
           y: 180 + (state.project.storages?.length ?? 0) * 60,
@@ -940,6 +945,7 @@ function updateResourceHistory(
     id: resource.id,
     displayName: resource.displayName,
     iconPath: resource.iconPath,
+    iconAtlas: resource.iconAtlas,
   };
   const key = getResourceKey(entry);
 
@@ -996,6 +1002,7 @@ function normalizeResourceHistory(value: unknown): RecipeBrowserResource[] {
       id: item.id,
       displayName: item.displayName,
       iconPath: item.iconPath,
+      iconAtlas: item.iconAtlas,
     };
     const key = getResourceKey(entry);
     if (seen.has(key)) {
@@ -1023,7 +1030,8 @@ function isStoredRecipeBrowserResource(value: unknown): value is RecipeBrowserRe
     typeof resource.id === "string" &&
     resource.id.length > 0 &&
     (resource.displayName === undefined || typeof resource.displayName === "string") &&
-    (resource.iconPath === undefined || typeof resource.iconPath === "string")
+    (resource.iconPath === undefined || typeof resource.iconPath === "string") &&
+    (resource.iconAtlas === undefined || typeof resource.iconAtlas === "object")
   );
 }
 

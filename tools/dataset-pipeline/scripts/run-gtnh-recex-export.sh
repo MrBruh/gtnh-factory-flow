@@ -13,6 +13,7 @@ export GTNH_EXPORT_TIMEOUT_SECONDS="${GTNH_EXPORT_TIMEOUT_SECONDS:-21600}"
 export GTNH_EXPORT_MAX_MEMORY="${GTNH_EXPORT_MAX_MEMORY:-6G}"
 export GTNH_RENDER_STACK_ICONS="${GTNH_RENDER_STACK_ICONS:-true}"
 export GTNH_ICON_EXPORT_BATCH_SIZE="${GTNH_ICON_EXPORT_BATCH_SIZE:-16}"
+export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-1024}"
 
 mkdir -p "$GTNH_DATASET_OUT_DIR" "$GTNH_RAW_EXPORT_DIR" "$GTNH_INSTANCE_DIR"
 
@@ -32,6 +33,7 @@ echo "Timeout: ${GTNH_EXPORT_TIMEOUT_SECONDS}s"
 echo "Pack kind: $GTNH_EXPORT_PACK_KIND"
 echo "GTNH 1.7.10 icon exporter: $GTNH_RENDER_STACK_ICONS"
 echo "Icon export batch size: $GTNH_ICON_EXPORT_BATCH_SIZE"
+echo "Atlas icon size: $GTNH_ATLAS_ICON_SIZE"
 
 node tools/dataset-pipeline/scripts/download-gtnh-pack.mjs "$pack_archive"
 
@@ -80,7 +82,7 @@ fi
 
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Drecex.autorun=true"
 if [[ "$GTNH_RENDER_STACK_ICONS" == "true" ]]; then
-  export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Drecex.renderIcons=true -Drecex.iconDir=$rendered_icon_dir -Drecex.iconExportBatchSize=$GTNH_ICON_EXPORT_BATCH_SIZE -Djava.awt.headless=false"
+  export JAVA_TOOL_OPTIONS="$JAVA_TOOL_OPTIONS -Drecex.renderIcons=true -Drecex.iconDir=$rendered_icon_dir -Drecex.iconSize=$GTNH_ATLAS_ICON_SIZE -Drecex.iconExportBatchSize=$GTNH_ICON_EXPORT_BATCH_SIZE -Djava.awt.headless=false"
 fi
 export _JAVA_OPTIONS="${_JAVA_OPTIONS:-} -Xms4G -Xmx${GTNH_EXPORT_MAX_MEMORY}"
 

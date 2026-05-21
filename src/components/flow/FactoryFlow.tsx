@@ -43,7 +43,10 @@ const edgeTypes = {
 } satisfies EdgeTypes;
 
 type ResourceEdgeData = {
-  resource: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath">;
+  resource: Pick<
+    ResourceAmount,
+    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas"
+  >;
   color: string;
   demand: string;
   transferred?: string;
@@ -97,15 +100,18 @@ export function FactoryFlow() {
           },
         } satisfies RecipeFlowNode;
       }),
-      ...(project.storages ?? []).map((storage) => ({
-        id: storage.id,
-        type: "storageNode",
-        position: storage.position,
-        data: {
-          storage,
-          result: result.storages[storage.id],
-        },
-      }) satisfies StorageFlowNode),
+      ...(project.storages ?? []).map(
+        (storage) =>
+          ({
+            id: storage.id,
+            type: "storageNode",
+            position: storage.position,
+            data: {
+              storage,
+              result: result.storages[storage.id],
+            },
+          }) satisfies StorageFlowNode,
+      ),
     ],
     [project.nodes, project.recipes, project.storages, result.nodes, result.storages],
   );
@@ -122,9 +128,12 @@ export function FactoryFlow() {
     setFlowNodes(nodesFromProject);
   }, [nodesFromProject]);
 
-  const handleNodesChange = (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
-    setFlowNodes((currentNodes) =>
-      applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
+  const handleNodesChange = (
+    changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[],
+  ) => {
+    setFlowNodes(
+      (currentNodes) =>
+        applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
     );
   };
 
@@ -135,8 +144,12 @@ export function FactoryFlow() {
         const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
         const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
         const transferred = edgeResult?.transferredPerSecond ?? demand;
-        const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
-        const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
+        const sourceStorage = (project.storages ?? []).find(
+          (storage) => storage.id === edge.source,
+        );
+        const targetStorage = (project.storages ?? []).find(
+          (storage) => storage.id === edge.target,
+        );
         const isStorageEdge = Boolean(sourceStorage || targetStorage);
         const storageResourceKey = sourceStorage
           ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
@@ -261,7 +274,9 @@ export function FactoryFlow() {
           draggingNodeRef.current = false;
           setFlowNodes((currentNodes) =>
             currentNodes.map((entry) =>
-              entry.id === node.id ? ({ ...entry, position: node.position } as typeof entry) : entry,
+              entry.id === node.id
+                ? ({ ...entry, position: node.position } as typeof entry)
+                : entry,
             ),
           );
         }}
@@ -274,10 +289,7 @@ export function FactoryFlow() {
         <Background gap={24} color="#d4d4d4" />
         <Controls position="bottom-left" />
       </ReactFlow>
-      <PaintToolbar
-        paintMode={nodeColorPaintMode}
-        onPaintModeChange={setNodeColorPaintMode}
-      />
+      <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
       {pendingResourceConnection ? (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
@@ -385,7 +397,7 @@ function ResourceEdge({
 function getEdgeResource(
   project: FactoryProject,
   edge: FactoryEdge,
-): Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath"> {
+): Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas"> {
   const sourceNode = project.nodes.find((node) => node.id === edge.source);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
@@ -401,6 +413,7 @@ function getEdgeResource(
     amount: 1,
     displayName: output?.displayName ?? storage?.displayName ?? edge.label,
     iconPath: output?.iconPath ?? storage?.iconPath,
+    iconAtlas: output?.iconAtlas ?? storage?.iconAtlas,
   };
 }
 

@@ -7,6 +7,16 @@ export type ResourceId = ItemId | FluidId;
 export type ResourceKind = "item" | "fluid";
 export type ResourceKey = `${ResourceKind}:${string}`;
 
+export interface ResourceIconAtlasRef {
+  imagePath: string;
+  atlasWidth: number;
+  atlasHeight: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 export type MachineTier =
   | "ULV"
   | "LV"
@@ -49,6 +59,7 @@ export interface ResourceAmount {
   amount: number;
   displayName?: string;
   iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
   modId?: string;
   tooltip?: string[];
   neiSlot?: {
@@ -140,6 +151,7 @@ export interface FactoryStorage {
   resourceId: ResourceId;
   displayName?: string;
   iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
   capacity?: number;
   position: {
     x: number;

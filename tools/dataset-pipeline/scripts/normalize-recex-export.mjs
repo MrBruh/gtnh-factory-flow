@@ -45,7 +45,7 @@ for (const machine of gregtechSource.machines) {
       ...(rawRecipe.fI ?? []).map(fluidAmount),
     ].filter(Boolean);
     const outputs = [
-      ...(rawRecipe.iO ?? []).map(itemAmount),
+      ...(rawRecipe.iO ?? []).map((item) => itemAmount(item, { chance: outputChance(item) })),
       ...(rawRecipe.fO ?? []).map(fluidAmount),
     ].filter(Boolean);
 
@@ -71,6 +71,7 @@ for (const machine of gregtechSource.machines) {
     }
 
     const primaryOutput = outputs[0];
+    const programmedCircuit = detectProgrammedCircuit(inputs);
     recipes.push({
       id: `recex:${datasetVersionId}:${slug(machineType)}:${hashRecipe(machineType, index, rawRecipe)}`,
       name: `${machineType}: ${primaryOutput.displayName ?? primaryOutput.id}`,
@@ -80,8 +81,9 @@ for (const machine of gregtechSource.machines) {
       eut: rawRecipe.eut ?? 0,
       inputs,
       outputs,
+      programmedCircuit,
       notes:
-        "Generated from a real GTNH RecEx runtime export. Tier, circuit, and chance metadata are best-effort until a richer exporter normalizer is added.",
+        "Generated from a real GTNH RecEx runtime export. Tier metadata is best-effort until a richer exporter normalizer is added.",
       source: {
         datasetVersionId,
         recipeMap: machineType,
@@ -129,7 +131,7 @@ function itemAmount(item, options = {}) {
 
   const id = item.m === undefined || item.m === 0 ? item.id : `${item.id}@${item.m}`;
   const iconPath = renderedIconPath(item.ic);
-  return {
+  const resource = {
     kind: "item",
     id,
     amount: item.a,
@@ -138,6 +140,39 @@ function itemAmount(item, options = {}) {
     iconPath,
     consumed: options.consumed === false ? false : undefined,
   };
+  if (options.chance !== undefined) {
+    resource.chance = options.chance;
+  }
+  return resource;
+}
+
+function outputChance(item) {
+  if (!Number.isFinite(item?.ch)) {
+    return undefined;
+  }
+
+  const chance = item.ch / 10000;
+  if (chance >= 1) {
+    return undefined;
+  }
+
+  return Math.max(0, Math.min(1, chance));
+}
+
+function detectProgrammedCircuit(inputs) {
+  const circuit = inputs.find((resource) => {
+    if (resource.kind !== "item") {
+      return false;
+    }
+    const label = `${resource.displayName ?? ""} ${resource.id}`.toLowerCase();
+    return (
+      label.includes("programmed circuit") ||
+      label.includes("integrated circuit") ||
+      label.includes("circuit configuration")
+    );
+  });
+
+  return circuit?.displayName;
 }
 
 function isNonConsumedInput(item) {

@@ -99,6 +99,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                   id: slot.resource.id,
                   displayName: slot.resource.displayName,
                   iconPath: slot.resource.iconPath,
+                  iconAtlas: slot.resource.iconAtlas,
                   anchorNodeId: projectNode.id,
                 },
                 mode,
@@ -117,6 +118,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               resourceId: slot.resource.id,
               displayName: slot.resource.displayName,
               iconPath: slot.resource.iconPath,
+              iconAtlas: slot.resource.iconAtlas,
               handleId: makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex),
             });
           }}
@@ -156,9 +158,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                   }`}
                   className={[
                     "!h-3 !w-3 !border-2 !border-white transition-opacity",
-                    shouldShowHandle
-                      ? "!opacity-100"
-                      : "!opacity-0 group-hover:!opacity-100",
+                    shouldShowHandle ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100",
                     isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
                   ].join(" ")}
                 />

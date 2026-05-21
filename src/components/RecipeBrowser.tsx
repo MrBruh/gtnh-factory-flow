@@ -4,8 +4,12 @@ import { Archive, GitBranchPlus, Plus, Search, X } from "lucide-react";
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
-import { queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
-import type { DatasetResource, DatasetResourceIndexEntry } from "@/lib/datasets/types";
+import { getRecipeDatasetRecipe, queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
+import type {
+  DatasetResource,
+  DatasetResourceIndexEntry,
+  RecipeSummary,
+} from "@/lib/datasets/types";
 import { getResourceKey, GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
 import type { MachineTier } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
@@ -37,7 +41,7 @@ export function RecipeBrowser() {
   const addResourceStorage = useFactoryStore((state) => state.addResourceStorage);
   const [selectedRecipeMap, setSelectedRecipeMap] = useState("all");
   const [maxTier, setMaxTier] = useState<TierFilter>("all");
-  const [filteredRecipes, setFilteredRecipes] = useState<Recipe[]>([]);
+  const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
   const [queryTotal, setQueryTotal] = useState(0);
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [recipeQueryLoading, setRecipeQueryLoading] = useState(false);
@@ -81,7 +85,7 @@ export function RecipeBrowser() {
     const query = deferredRecipeSearch.trim().toLowerCase();
     if (!query) {
       return [...resourceIndex.values()]
-        .filter((resource) => resource.iconPath)
+        .filter((resource) => resource.iconPath || resource.iconAtlas)
         .sort((left, right) => right.recipeCount - left.recipeCount)
         .slice(0, 72);
     }
@@ -179,6 +183,47 @@ export function RecipeBrowser() {
       selectedDatasetVersion,
     ],
   );
+
+  const getFullRecipe = useCallback(
+    async (recipeId: string): Promise<Recipe> => {
+      const projectRecipe = projectRecipes.find((recipe) => recipe.id === recipeId);
+      if (projectRecipe) {
+        return projectRecipe;
+      }
+      if (!selectedDatasetVersion) {
+        throw new Error("No dataset version is selected.");
+      }
+
+      return getRecipeDatasetRecipe(
+        datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+        selectedDatasetVersion,
+        recipeId,
+      );
+    },
+    [datasetManifestUrl, projectRecipes, selectedDatasetVersion],
+  );
+
+  const handleAddRecipe = useCallback(
+    async (recipeId: string) => {
+      addNodeForRecipe(await getFullRecipe(recipeId));
+    },
+    [addNodeForRecipe, getFullRecipe],
+  );
+
+  const handleAddConnectedRecipe = useMemo(() => {
+    if (!activeResource?.anchorNodeId) {
+      return undefined;
+    }
+
+    return async (recipeId: string) => {
+      addConnectedNodeForRecipe(await getFullRecipe(recipeId), activeResource.anchorNodeId!, {
+        kind: activeResource.kind,
+        id: activeResource.id,
+        displayName: activeResource.displayName,
+        mode: browserMode,
+      });
+    };
+  }, [activeResource, addConnectedNodeForRecipe, browserMode, getFullRecipe]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
@@ -390,18 +435,8 @@ export function RecipeBrowser() {
           queryTotal={queryTotal}
           recipeMapTabs={recipeMapTabs}
           selectedRecipeId={selectedRecipeId}
-          onAdd={addNodeForRecipe}
-          onAddConnected={
-            activeResource.anchorNodeId
-              ? (recipe) =>
-                  addConnectedNodeForRecipe(recipe, activeResource.anchorNodeId!, {
-                    kind: activeResource.kind,
-                    id: activeResource.id,
-                    displayName: activeResource.displayName,
-                    mode: browserMode,
-                  })
-              : undefined
-          }
+          onAdd={handleAddRecipe}
+          onAddConnected={handleAddConnectedRecipe}
           onClose={clearResourceBrowser}
           onAddStorage={() => {
             addResourceStorage(activeResource);
@@ -413,6 +448,7 @@ export function RecipeBrowser() {
                 id: resource.id,
                 displayName: resource.displayName,
                 iconPath: resource.iconPath,
+                iconAtlas: resource.iconAtlas,
                 anchorNodeId: activeResource.anchorNodeId,
               },
               mode,
@@ -431,9 +467,9 @@ function ResourceHistoryPanel({
   resources,
   onBrowse,
 }: {
-  resources: Array<Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath">>;
+  resources: Array<Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">>;
   onBrowse: (
-    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath">,
+    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
     mode: "recipes" | "uses",
   ) => void;
 }) {
@@ -470,20 +506,23 @@ function ResourceHistoryPanel({
   );
 }
 
-interface IndexedResource extends Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath"> {
+interface IndexedResource extends Pick<
+  ResourceAmount,
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
+> {
   recipeCount: number;
 }
 
 interface RecipeMapTab {
   id: string;
   label: string;
-  icon?: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath">;
+  icon?: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas">;
 }
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
 interface RecipeQueryCacheEntry {
-  recipes: Recipe[];
+  recipes: RecipeSummary[];
   total: number;
   recipeMaps: string[];
 }
@@ -578,7 +617,13 @@ function RecipeMapTabBar({
               className={neiTabClass(activeRecipeMap === tab.id)}
             >
               {tab.icon ? (
-                <ResourceIcon resource={tab.icon} size="sm" showAmount={false} bare tooltip={false} />
+                <ResourceIcon
+                  resource={tab.icon}
+                  size="sm"
+                  showAmount={false}
+                  bare
+                  tooltip={false}
+                />
               ) : (
                 <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
                   ?
@@ -627,14 +672,14 @@ function RecipeBookOverlay({
 }: {
   activeRecipeMap: string;
   activeResource: IndexedResource & { anchorNodeId?: string };
-  filteredRecipes: Recipe[];
+  filteredRecipes: RecipeSummary[];
   isLoading: boolean;
   queryError?: string;
   queryTotal: number;
   recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
-  onAdd: (recipe: Recipe) => void;
-  onAddConnected?: (recipe: Recipe) => void;
+  onAdd: (recipeId: string) => void | Promise<void>;
+  onAddConnected?: (recipeId: string) => void | Promise<void>;
   onClose: () => void;
   onAddStorage: () => void;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
@@ -797,7 +842,7 @@ function RecipeBookOverlay({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          <div className="min-h-0 flex-1 overflow-y-auto p-3" id="recipe-book-scroll">
             {queryError ? (
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 {queryError}
@@ -811,25 +856,15 @@ function RecipeBookOverlay({
                 No matching recipes.
               </div>
             ) : (
-              <div
-                className="grid grid-cols-[repeat(auto-fit,minmax(360px,1fr))] items-start gap-2"
-                title={
-                  queryTotal > filteredRecipes.length ? `${queryTotal} recipes matched` : undefined
-                }
-              >
-                {filteredRecipes.map((recipe) => (
-                  <RecipeResultCard
-                    key={recipe.id}
-                    recipe={recipe}
-                    selected={selectedRecipeId === recipe.id}
-                    onSelect={() => onSelectRecipe(recipe.id)}
-                    onAdd={() => onAdd(recipe)}
-                    onAddConnected={onAddConnected ? () => onAddConnected(recipe) : undefined}
-                    onSlotBrowse={onBrowseResource}
-                    minimal
-                  />
-                ))}
-              </div>
+              <VirtualRecipeResultList
+                recipes={filteredRecipes}
+                queryTotal={queryTotal}
+                selectedRecipeId={selectedRecipeId}
+                onSelectRecipe={onSelectRecipe}
+                onAdd={onAdd}
+                onAddConnected={onAddConnected}
+                onSlotBrowse={onBrowseResource}
+              />
             )}
           </div>
           <button
@@ -850,6 +885,84 @@ function RecipeBookOverlay({
   );
 }
 
+function VirtualRecipeResultList({
+  recipes,
+  queryTotal,
+  selectedRecipeId,
+  onSelectRecipe,
+  onAdd,
+  onAddConnected,
+  onSlotBrowse,
+}: {
+  recipes: RecipeSummary[];
+  queryTotal: number;
+  selectedRecipeId?: string;
+  onSelectRecipe: (recipeId: string) => void;
+  onAdd: (recipeId: string) => void | Promise<void>;
+  onAddConnected?: (recipeId: string) => void | Promise<void>;
+  onSlotBrowse: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
+}) {
+  const anchorRef = useRef<HTMLDivElement>(null);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 760 });
+  const rowHeight = 246;
+  const overscan = 4;
+  const startIndex = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
+  const visibleCount = Math.ceil(viewport.height / rowHeight) + overscan * 2;
+  const visibleRecipes = recipes.slice(startIndex, startIndex + visibleCount);
+  const topPadding = startIndex * rowHeight;
+  const bottomPadding = Math.max(
+    0,
+    (recipes.length - startIndex - visibleRecipes.length) * rowHeight,
+  );
+
+  useEffect(() => {
+    const scrollParent = anchorRef.current?.parentElement;
+    if (!scrollParent) {
+      return;
+    }
+
+    const updateViewport = () => {
+      setViewport({
+        scrollTop: scrollParent.scrollTop,
+        height: scrollParent.clientHeight,
+      });
+    };
+
+    updateViewport();
+    scrollParent.addEventListener("scroll", updateViewport, { passive: true });
+    const resizeObserver = new ResizeObserver(updateViewport);
+    resizeObserver.observe(scrollParent);
+
+    return () => {
+      scrollParent.removeEventListener("scroll", updateViewport);
+      resizeObserver.disconnect();
+    };
+  }, [recipes.length]);
+
+  return (
+    <div
+      ref={anchorRef}
+      title={queryTotal > recipes.length ? `${queryTotal} recipes matched` : undefined}
+    >
+      <div style={{ height: topPadding }} />
+      <div className="grid grid-cols-1 items-start gap-2">
+        {visibleRecipes.map((recipe) => (
+          <RecipeResultCard
+            key={recipe.id}
+            recipe={recipe}
+            selected={selectedRecipeId === recipe.id}
+            onSelect={() => onSelectRecipe(recipe.id)}
+            onAdd={() => void onAdd(recipe.id)}
+            onAddConnected={onAddConnected ? () => void onAddConnected(recipe.id) : undefined}
+            onSlotBrowse={onSlotBrowse}
+          />
+        ))}
+      </div>
+      <div style={{ height: bottomPadding }} />
+    </div>
+  );
+}
+
 function RecipeResultCard({
   recipe,
   selected,
@@ -857,17 +970,16 @@ function RecipeResultCard({
   onAdd,
   onAddConnected,
   onSlotBrowse,
-  minimal = false,
 }: {
-  recipe: Recipe;
+  recipe: RecipeSummary;
   selected: boolean;
   onSelect: () => void;
   onAdd: () => void;
   onAddConnected?: () => void;
   onSlotBrowse?: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
-  minimal?: boolean;
 }) {
-  const primary = primaryOutput(recipe);
+  const previewRecipe = summaryToPreviewRecipe(recipe);
+  const primary = primaryOutput(previewRecipe);
 
   return (
     <article
@@ -878,15 +990,6 @@ function RecipeResultCard({
       ].join(" ")}
     >
       <div className="flex items-start justify-end gap-2">
-        {!minimal ? (
-          <div className="min-w-0 flex-1">
-            <h3 className="truncate text-sm font-semibold text-neutral-50">{recipe.name}</h3>
-            <p className="mt-0.5 truncate text-xs text-neutral-400">
-              {recipe.source?.recipeMap ?? recipe.machineType} | {recipe.durationTicks} ticks |{" "}
-              {recipe.eut} EU/t
-            </p>
-          </div>
-        ) : null}
         <button
           type="button"
           title={onAddConnected ? "Add and connect recipe node" : "Add recipe node"}
@@ -906,20 +1009,36 @@ function RecipeResultCard({
       </div>
       <div className="overflow-x-auto pb-1 pr-9">
         <NeiRecipeWindow
-          recipe={recipe}
+          recipe={previewRecipe}
           scale={2}
           compact
           className="mx-auto"
           onSlotClick={onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined}
         />
       </div>
-      {!minimal && primary ? (
+      {primary ? (
         <p className="mt-2 truncate text-[11px] text-neutral-400">
           Primary: {primary.displayName ?? primary.id}
         </p>
       ) : null}
     </article>
   );
+}
+
+function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
+  return {
+    id: summary.id,
+    name: summary.name,
+    machineType: summary.machineType,
+    minimumTier: summary.minimumTier,
+    durationTicks: summary.durationTicks,
+    eut: summary.eut,
+    inputs: summary.inputs,
+    outputs: summary.outputs,
+    programmedCircuit: summary.programmedCircuit,
+    source: summary.source,
+    nei: summary.nei,
+  };
 }
 
 function clampDragOffset(offset: { x: number; y: number }, panel: HTMLElement | null) {
@@ -1033,6 +1152,9 @@ function addRecipesToResourceIndex(index: Map<ResourceKey, IndexedResource>, rec
         if (!existing.iconPath && resource.iconPath) {
           existing.iconPath = resource.iconPath;
         }
+        if (!existing.iconAtlas && resource.iconAtlas) {
+          existing.iconAtlas = resource.iconAtlas;
+        }
         if (!existing.displayName && resource.displayName) {
           existing.displayName = resource.displayName;
         }
@@ -1042,6 +1164,7 @@ function addRecipesToResourceIndex(index: Map<ResourceKey, IndexedResource>, rec
           id: resource.id,
           displayName: resource.displayName,
           iconPath: resource.iconPath,
+          iconAtlas: resource.iconAtlas,
           recipeCount: 1,
         });
       }
@@ -1068,6 +1191,7 @@ function buildRecipeMapTabs(recipeMaps: string[], resources: DatasetResource[]):
             amount: 1,
             displayName: resource.displayName,
             iconPath: resource.iconPath,
+            iconAtlas: resource.iconAtlas,
           }
         : undefined,
     };
@@ -1083,7 +1207,7 @@ function findRecipeMapIcon(
   let best: { resource: DatasetResource; score: number } | undefined;
 
   for (const resource of resources) {
-    if (resource.kind !== "item" || !resource.iconPath) {
+    if (resource.kind !== "item" || (!resource.iconPath && !resource.iconAtlas)) {
       continue;
     }
 

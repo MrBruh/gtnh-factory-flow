@@ -81,6 +81,11 @@ Useful knobs:
 
 - `GTNH_RENDER_STACK_ICONS=true|false` enables the Forge 1.7.10 exporter.
 - `GTNH_ICON_EXPORT_BATCH_SIZE=16` controls how many icons are rendered per client frame.
+- `GTNH_ATLAS_ICON_SIZE=1024` controls the rendered icon size and atlas cell size.
+- `GTNH_ATLAS_MAX_SIZE=8192` controls each atlas page size. At 1024px cells this stores
+  64 icons per page.
+- `GTNH_ATLAS_KEEP_RENDERED=true` keeps the intermediate per-icon PNGs for debugging.
+  The default removes them after `textures/atlas/*.png` has been written.
 - `GTNH_RENDERED_ICON_DIR` is set by the runner and receives PNGs plus `icon-map.json`.
 
 The scripts do not synthesize missing icons. If a stack cannot be rendered by the GTNH

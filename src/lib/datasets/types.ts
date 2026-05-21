@@ -1,4 +1,4 @@
-import type { Recipe } from "../model/types";
+import type { Recipe, RecipeInput, RecipeOutput, ResourceIconAtlasRef } from "../model/types";
 
 export interface DatasetSourceInfo {
   sourceId: "nesql" | "recex" | "nerd" | "unknown";
@@ -13,6 +13,7 @@ export interface DatasetResource {
   kind: "item" | "fluid";
   displayName: string;
   iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
   modId?: string;
   tooltip?: string[];
   oreDictionary?: string[];
@@ -23,6 +24,7 @@ export interface DatasetResourceIndexEntry {
   kind: "item" | "fluid";
   displayName?: string;
   iconPath?: string;
+  iconAtlas?: ResourceIconAtlasRef;
   recipeCount: number;
 }
 
@@ -55,4 +57,28 @@ export interface RecipeDataset {
   oreDictionary: Record<string, string[]>;
   recipeMaps: string[];
   generatedAt: string;
+}
+
+export interface RecipeSummary {
+  id: string;
+  name: string;
+  recipeMap: string;
+  machineType: string;
+  minimumTier: string;
+  durationTicks: number;
+  eut: number;
+  programmedCircuit?: string;
+  inputs: RecipeInput[];
+  outputs: RecipeOutput[];
+  source?: Recipe["source"];
+  nei?: Recipe["nei"];
+  slots: RecipeSummarySlot[];
+}
+
+export interface RecipeSummarySlot {
+  side: "input" | "output";
+  kind: "item" | "fluid";
+  resourceIndex: number;
+  x: number;
+  y: number;
 }

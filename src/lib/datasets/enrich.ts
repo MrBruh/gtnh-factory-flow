@@ -46,6 +46,9 @@ export function buildDatasetResourceIndex(recipes: Recipe[]): DatasetResourceInd
         if (!existing.iconPath && resource.iconPath) {
           existing.iconPath = resource.iconPath;
         }
+        if (!existing.iconAtlas && resource.iconAtlas) {
+          existing.iconAtlas = resource.iconAtlas;
+        }
         if (!existing.displayName && resource.displayName) {
           existing.displayName = resource.displayName;
         }
@@ -55,6 +58,7 @@ export function buildDatasetResourceIndex(recipes: Recipe[]): DatasetResourceInd
           id: resource.id,
           displayName: resource.displayName,
           iconPath: resource.iconPath,
+          iconAtlas: resource.iconAtlas,
           recipeCount: 1,
         });
       }
@@ -99,6 +103,7 @@ function enrichResource<T extends ResourceAmount>(
     ...resource,
     displayName: resource.displayName ?? indexed.displayName,
     iconPath: resource.iconPath ?? indexed.iconPath,
+    iconAtlas: resource.iconAtlas ?? indexed.iconAtlas,
     tooltip: resource.tooltip ?? indexed.tooltip,
     modId: resource.modId ?? indexed.modId,
   };

@@ -2,7 +2,7 @@
 
 import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
 import { resolveDatasetUrl } from "./remote";
-import type { DatasetVersion, RecipeDataset } from "./types";
+import type { DatasetVersion, RecipeDataset, RecipeSummary } from "./types";
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
@@ -16,7 +16,7 @@ export interface RecipeDatasetQuery {
 }
 
 export interface RecipeDatasetQueryResult {
-  recipes: Recipe[];
+  recipes: RecipeSummary[];
   total: number;
   recipeMaps: string[];
 }
@@ -40,7 +40,15 @@ type WorkerRequest =
       datasetUrl: string;
       expectedVersionId: string;
       cacheKey: string;
-    } & RecipeDatasetQuery);
+    } & RecipeDatasetQuery)
+  | {
+      id: number;
+      type: "getRecipe";
+      datasetUrl: string;
+      expectedVersionId: string;
+      cacheKey: string;
+      recipeId: string;
+    };
 
 type WorkerResponse =
   | {
@@ -53,15 +61,27 @@ type WorkerResponse =
       id: number;
       ok: true;
       type: "queryRecipes";
-      recipes: Recipe[];
+      recipes: RecipeSummary[];
       total: number;
       recipeMaps: string[];
+    }
+  | {
+      id: number;
+      ok: true;
+      type: "getRecipe";
+      recipe: Recipe;
     }
   | {
       id: number;
       ok: false;
       error: string;
     };
+
+type WorkerRequestInput = WorkerRequest extends infer Request
+  ? Request extends { id: number }
+    ? Omit<Request, "id">
+    : never
+  : never;
 
 let nextWorkerRequestId = 1;
 let datasetWorker: Worker | undefined;
@@ -84,6 +104,28 @@ export async function initRecipeDatasetVersion(
   }
 
   return response.summary;
+}
+
+export async function getRecipeDatasetRecipe(
+  manifestUrl: string,
+  version: DatasetVersion,
+  recipeId: string,
+): Promise<Recipe> {
+  const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
+  const cacheKey = getDatasetCacheKey(version);
+  const response = await sendDatasetWorkerRequest({
+    type: "getRecipe",
+    datasetUrl,
+    expectedVersionId: version.id,
+    cacheKey,
+    recipeId,
+  });
+
+  if (response.type !== "getRecipe") {
+    throw new Error("Dataset worker returned an unexpected response.");
+  }
+
+  return response.recipe;
 }
 
 export async function queryRecipeDatasetRecipes(
@@ -115,7 +157,7 @@ export async function queryRecipeDatasetRecipes(
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
 
 function sendDatasetWorkerRequest(
-  request: Omit<WorkerRequest, "id">,
+  request: WorkerRequestInput,
 ): Promise<Extract<WorkerResponse, { ok: true }>> {
   return new Promise((resolve, reject) => {
     if (typeof Worker === "undefined") {
@@ -170,7 +212,7 @@ function getDatasetWorker(): Worker {
 
 function getDatasetCacheKey(version: DatasetVersion): string {
   return [
-    "worker-v1",
+    "worker-v2",
     version.id,
     version.recipeDatasetPath,
     version.checksumSha256,

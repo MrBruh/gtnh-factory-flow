@@ -2,6 +2,15 @@ import { z } from "zod";
 import { PROJECT_SCHEMA_VERSION } from "./types";
 
 export const resourceKindSchema = z.enum(["item", "fluid"]);
+export const resourceIconAtlasRefSchema = z.object({
+  imagePath: z.string().min(1),
+  atlasWidth: z.number().int().positive(),
+  atlasHeight: z.number().int().positive(),
+  x: z.number().int().min(0),
+  y: z.number().int().min(0),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+});
 export const factoryNodeColorTagSchema = z.enum([
   "white",
   "orange",
@@ -27,6 +36,7 @@ export const resourceAmountSchema = z.object({
   amount: z.number().positive("Amount must be greater than zero"),
   displayName: z.string().min(1).optional(),
   iconPath: z.string().min(1).optional(),
+  iconAtlas: resourceIconAtlasRefSchema.optional(),
   modId: z.string().min(1).optional(),
   tooltip: z.array(z.string()).optional(),
   neiSlot: z
@@ -126,6 +136,7 @@ export const factoryStorageSchema = z.object({
   resourceId: z.string().min(1),
   displayName: z.string().optional(),
   iconPath: z.string().optional(),
+  iconAtlas: resourceIconAtlasRefSchema.optional(),
   capacity: z.number().positive().optional(),
   position: z.object({
     x: z.number(),

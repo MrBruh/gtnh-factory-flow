@@ -101,6 +101,8 @@ jobs:
           GTNH_EXPORT_TIMEOUT_SECONDS: "21600"
           GTNH_EXPORT_PACK_KIND: "client"
           GTNH_RENDER_STACK_ICONS: "true"
+          GTNH_ATLAS_ICON_SIZE: "1024"
+          GTNH_ATLAS_MAX_SIZE: "8192"
           GITHUB_TOKEN: ${{ github.token }}
         run: node tools/dataset-pipeline/scripts/generate-dataset.mjs
 
@@ -145,6 +147,7 @@ jobs:
 
       - name: Stage downloaded datasets
         run: |
+          rm -rf public/datasets/gtnh
           mkdir -p public/datasets/gtnh
           if [ -d .pipeline/downloaded-datasets/public/datasets/gtnh ]; then
             cp -R .pipeline/downloaded-datasets/public/datasets/gtnh/. public/datasets/gtnh/
