@@ -27,7 +27,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
-  const updateNode = useFactoryStore((state) => state.updateNode);
+  const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
+  const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const selectResourceConnectionSlot = useFactoryStore(
     (state) => state.selectResourceConnectionSlot,
@@ -43,6 +44,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     <div
       className={[
         "group w-[368px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
+        nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         nodeColor ? "" : color.ring,
@@ -78,7 +80,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           </div>
           <ColorPickerButton
             activeTag={projectNode.colorTag}
-            onChange={(colorTag) => updateNode(projectNode.id, { colorTag })}
+            paintTag={nodeColorPaintMode}
+            onPaintModeChange={setNodeColorPaintMode}
           />
           <button
             type="button"
@@ -185,10 +188,12 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
 
 function ColorPickerButton({
   activeTag,
-  onChange,
+  paintTag,
+  onPaintModeChange,
 }: {
   activeTag?: FactoryNodeColorTag;
-  onChange: (tag: FactoryNodeColorTag | undefined) => void;
+  paintTag?: FactoryNodeColorTag | null;
+  onPaintModeChange: (tag: FactoryNodeColorTag | null | undefined) => void;
 }) {
   return (
     <div className="nodrag relative h-6 w-6">
@@ -197,9 +202,12 @@ function ColorPickerButton({
         onClick={(event) => {
           event.stopPropagation();
         }}
-        className="peer h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#9b9b9b]"
-        title="Color group"
-        aria-label="Color group"
+        className={[
+          "peer h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#9b9b9b]",
+          paintTag !== undefined ? "bg-[#4f8f4f]" : "",
+        ].join(" ")}
+        title="Paint recipe nodes"
+        aria-label="Paint recipe nodes"
       >
         <Paintbrush className="mx-auto h-3.5 w-3.5" />
       </button>
@@ -209,10 +217,13 @@ function ColorPickerButton({
       >
         <button
           type="button"
-          onClick={() => onChange(undefined)}
-          className="flex h-7 w-7 items-center justify-center border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]"
-          title="No color"
-          aria-label="No color"
+          onClick={() => onPaintModeChange(null)}
+          className={[
+            "flex h-7 w-7 items-center justify-center border-2 bg-[#7d7d7d] text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]",
+            paintTag === null ? "border-white" : "border-[#252525]",
+          ].join(" ")}
+          title="Erase colors"
+          aria-label="Erase colors"
         >
           <X className="h-3.5 w-3.5" />
         </button>
@@ -220,10 +231,14 @@ function ColorPickerButton({
           <button
             key={entry.tag}
             type="button"
-            onClick={() => onChange(entry.tag)}
+            onClick={() => onPaintModeChange(entry.tag)}
             className={[
               "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
-              activeTag === entry.tag ? "border-white" : "border-[#252525]",
+              paintTag === entry.tag
+                ? "border-white"
+                : activeTag === entry.tag
+                  ? "border-cyan-200"
+                  : "border-[#252525]",
             ].join(" ")}
             style={{ backgroundColor: entry.color.swatch }}
             title={entry.tag}

@@ -8,6 +8,7 @@ import { getResourceKey, primaryOutput, resourceLabel } from "@/lib/model/resour
 import type {
   FactoryEdge,
   FactoryNode,
+  FactoryNodeColorTag,
   FactoryProject,
   FactoryStorage,
   Recipe,
@@ -33,6 +34,7 @@ interface FactoryStore {
   recipeBrowserMode: RecipeBrowserMode;
   recipeResourceHistory: RecipeBrowserResource[];
   pendingResourceConnection?: PendingResourceConnection;
+  nodeColorPaintMode?: FactoryNodeColorTag | null;
   hoveredStorageResourceKey?: string;
   selectedNodeId?: string;
   selectedRecipeId?: string;
@@ -51,6 +53,7 @@ interface FactoryStore {
   cleanBoard: () => void;
   selectResourceConnectionSlot: (slot: PendingResourceConnection) => void;
   cancelResourceConnection: () => void;
+  setNodeColorPaintMode: (colorTag?: FactoryNodeColorTag | null) => void;
   setHoveredStorageResourceKey: (key?: string) => void;
   recalculate: () => void;
   selectNode: (nodeId?: string) => void;
@@ -127,6 +130,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   recipeBrowserMode: "recipes",
   recipeResourceHistory: [],
   pendingResourceConnection: undefined,
+  nodeColorPaintMode: undefined,
   hoveredStorageResourceKey: undefined,
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
@@ -286,6 +290,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   cancelResourceConnection: () => {
     set({ pendingResourceConnection: undefined });
+  },
+  setNodeColorPaintMode: (colorTag) => {
+    set({ nodeColorPaintMode: colorTag });
   },
   setHoveredStorageResourceKey: (key) => {
     set({ hoveredStorageResourceKey: key });

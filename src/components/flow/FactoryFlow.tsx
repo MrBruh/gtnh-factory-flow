@@ -53,11 +53,14 @@ export function FactoryFlow() {
   const result = useFactoryStore((state) => state.lastResult);
   const selectNode = useFactoryStore((state) => state.selectNode);
   const setNodePosition = useFactoryStore((state) => state.setNodePosition);
+  const updateNode = useFactoryStore((state) => state.updateNode);
   const setStoragePosition = useFactoryStore((state) => state.setStoragePosition);
   const connectNodes = useFactoryStore((state) => state.connectNodes);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
+  const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
+  const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
 
@@ -209,12 +212,13 @@ export function FactoryFlow() {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         cancelResourceConnection();
+        setNodeColorPaintMode(undefined);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cancelResourceConnection]);
+  }, [cancelResourceConnection, setNodeColorPaintMode]);
 
   return (
     <div className="factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
@@ -224,7 +228,14 @@ export function FactoryFlow() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onConnect={handleConnect}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        onNodeClick={(_, node) => {
+          if (nodeColorPaintMode !== undefined && node.type === "recipeNode") {
+            updateNode(node.id, { colorTag: nodeColorPaintMode ?? undefined });
+            return;
+          }
+
+          selectNode(node.id);
+        }}
         onNodesChange={handleNodesChange}
         onPaneClick={() => {
           selectNode(undefined);
@@ -261,6 +272,18 @@ export function FactoryFlow() {
           {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
           {pendingResourceConnection.displayName ?? pendingResourceConnection.resourceId}
           <span className="ml-2 font-normal">click matching slot, Esc to cancel</span>
+        </div>
+      ) : null}
+      {nodeColorPaintMode !== undefined ? (
+        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+          Paint mode: {nodeColorPaintMode ?? "erase"}
+          <button
+            type="button"
+            onClick={() => setNodeColorPaintMode(undefined)}
+            className="pointer-events-auto nodrag ml-3 border border-[#252525] bg-[#7d7d7d] px-2 text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]"
+          >
+            stop
+          </button>
         </div>
       ) : null}
     </div>
