@@ -87,7 +87,6 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           net={net}
           unit={unit}
           isHighlighted={isHighlighted || isSearchHighlighted}
-          storageColor={storageColor}
           inputHandleId={inputHandleId}
           outputHandleId={outputHandleId}
         />
@@ -132,7 +131,6 @@ function FluidStorageCard({
   net,
   unit,
   isHighlighted,
-  storageColor,
   inputHandleId,
   outputHandleId,
 }: {
@@ -142,21 +140,15 @@ function FluidStorageCard({
   net: number;
   unit: string;
   isHighlighted: boolean;
-  storageColor: StorageColor;
   inputHandleId: string;
   outputHandleId: string;
 }) {
   return (
     <div
       className={[
-        "storage-node-card w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]",
+        "storage-node-card w-[174px] border-2 border-[#1f1f1f] bg-[#b9c2d4] p-1 shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]",
         isHighlighted ? "brightness-110" : "",
       ].join(" ")}
-      style={
-        {
-          borderColor: storageColor?.border,
-        } as CSSProperties
-      }
     >
       <StorageHeader title="Super Tank" variant="tank" />
       <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_7px_7px_0_#1f2933,inset_-7px_-7px_0_#050505]">
