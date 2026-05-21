@@ -40,6 +40,9 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
 
   return (
     <div
+      data-storage-node-id={storage.id}
+      data-storage-kind={storage.kind}
+      data-storage-resource-id={storage.resourceId}
       onMouseEnter={() => setHoveredStorageResourceKey(resourceKey)}
       onMouseLeave={() => setHoveredStorageResourceKey(undefined)}
       className={[

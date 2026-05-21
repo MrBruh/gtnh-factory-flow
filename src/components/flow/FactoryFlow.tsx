@@ -301,7 +301,8 @@ export function FactoryFlow() {
     (event: MouseEvent | TouchEvent, connectionState: { toHandle: unknown | null }) => {
       const draggedResource = draggedResourceRef.current;
       draggedResourceRef.current = undefined;
-      const targetHandle = getResourceHandleAtPointer(event);
+      const targetHandle =
+        getResourceHandleAtPointer(event) ?? getStorageHandleAtPointer(event, draggedResource);
 
       if (draggedResource && targetHandle) {
         if (
@@ -786,6 +787,42 @@ function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {
         side: handle.side,
         kind: handle.kind,
         resourceId: handle.resourceId,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function getStorageHandleAtPointer(
+  event: MouseEvent | TouchEvent,
+  draggedResource: DraggedResourceConnection | undefined,
+) {
+  const position = getClientPosition(event);
+  if (!position || !draggedResource || typeof document === "undefined") {
+    return undefined;
+  }
+
+  for (const element of document.elementsFromPoint(position.x, position.y)) {
+    const storageElement = element.closest<HTMLElement>("[data-storage-node-id]");
+    const nodeId = storageElement?.dataset.storageNodeId;
+    const kind = storageElement?.dataset.storageKind;
+    const resourceId = storageElement?.dataset.storageResourceId;
+
+    if (
+      nodeId &&
+      nodeId !== draggedResource.nodeId &&
+      (kind === "item" || kind === "fluid") &&
+      kind === draggedResource.kind &&
+      resourceId === draggedResource.id
+    ) {
+      const side = draggedResource.side === "output" ? "input" : "output";
+      return {
+        nodeId,
+        handleId: `${side}:${kind}:${encodeURIComponent(resourceId)}`,
+        side,
+        kind,
+        resourceId,
       };
     }
   }

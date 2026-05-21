@@ -15,6 +15,7 @@ interface NeiRecipeWindowProps {
   className?: string;
   compact?: boolean;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
+  getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
 }
 
@@ -24,6 +25,7 @@ export function NeiRecipeWindow({
   className = "",
   compact = false,
   renderHandle,
+  getSlotConnectionAttributes,
   onSlotClick,
 }: NeiRecipeWindowProps) {
   const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
@@ -54,6 +56,7 @@ export function NeiRecipeWindow({
             slotPixelSize={compact ? QUICK_SLOT_PIXEL_SIZE : undefined}
             iconPixelSize={compact ? QUICK_SLOT_ICON_PIXEL_SIZE : undefined}
             renderHandle={renderHandle}
+            getSlotConnectionAttributes={getSlotConnectionAttributes}
             onSlotClick={onSlotClick}
           />
         </div>

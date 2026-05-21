@@ -121,6 +121,18 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           recipe={overclockedRecipe}
           scale={2}
           compact
+          getSlotConnectionAttributes={(slot) => {
+            if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
+              return undefined;
+            }
+
+            const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+            return {
+              "data-resource-handle": "true",
+              "data-resource-node-id": projectNode.id,
+              "data-resource-handle-id": handleId,
+            };
+          }}
           onSlotClick={(slot, mode) => {
             browseResource(
               {

@@ -20,6 +20,7 @@ interface NeiRecipeCanvasProps {
   iconPixelSize?: number;
   className?: string;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
+  getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
 }
 
@@ -30,6 +31,7 @@ export function NeiRecipeCanvas({
   iconPixelSize,
   className = "",
   renderHandle,
+  getSlotConnectionAttributes,
   onSlotClick,
 }: NeiRecipeCanvasProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
@@ -74,6 +76,7 @@ export function NeiRecipeCanvas({
             frame={frame}
             iconPixelSize={renderedIconPixelSize}
             renderHandle={renderHandle}
+            getSlotConnectionAttributes={getSlotConnectionAttributes}
             onSlotClick={onSlotClick}
             onOverflowClick={
               frame.action === "overflow"
@@ -281,6 +284,7 @@ function NeiSlotFrameView({
   frame,
   iconPixelSize,
   renderHandle,
+  getSlotConnectionAttributes,
   onSlotClick,
   onOverflowClick,
   onCollapseClick,
@@ -288,6 +292,7 @@ function NeiSlotFrameView({
   frame: RenderFrame;
   iconPixelSize: number;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
+  getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
   onOverflowClick?: () => void;
   onCollapseClick?: () => void;
@@ -295,11 +300,13 @@ function NeiSlotFrameView({
   const slot = frame.resource ? (frame as NeiPositionedSlot) : undefined;
   const isOverflow = frame.action === "overflow";
   const isCollapse = frame.action === "collapse";
+  const connectionAttributes = slot ? getSlotConnectionAttributes?.(slot) : undefined;
 
   return (
     <button
       type="button"
       tabIndex={slot || isOverflow || isCollapse ? 0 : -1}
+      {...connectionAttributes}
       onClick={(event) => {
         if (isOverflow && onOverflowClick) {
           event.stopPropagation();

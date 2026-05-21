@@ -163,6 +163,39 @@ describe("factory resource links", () => {
     useFactoryStore.getState().selectResourceConnectionSlot(secondSlot);
     expect(useFactoryStore.getState().project.edges).toHaveLength(0);
   });
+
+  it("links a sodium to NaK coolant fluid chain without creating storage", () => {
+    useFactoryStore.getState().setProject(createNakCoolantProject());
+
+    useFactoryStore.getState().connectNodes("fluid-heater", "distillery", {
+      kind: "fluid",
+      id: "liquid_sodium",
+      sourceHandle: makeResourceHandleId("output", { kind: "fluid", id: "liquid_sodium" }, 0),
+      targetHandle: makeResourceHandleId("input", { kind: "fluid", id: "liquid_sodium" }, 1),
+    });
+    useFactoryStore.getState().connectNodes("distillery", "fluid-canner", {
+      kind: "fluid",
+      id: "sodium_potassium",
+      sourceHandle: makeResourceHandleId("output", { kind: "fluid", id: "sodium_potassium" }, 0),
+      targetHandle: makeResourceHandleId("input", { kind: "fluid", id: "sodium_potassium" }, 1),
+    });
+
+    expect(useFactoryStore.getState().project.storages).toHaveLength(0);
+    expect(useFactoryStore.getState().project.edges).toEqual([
+      expect.objectContaining({
+        source: "fluid-heater",
+        target: "distillery",
+        resourceKind: "fluid",
+        resourceId: "liquid_sodium",
+      }),
+      expect.objectContaining({
+        source: "distillery",
+        target: "fluid-canner",
+        resourceKind: "fluid",
+        resourceId: "sodium_potassium",
+      }),
+    ]);
+  });
 });
 
 function createLinkTestProject(): FactoryProject {
@@ -266,5 +299,59 @@ function makeNode(id: string, recipeId: string, x: number, y = 0) {
     overclockTier: "LV",
     enabled: true,
     position: { x, y },
+  };
+}
+
+function createNakCoolantProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "nak-chain",
+    name: "NaK chain",
+    recipes: [
+      {
+        id: "fluid-heater-recipe",
+        name: "Fluid Heater: Sodium",
+        machineType: "Fluid Heater",
+        minimumTier: "MV",
+        durationTicks: 200,
+        eut: 120,
+        inputs: [{ kind: "item", id: "sodium_dust", amount: 1 }],
+        outputs: [{ kind: "fluid", id: "liquid_sodium", amount: 1000 }],
+      },
+      {
+        id: "distillery-recipe",
+        name: "Distillery: Sodium Potassium",
+        machineType: "Distillery",
+        minimumTier: "LV",
+        durationTicks: 400,
+        eut: 30,
+        inputs: [
+          { kind: "item", id: "rock_salt", amount: 1 },
+          { kind: "fluid", id: "liquid_sodium", amount: 1000 },
+        ],
+        outputs: [{ kind: "fluid", id: "sodium_potassium", amount: 1000 }],
+      },
+      {
+        id: "fluid-canner-recipe",
+        name: "Fluid Canner: 60k NaK Coolant Cell",
+        machineType: "Fluid Canner",
+        minimumTier: "LV",
+        durationTicks: 200,
+        eut: 30,
+        inputs: [
+          { kind: "item", id: "10k_cell", amount: 1 },
+          { kind: "fluid", id: "sodium_potassium", amount: 1000 },
+        ],
+        outputs: [{ kind: "item", id: "60k_nak_coolant_cell", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("fluid-heater", "fluid-heater-recipe", 0, 0),
+      makeNode("distillery", "distillery-recipe", 300, 0),
+      makeNode("fluid-canner", "fluid-canner-recipe", 600, 0),
+    ],
+    storages: [],
+    edges: [],
+    fuelProfiles: [],
   };
 }
