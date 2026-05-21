@@ -1289,7 +1289,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
           scale={2}
           compact
           className="mx-auto"
-          slotTooltip={false}
           onSlotClick={
             onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined
           }
