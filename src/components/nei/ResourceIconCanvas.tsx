@@ -11,6 +11,7 @@ interface ResourceIconCanvasProps {
 
 const imageCache = new Map<string, HTMLImageElement>();
 const bitmapCache = new Map<string, Promise<ImageBitmap>>();
+const resolvedBitmapCache = new Map<string, ImageBitmap>();
 
 export const ResourceIconCanvas = memo(function ResourceIconCanvas({
   resource,
@@ -55,8 +56,9 @@ export const ResourceIconCanvas = memo(function ResourceIconCanvas({
       context.imageSmoothingEnabled = false;
 
       if (resource.iconAtlas) {
+        const cacheKey = getIconBitmapCacheKey(resource);
         const bitmap = await loadIconBitmap(image, {
-          cacheKey: `${source}:${resource.iconAtlas.x}:${resource.iconAtlas.y}:${resource.iconAtlas.width}:${resource.iconAtlas.height}`,
+          cacheKey,
           x: resource.iconAtlas.x,
           y: resource.iconAtlas.y,
           width: resource.iconAtlas.width,
@@ -69,8 +71,9 @@ export const ResourceIconCanvas = memo(function ResourceIconCanvas({
         return;
       }
 
+      const cacheKey = getIconBitmapCacheKey(resource);
       const bitmap = await loadIconBitmap(image, {
-        cacheKey: source,
+        cacheKey,
         x: 0,
         y: 0,
         width: image.naturalWidth,
@@ -118,7 +121,14 @@ function loadIconBitmap(
       : Promise.resolve(image as unknown as ImageBitmap);
 
   bitmapCache.set(source.cacheKey, bitmapPromise);
+  bitmapPromise.then((bitmap) => resolvedBitmapCache.set(source.cacheKey, bitmap));
   return bitmapPromise;
+}
+
+export function getCachedResourceIconBitmap(
+  resource?: Pick<ResourceAmount, "iconPath" | "iconAtlas">,
+): ImageBitmap | undefined {
+  return resolvedBitmapCache.get(getIconBitmapCacheKey(resource));
 }
 
 export function preloadResourceIconCanvas(
@@ -132,7 +142,7 @@ export function preloadResourceIconCanvas(
   return loadIconImage(source).then((image) => {
     if (resource?.iconAtlas) {
       return loadIconBitmap(image, {
-        cacheKey: `${source}:${resource.iconAtlas.x}:${resource.iconAtlas.y}:${resource.iconAtlas.width}:${resource.iconAtlas.height}`,
+        cacheKey: getIconBitmapCacheKey(resource),
         x: resource.iconAtlas.x,
         y: resource.iconAtlas.y,
         width: resource.iconAtlas.width,
@@ -141,13 +151,22 @@ export function preloadResourceIconCanvas(
     }
 
     return loadIconBitmap(image, {
-      cacheKey: source,
+      cacheKey: getIconBitmapCacheKey(resource),
       x: 0,
       y: 0,
       width: image.naturalWidth,
       height: image.naturalHeight,
     });
   });
+}
+
+function getIconBitmapCacheKey(resource?: Pick<ResourceAmount, "iconPath" | "iconAtlas">) {
+  const source = resource?.iconAtlas?.imagePath ?? resource?.iconPath ?? "";
+  if (resource?.iconAtlas) {
+    return `${source}:${resource.iconAtlas.x}:${resource.iconAtlas.y}:${resource.iconAtlas.width}:${resource.iconAtlas.height}`;
+  }
+
+  return source;
 }
 
 function loadIconImage(src: string): Promise<HTMLImageElement> {

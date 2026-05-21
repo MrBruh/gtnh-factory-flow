@@ -29,7 +29,11 @@ import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
-import { preloadResourceIconCanvas, ResourceIconCanvas } from "./nei/ResourceIconCanvas";
+import {
+  getCachedResourceIconBitmap,
+  preloadResourceIconCanvas,
+  ResourceIconCanvas,
+} from "./nei/ResourceIconCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 6;
@@ -854,13 +858,14 @@ function drawCanvasIconSlot(
   context.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
   drawCanvasBevel(context, x, y, size, size);
 
-  void preloadResourceIconCanvas(resource).then((bitmap) => {
-    if (!bitmap) {
-      return;
-    }
+  const bitmap = getCachedResourceIconBitmap(resource);
+  if (bitmap) {
     context.imageSmoothingEnabled = false;
     context.drawImage(bitmap, x + 2, y + 2, size - 4, size - 4);
-  });
+    return;
+  }
+
+  void preloadResourceIconCanvas(resource);
 }
 
 function drawCanvasBevel(
