@@ -15,6 +15,7 @@ import {
   resourceLabel,
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
+import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
@@ -194,22 +195,26 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                       ].join(" ")}
                     />
                   ) : null}
-                  <Handle
-                    id={handleId}
-                    type={isInput ? "target" : "source"}
-                    position={isInput ? Position.Left : Position.Right}
-                    data-resource-handle="true"
-                    data-resource-node-id={projectNode.id}
-                    data-resource-handle-id={handleId}
-                    title={`${isInput ? "Input" : "Output"}: ${
-                      slot.resource.displayName ?? slot.resource.id
-                    }`}
-                    className={[
-                      "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
-                      "!rounded-none !border-0 !bg-transparent !opacity-0",
-                      "cursor-crosshair",
-                    ].join(" ")}
-                  />
+                  <MinecraftTooltip
+                    label={slot.resource.tooltip ?? slot.resource.displayName ?? slot.resource.id}
+                  >
+                    <Handle
+                      id={handleId}
+                      type={isInput ? "target" : "source"}
+                      position={isInput ? Position.Left : Position.Right}
+                      data-resource-handle="true"
+                      data-resource-node-id={projectNode.id}
+                      data-resource-handle-id={handleId}
+                      title={`${isInput ? "Input" : "Output"}: ${
+                        slot.resource.displayName ?? slot.resource.id
+                      }`}
+                      className={[
+                        "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+                        "!rounded-none !border-0 !bg-transparent !opacity-0",
+                        "cursor-crosshair",
+                      ].join(" ")}
+                    />
+                  </MinecraftTooltip>
                 </>
               );
             }}
