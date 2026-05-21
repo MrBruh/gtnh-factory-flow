@@ -13,7 +13,7 @@ on:
           - stable
           - daily
       publish:
-        description: "Commit generated datasets to this repository"
+        description: "Publish generated datasets to the exotiserver dataset volume"
         required: true
         default: false
         type: boolean
@@ -21,7 +21,7 @@ on:
     - cron: "35 5 * * *"
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 concurrency:
@@ -31,7 +31,7 @@ concurrency:
 jobs:
   detect:
     name: Detect GTNH versions
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gtnh-export]
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
       has_versions: ${{ steps.detect.outputs.has_versions }}
@@ -46,7 +46,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CHANNEL: ${{ inputs.channel || 'both' }}
-        run: node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
+        run: GTNH_DATASETS_ROOT="$HOME/data/gtnh-factory-flow/datasets/gtnh" node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
 
       - uses: actions/upload-artifact@v4
         with:
@@ -91,6 +91,10 @@ jobs:
           GTNH_ATLAS_MAX_SIZE: "8192"
           GITHUB_TOKEN: ${{ github.token }}
         run: |
+          staging_root="$HOME/data/gtnh-factory-flow/staging/${GITHUB_RUN_ID}/datasets/gtnh"
+          rm -rf "$staging_root/${GTNH_VERSION_ID}"
+          mkdir -p "$staging_root"
+
           docker run --rm \
             --name "gtnh-export-${GTNH_VERSION_ID}" \
             --user "$(id -u):$(id -g)" \
@@ -113,6 +117,8 @@ jobs:
             -e GTNH_RENDER_STACK_ICONS \
             -e GTNH_ATLAS_ICON_SIZE \
             -e GTNH_ATLAS_MAX_SIZE \
+            -e GTNH_DATASETS_ROOT=/datasets \
+            -v "$staging_root:/datasets" \
             -v "$PWD:/workspace" \
             -w /workspace \
             gtnh-factory-flow-dataset:ci \
@@ -129,78 +135,79 @@ jobs:
             .pipeline/${{ matrix.id }}.pipeline.json
           if-no-files-found: warn
 
-      - name: Stage dataset artifact
-        run: |
-          mkdir -p .pipeline/dataset-artifact/${{ matrix.id }}
-          cp public/datasets/gtnh/${{ matrix.id }}/recipes.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/recipes.json.gz
-          cp public/datasets/gtnh/${{ matrix.id }}/resource-index.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/resource-index.json.gz
-          cp public/datasets/gtnh/${{ matrix.id }}/recipe-index.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/recipe-index.json.gz
-          cp public/datasets/gtnh/${{ matrix.id }}/recipe-lookup-index.json.gz .pipeline/dataset-artifact/${{ matrix.id }}/recipe-lookup-index.json.gz
-          if [ -d public/datasets/gtnh/${{ matrix.id }}/recipes-shards ]; then
-            cp -R public/datasets/gtnh/${{ matrix.id }}/recipes-shards .pipeline/dataset-artifact/${{ matrix.id }}/recipes-shards
-          fi
-          if [ -d public/datasets/gtnh/${{ matrix.id }}/textures ]; then
-            cp -R public/datasets/gtnh/${{ matrix.id }}/textures .pipeline/dataset-artifact/${{ matrix.id }}/textures
-          fi
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: gtnh-dataset-${{ matrix.id }}
-          path: |
-            .pipeline/dataset-artifact/
-
   publish:
     name: Publish generated datasets
     needs: build
     if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || inputs.publish == true) }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
         with:
-          pattern: gtnh-dataset-*
-          merge-multiple: true
-          path: .pipeline/downloaded-datasets
+          name: detected-gtnh-versions
+          path: .pipeline
 
-      - name: Stage downloaded datasets
+      - name: Publish staged datasets to persistent volume
         run: |
-          mkdir -p public/datasets/gtnh
+          set -euo pipefail
+          dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
+          staging_root="$HOME/data/gtnh-factory-flow/staging/${GITHUB_RUN_ID}/datasets/gtnh"
+          mkdir -p "$dataset_root"
 
-          source_root=".pipeline/downloaded-datasets"
-          if [ -d "$source_root/public/datasets/gtnh" ]; then
-            source_root="$source_root/public/datasets/gtnh"
+          mapfile -t versions < <(
+            node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('.pipeline/detected-versions.json','utf8')); for (const v of data.detected) console.log(v.channel + '\t' + v.id)"
+          )
+
+          if [ "${#versions[@]}" -eq 0 ]; then
+            echo "No generated dataset versions to publish."
+            exit 0
           fi
 
-          if find "$source_root" -mindepth 1 -maxdepth 1 -type d -name 'daily-*' | grep -q .; then
-            find public/datasets/gtnh -mindepth 1 -maxdepth 1 -type d -name 'daily-*' -exec rm -rf {} +
+          has_daily=false
+          for line in "${versions[@]}"; do
+            IFS=$'\t' read -r channel version_id <<<"$line"
+            source_dir="$staging_root/$version_id"
+            incoming_dir="$dataset_root/.incoming-$version_id"
+            if [ ! -d "$source_dir" ]; then
+              echo "Missing staged dataset: $source_dir" >&2
+              exit 1
+            fi
+            if [ "$channel" = "daily" ]; then
+              has_daily=true
+            fi
+            rm -rf "$incoming_dir"
+            cp -a "$source_dir" "$incoming_dir"
+          done
+
+          if [ "$has_daily" = "true" ]; then
+            find "$dataset_root" -mindepth 1 -maxdepth 1 -type d -name 'daily-*' -exec rm -rf {} +
           fi
 
-          cp -R "$source_root"/. public/datasets/gtnh/
+          for line in "${versions[@]}"; do
+            IFS=$'\t' read -r _channel version_id <<<"$line"
+            rm -rf "$dataset_root/$version_id"
+            mv "$dataset_root/.incoming-$version_id" "$dataset_root/$version_id"
+          done
 
       - name: Rebuild dataset manifest
         run: |
+          dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           docker build -t gtnh-factory-flow-dataset:ci -f tools/dataset-pipeline/docker/Dockerfile .
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
+            -e GTNH_DATASETS_ROOT=/datasets \
+            -v "$dataset_root:/datasets" \
             -v "$PWD:/workspace" \
             -w /workspace \
             gtnh-factory-flow-dataset:ci \
             node tools/dataset-pipeline/scripts/rebuild-manifest.mjs
 
-      - name: Commit dataset updates
+      - name: Cleanup dataset staging
+        if: always()
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/datasets/gtnh
-          if git diff --cached --quiet -- public/datasets/gtnh; then
-            echo "No dataset changes to commit."
-            exit 0
-          fi
-          git commit -m "Update GTNH datasets"
-          git pull --rebase origin main
-          git push
+          rm -rf "$HOME/data/gtnh-factory-flow/staging/${GITHUB_RUN_ID}"
 
   deploy:
     name: Deploy site to exotiserver
@@ -226,11 +233,14 @@ jobs:
           set -euo pipefail
           release_sha="$(git rev-parse --short=10 HEAD)"
           app_root="$HOME/apps/gtnh-factory-flow"
+          dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           release_dir="$app_root/releases/$release_sha"
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           git archive --format=tar HEAD | tar -xf - -C "$release_dir"
+
+          mkdir -p "$dataset_root"
 
           docker run --rm \
             --user "$(id -u):$(id -g)" \
@@ -240,10 +250,23 @@ jobs:
             gtnh-factory-flow-site:ci \
             bash -lc 'npm install && npm run build'
 
+          mkdir -p "$release_dir/public/datasets"
+          rm -rf "$release_dir/public/datasets/gtnh"
+          ln -s "$dataset_root" "$release_dir/public/datasets/gtnh"
+
           ln -sfn "$release_dir" "$app_root/current.next"
           mv -Tf "$app_root/current.next" "$app_root/current"
           systemctl --user restart gtnh-factory-flow.service
           systemctl --user --no-pager --full status gtnh-factory-flow.service
+
+          if [ -f "$dataset_root/datasets.manifest.json" ]; then
+            for existing_release in "$app_root"/releases/*; do
+              [ -d "$existing_release" ] || continue
+              mkdir -p "$existing_release/public/datasets"
+              rm -rf "$existing_release/public/datasets/gtnh"
+              ln -s "$dataset_root" "$existing_release/public/datasets/gtnh"
+            done
+          fi
 
           find "$app_root/releases" -mindepth 1 -maxdepth 1 -type d ! -name "$release_sha" -printf '%T@ %p\n' \
             | sort -nr \

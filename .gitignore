@@ -15,6 +15,7 @@
 /.pipeline
 /.tmp
 *.tar
+/public/datasets/gtnh/
 
 # next.js
 /.next/

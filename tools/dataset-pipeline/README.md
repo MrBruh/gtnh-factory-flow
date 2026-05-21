@@ -11,7 +11,8 @@ Responsibilities:
 - Run NESQL Exporter, RecEx, or NERD outside the browser and outside the deployed app.
 - Normalize raw exporter output into the internal `RecipeDataset` model.
 - Compress and checksum generated JSON.
-- Publish datasets to `/public/datasets/gtnh/<version>/`.
+- Publish datasets to the persistent dataset root, then expose them publicly at
+  `/datasets/gtnh/<version>/`.
 - Generate diffs between dataset versions.
 
 The web app automatically reads `/datasets/gtnh/datasets.manifest.json` or the URL from
@@ -36,7 +37,16 @@ It currently:
   `$GTNH_DATASET_OUT_DIR/textures/rendered`.
 - Extracts matched real PNG textures from the selected GTNH mods for any remaining
   resources into `$GTNH_DATASET_OUT_DIR/textures`.
-- Rebuilds `public/datasets/gtnh/datasets.manifest.json` from generated datasets.
+- Rebuilds `datasets.manifest.json` in the configured dataset root.
+
+Production uses the self-hosted runner path:
+
+```bash
+$HOME/data/gtnh-factory-flow/datasets/gtnh
+```
+
+Each deployed release symlinks `public/datasets/gtnh` to that directory. The dataset
+volume is ignored by git; generated recipes and PNGs should not be committed.
 
 `GTNH_CLIENT_EXPORT_COMMAND` can override the default runner. The override must run the
 real selected GTNH build/exporter and produce a normalized `RecipeDataset`, not raw

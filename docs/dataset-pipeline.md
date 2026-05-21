@@ -9,7 +9,8 @@ artifacts.
 - Track stable and daily GTNH versions.
 - Preserve source metadata for NESQL Exporter, RecEx, and NERD.
 - Normalize raw exporter output into the internal `RecipeDataset` model.
-- Publish immutable datasets under `/public/datasets/gtnh/<version>/`.
+- Publish immutable datasets at the public URL `/datasets/gtnh/<version>/`, backed by
+  a persistent server volume outside the git repository.
 - Compare recipe and resource changes between versions.
 
 ## Stages
@@ -39,11 +40,12 @@ artifacts.
 5. Extract real icons
    - Scan `assets/<modid>/textures/items`, `blocks`, and `fluids` inside the selected
      GTNH mods.
-   - Copy only matched PNGs into `/public/datasets/gtnh/<version>/textures/`.
+   - Copy only matched PNGs into the generated dataset directory under
+     `<dataset-root>/<version>/textures/`.
    - Render item-stack icons in a headless GTNH client when the exporter runs with
      `GTNH_RENDER_STACK_ICONS=true`. These PNGs are written under
-     `/public/datasets/gtnh/<version>/textures/rendered/`, finalized to
-     `/public/datasets/gtnh/<version>/textures/icons/`, and take priority over static jar
+     `<dataset-root>/<version>/textures/rendered/`, finalized to
+     `<dataset-root>/<version>/textures/icons/`, and take priority over static jar
      texture matches.
    - Never generate substitute icons. If a stack cannot be rendered by the real client
      and no exact PNG exists, leave the icon blank.
@@ -53,8 +55,11 @@ artifacts.
    - Generate SHA-256 checksums for every published artifact.
 
 7. Publish only real generated datasets
-   - Place artifacts under `/public/datasets/gtnh/<version>/`.
-   - Update `/public/datasets/gtnh/datasets.manifest.json`.
+   - Place artifacts under the persistent dataset root, for production currently
+     `$HOME/data/gtnh-factory-flow/datasets/gtnh/<version>/`.
+   - Update `$HOME/data/gtnh-factory-flow/datasets/gtnh/datasets.manifest.json`.
+   - Each deployed release exposes that volume through a symlink at
+     `public/datasets/gtnh`, so the browser still reads `/datasets/gtnh/...`.
    - If artifacts are hosted elsewhere, set
      `NEXT_PUBLIC_GTNH_DATASET_MANIFEST_URL` to the public manifest URL.
    - Do not point the browser at a private GitHub raw URL that requires a token.

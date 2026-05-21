@@ -4,7 +4,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { gunzipSync } from "node:zlib";
 
-const rootDir = path.join("public", "datasets", "gtnh");
+const rootDir = process.env.GTNH_DATASETS_ROOT ?? path.join("public", "datasets", "gtnh");
 const entries = existsSync(rootDir) ? await fs.readdir(rootDir, { withFileTypes: true }) : [];
 const discoveredVersions = [];
 

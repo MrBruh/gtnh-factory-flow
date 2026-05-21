@@ -1,0 +1,9 @@
+.git
+.next
+.pipeline
+.tmp
+node_modules
+coverage
+*.tar
+dev-server*.log
+public/datasets/gtnh

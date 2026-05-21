@@ -28,11 +28,18 @@ jobs:
           set -euo pipefail
           release_sha="$(git rev-parse --short=10 HEAD)"
           app_root="$HOME/apps/gtnh-factory-flow"
+          dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           release_dir="$app_root/releases/$release_sha"
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           git archive --format=tar HEAD | tar -xf - -C "$release_dir"
+
+          mkdir -p "$(dirname "$dataset_root")"
+          if [ ! -f "$dataset_root/datasets.manifest.json" ] && [ -d "$app_root/current/public/datasets/gtnh" ]; then
+            echo "Bootstrapping persistent dataset volume from current release."
+            cp -aL "$app_root/current/public/datasets/gtnh" "$dataset_root"
+          fi
 
           docker run --rm \
             --user "$(id -u):$(id -g)" \
@@ -42,10 +49,23 @@ jobs:
             gtnh-factory-flow-site:ci \
             bash -lc 'npm install && npm run build'
 
+          mkdir -p "$release_dir/public/datasets"
+          rm -rf "$release_dir/public/datasets/gtnh"
+          ln -s "$dataset_root" "$release_dir/public/datasets/gtnh"
+
           ln -sfn "$release_dir" "$app_root/current.next"
           mv -Tf "$app_root/current.next" "$app_root/current"
           systemctl --user restart gtnh-factory-flow.service
           systemctl --user --no-pager --full status gtnh-factory-flow.service
+
+          if [ -f "$dataset_root/datasets.manifest.json" ]; then
+            for existing_release in "$app_root"/releases/*; do
+              [ -d "$existing_release" ] || continue
+              mkdir -p "$existing_release/public/datasets"
+              rm -rf "$existing_release/public/datasets/gtnh"
+              ln -s "$dataset_root" "$existing_release/public/datasets/gtnh"
+            done
+          fi
 
           find "$app_root/releases" -mindepth 1 -maxdepth 1 -type d ! -name "$release_sha" -printf '%T@ %p\n' \
             | sort -nr \

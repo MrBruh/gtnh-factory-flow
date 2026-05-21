@@ -12,7 +12,8 @@ const sourceUrl = process.env.GTNH_SOURCE_URL;
 const exportCommand =
   process.env.GTNH_CLIENT_EXPORT_COMMAND ||
   "bash tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh";
-const outDir = path.join("public", "datasets", "gtnh", versionId);
+const datasetsRoot = process.env.GTNH_DATASETS_ROOT ?? path.join("public", "datasets", "gtnh");
+const outDir = path.join(datasetsRoot, versionId);
 const pipelineDir = ".pipeline";
 const instanceDir = path.join(pipelineDir, "client-instance", versionId);
 const rawExportDir = path.join(pipelineDir, "raw-export", versionId);

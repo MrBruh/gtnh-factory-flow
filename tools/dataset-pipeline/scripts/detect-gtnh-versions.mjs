@@ -1,5 +1,6 @@
 import { appendFileSync } from "node:fs";
 import fs from "node:fs/promises";
+import path from "node:path";
 
 const channelInput = process.env.CHANNEL ?? "both";
 const githubToken = process.env.GITHUB_TOKEN;
@@ -11,6 +12,7 @@ const headers = {
 
 const selectedChannels =
   channelInput === "both" ? new Set(["stable", "daily"]) : new Set([channelInput]);
+const datasetsRoot = process.env.GTNH_DATASETS_ROOT ?? path.join("public", "datasets", "gtnh");
 const detected = [];
 const currentManifest = await readCurrentManifest();
 
@@ -47,7 +49,10 @@ writeOutput("has_versions", detected.length > 0 ? "true" : "false");
 
 async function readCurrentManifest() {
   try {
-    const rawManifest = await fs.readFile("public/datasets/gtnh/datasets.manifest.json", "utf8");
+    const rawManifest = await fs.readFile(
+      path.join(datasetsRoot, "datasets.manifest.json"),
+      "utf8",
+    );
     return JSON.parse(rawManifest);
   } catch (error) {
     if (error?.code === "ENOENT") {
