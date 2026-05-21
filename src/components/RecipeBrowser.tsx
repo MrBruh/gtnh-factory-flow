@@ -694,19 +694,14 @@ function VirtualResourceResultList({
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [, startPageTransition] = useTransition();
   const pageSize = useResourcePageSize(containerRef, onPageSizeChange);
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const handlePreviousPage = useCallback(() => {
-    startPageTransition(() => {
-      onPageChange(Math.max(0, currentPage - 1));
-    });
-  }, [currentPage, onPageChange, startPageTransition]);
+    onPageChange(Math.max(0, currentPage - 1));
+  }, [currentPage, onPageChange]);
   const handleNextPage = useCallback(() => {
-    startPageTransition(() => {
-      onPageChange(Math.min(pageCount - 1, currentPage + 1));
-    });
-  }, [currentPage, onPageChange, pageCount, startPageTransition]);
+    onPageChange(Math.min(pageCount - 1, currentPage + 1));
+  }, [currentPage, onPageChange, pageCount]);
 
   return (
     <div ref={containerRef} className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
