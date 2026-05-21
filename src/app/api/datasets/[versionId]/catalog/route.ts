@@ -14,11 +14,19 @@ export async function GET(
     void prewarmDatasetVersion(versionId).catch((error) => {
       console.error(`Failed to prewarm dataset ${versionId}`, error);
     });
-    return NextResponse.json(catalog);
+    return NextResponse.json(catalog, {
+      headers: datasetCacheHeaders(),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Dataset catalog failed." },
       { status: 500 },
     );
   }
+}
+
+function datasetCacheHeaders() {
+  return {
+    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+  };
 }

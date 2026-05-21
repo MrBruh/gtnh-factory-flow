@@ -15,11 +15,19 @@ export async function GET(
       return NextResponse.json({ error: "Recipe not found." }, { status: 404 });
     }
 
-    return NextResponse.json(recipe);
+    return NextResponse.json(recipe, {
+      headers: datasetCacheHeaders(),
+    });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Recipe load failed." },
       { status: 500 },
     );
   }
+}
+
+function datasetCacheHeaders() {
+  return {
+    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+  };
 }

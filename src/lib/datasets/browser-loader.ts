@@ -1,7 +1,12 @@
 "use client";
 
 import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
-import type { DatasetVersion, RecipeDataset, RecipeSummary } from "./types";
+import type {
+  DatasetResourceIndexEntry,
+  DatasetVersion,
+  RecipeDataset,
+  RecipeSummary,
+} from "./types";
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
@@ -19,6 +24,21 @@ export interface RecipeDatasetQueryResult {
   recipes: RecipeSummary[];
   total: number;
   recipeMaps: string[];
+  recipeMapIcons?: Record<string, DatasetResourceIndexEntry>;
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface RecipeDatasetResourceQuery {
+  query: string;
+  offset: number;
+  limit: number;
+}
+
+export interface RecipeDatasetResourceQueryResult {
+  resources: DatasetResourceIndexEntry[];
+  total: number;
   offset: number;
   limit: number;
   hasMore: boolean;
@@ -66,11 +86,27 @@ export async function queryRecipeDatasetRecipes(
   return fetchJson<RecipeDatasetQueryResult>(url.toString());
 }
 
+export async function queryRecipeDatasetResources(
+  _manifestUrl: string,
+  version: DatasetVersion,
+  query: RecipeDatasetResourceQuery,
+): Promise<RecipeDatasetResourceQueryResult> {
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/resources`,
+    window.location.origin,
+  );
+  url.searchParams.set("query", query.query);
+  url.searchParams.set("offset", String(query.offset));
+  url.searchParams.set("limit", String(query.limit));
+
+  return fetchJson<RecipeDatasetResourceQueryResult>(url.toString());
+}
+
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
-    cache: "no-store",
+    cache: "force-cache",
     headers: {
       Accept: "application/json",
     },

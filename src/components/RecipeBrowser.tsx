@@ -15,24 +15,24 @@ import type { PointerEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
   getRecipeDatasetRecipe,
+  queryRecipeDatasetResources,
   queryRecipeDatasetRecipes,
+  type RecipeDatasetResourceQueryResult,
   type RecipeDatasetQueryResult,
 } from "@/lib/datasets/browser-loader";
-import type {
-  DatasetResource,
-  DatasetResourceIndexEntry,
-  RecipeSummary,
-} from "@/lib/datasets/types";
-import { getResourceKey, GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
+import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
+import { GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
-import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
+import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 6;
+const RESOURCE_QUERY_LIMIT = 6;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
+const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 
 export function RecipeBrowser() {
   const dataset = useFactoryStore((state) => state.dataset);
@@ -59,76 +59,34 @@ export function RecipeBrowser() {
   const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
   const [queryTotal, setQueryTotal] = useState(0);
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
+  const [resourcePage, setResourcePage] = useState(0);
+  const [resourceResults, setResourceResults] = useState<IndexedResource[]>([]);
+  const [resourceTotal, setResourceTotal] = useState(0);
+  const [resourceQueryLoading, setResourceQueryLoading] = useState(false);
+  const [resourceQueryError, setResourceQueryError] = useState<string | undefined>();
+  const [recipeMapIcons, setRecipeMapIcons] = useState<Record<string, DatasetResourceIndexEntry>>(
+    {},
+  );
   const [recipeQueryLoading, setRecipeQueryLoading] = useState(false);
   const [recipeQueryError, setRecipeQueryError] = useState<string | undefined>();
   const recipeQueryCacheRef = useRef<Map<string, RecipeQueryCacheEntry>>(new Map());
+  const resourceQueryCacheRef = useRef<Map<string, ResourceQueryCacheEntry>>(new Map());
   const deferredRecipeSearch = useDeferredValue(recipeSearch);
   const [, startSearchTransition] = useTransition();
 
-  const resourceIndex = useMemo(
-    () => buildResourceIndex(dataset?.resourceIndex, dataset?.recipes ?? [], projectRecipes),
-    [dataset?.resourceIndex, dataset?.recipes, projectRecipes],
-  );
   const activeResource = useMemo(() => {
     if (!browserResource) {
       return undefined;
     }
 
-    const indexed = resourceIndex.get(
-      `${browserResource.kind}:${browserResource.id}` as ResourceKey,
-    );
-
     return {
-      ...(indexed ?? { ...browserResource, recipeCount: 0 }),
+      ...browserResource,
+      recipeCount: 0,
       anchorNodeId: browserResource.anchorNodeId,
     };
-  }, [browserResource, resourceIndex]);
+  }, [browserResource]);
 
-  const historyResources = useMemo(
-    () =>
-      resourceHistory.map((resource) => {
-        const indexed = resourceIndex.get(`${resource.kind}:${resource.id}` as ResourceKey);
-        return indexed ?? resource;
-      }),
-    [resourceHistory, resourceIndex],
-  );
-
-  const sortedResources = useMemo(
-    () => [...resourceIndex.values()].sort(compareResourcesByRecipeCount),
-    [resourceIndex],
-  );
-
-  const resourceResults = useMemo(() => {
-    if (activeResource) {
-      return [];
-    }
-
-    const query = deferredRecipeSearch.trim().toLowerCase();
-    if (!query) {
-      return sortedResources.filter((resource) => resource.iconPath || resource.iconAtlas);
-    }
-
-    return sortedResources
-      .filter((resource) => resourceMatchesQuery(resource, query))
-      .sort((left, right) => {
-        const leftLabel = resourceLabel(left).toLowerCase();
-        const rightLabel = resourceLabel(right).toLowerCase();
-        const leftExact = leftLabel === query || left.id.toLowerCase() === query ? 1 : 0;
-        const rightExact = rightLabel === query || right.id.toLowerCase() === query ? 1 : 0;
-        return rightExact - leftExact || compareResourcesByRecipeCount(left, right);
-      });
-  }, [activeResource, deferredRecipeSearch, sortedResources]);
-
-  const visibleResourceResults = useMemo(() => {
-    if (!activeResource) {
-      return resourceResults;
-    }
-
-    const query = deferredRecipeSearch.trim().toLowerCase();
-    return query
-      ? sortedResources.filter((resource) => resourceMatchesQuery(resource, query))
-      : sortedResources;
-  }, [activeResource, deferredRecipeSearch, resourceResults, sortedResources]);
+  const historyResources = resourceHistory;
 
   const recipeMaps = useMemo(
     () => availableRecipeMaps.filter(Boolean).sort((a, b) => a.localeCompare(b)),
@@ -136,8 +94,8 @@ export function RecipeBrowser() {
   );
 
   const recipeMapTabs = useMemo(
-    () => buildRecipeMapTabs(recipeMaps, dataset?.resourceIndex ?? dataset?.resources ?? []),
-    [dataset?.resourceIndex, dataset?.resources, recipeMaps],
+    () => buildRecipeMapTabs(recipeMaps, recipeMapIcons),
+    [recipeMapIcons, recipeMaps],
   );
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
@@ -164,6 +122,19 @@ export function RecipeBrowser() {
           })
         : "",
     [activeResource, browserMode, deferredRecipeSearch, maxTier, selectedDatasetVersion],
+  );
+
+  const getResourceQueryKey = useCallback(
+    (page: number) =>
+      selectedDatasetVersion
+        ? getResourceQueryCacheKey({
+            versionId: selectedDatasetVersion.id,
+            query: deferredRecipeSearch.trim(),
+            offset: page * RESOURCE_QUERY_LIMIT,
+            limit: RESOURCE_QUERY_LIMIT,
+          })
+        : "",
+    [deferredRecipeSearch, selectedDatasetVersion],
   );
 
   const prefetchRecipeMap = useCallback(
@@ -243,6 +214,88 @@ export function RecipeBrowser() {
   );
 
   useEffect(() => {
+    return deferStateUpdate(() => setResourcePage(0));
+  }, [deferredRecipeSearch, selectedDatasetVersion?.id]);
+
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(resourceTotal / RESOURCE_QUERY_LIMIT) - 1);
+    if (resourcePage > maxPage) {
+      return deferStateUpdate(() => setResourcePage(maxPage));
+    }
+    return undefined;
+  }, [resourcePage, resourceTotal]);
+
+  useEffect(() => {
+    if (!selectedDatasetVersion) {
+      return deferStateUpdate(() => {
+        setResourceResults([]);
+        setResourceTotal(0);
+        setResourceQueryLoading(false);
+        setResourceQueryError(undefined);
+      });
+    }
+
+    const query = deferredRecipeSearch.trim();
+    const cacheKey = getResourceQueryKey(resourcePage);
+    const cached = getCachedResourceQuery(resourceQueryCacheRef.current, cacheKey);
+    if (cached) {
+      return deferStateUpdate(() => {
+        setResourceResults(cached.resources);
+        setResourceTotal(cached.total);
+        setResourceQueryLoading(false);
+        setResourceQueryError(undefined);
+      });
+    }
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setResourceQueryLoading(true);
+        setResourceQueryError(undefined);
+      }
+    });
+
+    queryRecipeDatasetResources(
+      datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+      selectedDatasetVersion,
+      {
+        query,
+        offset: resourcePage * RESOURCE_QUERY_LIMIT,
+        limit: RESOURCE_QUERY_LIMIT,
+      },
+    )
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setCachedResourceQuery(resourceQueryCacheRef.current, cacheKey, result);
+        trimResourceQueryCache(resourceQueryCacheRef.current);
+        setResourceResults(result.resources);
+        setResourceTotal(result.total);
+        setResourceQueryLoading(false);
+      })
+      .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+        setResourceResults([]);
+        setResourceTotal(0);
+        setResourceQueryError(error instanceof Error ? error.message : "Resource query failed.");
+        setResourceQueryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    datasetManifestUrl,
+    deferredRecipeSearch,
+    getResourceQueryKey,
+    resourcePage,
+    selectedDatasetVersion,
+  ]);
+
+  useEffect(() => {
     return deferStateUpdate(() => setRecipePage(0));
   }, [
     activeResource?.id,
@@ -268,6 +321,7 @@ export function RecipeBrowser() {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
+        setRecipeMapIcons({});
       });
     }
 
@@ -277,6 +331,7 @@ export function RecipeBrowser() {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
+        setRecipeMapIcons({});
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
       });
@@ -289,6 +344,7 @@ export function RecipeBrowser() {
         setFilteredRecipes(cached.recipes);
         setQueryTotal(cached.total);
         setAvailableRecipeMaps(cached.recipeMaps);
+        setRecipeMapIcons(cached.recipeMapIcons ?? {});
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
       });
@@ -337,6 +393,7 @@ export function RecipeBrowser() {
         setFilteredRecipes(result.recipes);
         setQueryTotal(result.total);
         setAvailableRecipeMaps(result.recipeMaps);
+        setRecipeMapIcons(result.recipeMapIcons ?? {});
         setRecipeQueryLoading(false);
       })
       .catch((error) => {
@@ -346,6 +403,7 @@ export function RecipeBrowser() {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
+        setRecipeMapIcons({});
         setRecipeQueryError(error instanceof Error ? error.message : "Recipe query failed.");
         setRecipeQueryLoading(false);
       });
@@ -436,13 +494,13 @@ export function RecipeBrowser() {
             </div>
           ) : (
             <VirtualResourceResultList
-              key={[
-                selectedDatasetVersionId ?? "",
-                activeResource ? `${activeResource.kind}:${activeResource.id}` : "",
-                deferredRecipeSearch.trim().toLowerCase(),
-              ].join("|")}
-              resources={visibleResourceResults}
+              resources={resourceResults}
+              total={resourceTotal}
+              currentPage={resourcePage}
+              isLoading={resourceQueryLoading}
+              error={resourceQueryError}
               activeResource={activeResource}
+              onPageChange={setResourcePage}
               onBrowse={browseResource}
             />
           )}
@@ -590,57 +648,64 @@ interface RecipeQueryCacheEntry {
   expiresAt: number;
 }
 
-interface RecipeMapIconCandidate {
-  resource: DatasetResource | DatasetResourceIndexEntry;
-  label: string;
-  tokens: Set<string>;
-  exactMachineBonus: boolean;
-  prefixBonus: boolean;
-  penalty: boolean;
+interface ResourceQueryCacheEntry {
+  result: RecipeDatasetResourceQueryResult;
+  expiresAt: number;
 }
-
-const recipeMapIconCandidateCache = new WeakMap<
-  Array<DatasetResource | DatasetResourceIndexEntry>,
-  RecipeMapIconCandidate[]
->();
-const recipeMapIconResultCache = new WeakMap<
-  Array<DatasetResource | DatasetResourceIndexEntry>,
-  Map<string, DatasetResource | DatasetResourceIndexEntry | undefined>
->();
 
 function VirtualResourceResultList({
   resources,
+  total,
+  currentPage,
+  isLoading,
+  error,
   activeResource,
+  onPageChange,
   onBrowse,
 }: {
   resources: IndexedResource[];
+  total: number;
+  currentPage: number;
+  isLoading: boolean;
+  error?: string;
   activeResource?: IndexedResource;
+  onPageChange: (page: number) => void;
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
-  const [page, setPage] = useState(0);
   const [, startPageTransition] = useTransition();
-  const pageSize = 6;
-  const pageCount = Math.max(1, Math.ceil(resources.length / pageSize));
-  const currentPage = Math.min(page, pageCount - 1);
-  const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const pageCount = Math.max(1, Math.ceil(total / RESOURCE_QUERY_LIMIT));
   const handlePreviousPage = useCallback(() => {
     startPageTransition(() => {
-      setPage((current) => Math.max(0, current - 1));
+      onPageChange(Math.max(0, currentPage - 1));
     });
-  }, [startPageTransition]);
+  }, [currentPage, onPageChange, startPageTransition]);
   const handleNextPage = useCallback(() => {
     startPageTransition(() => {
-      setPage((current) => Math.min(pageCount - 1, current + 1));
+      onPageChange(Math.min(pageCount - 1, currentPage + 1));
     });
-  }, [pageCount, startPageTransition]);
+  }, [currentPage, onPageChange, pageCount, startPageTransition]);
 
   return (
     <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
-      <ResourceResultPage
-        resources={visibleResources}
-        activeResource={activeResource}
-        onBrowseResource={onBrowse}
-      />
+      {error ? (
+        <div className="rounded border border-dashed border-red-700 p-4 text-sm text-red-200">
+          {error}
+        </div>
+      ) : isLoading && resources.length === 0 ? (
+        <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
+          Loading resources...
+        </div>
+      ) : resources.length === 0 ? (
+        <div className="rounded border border-dashed border-neutral-600 p-4 text-sm text-neutral-300">
+          No matching resource.
+        </div>
+      ) : (
+        <ResourceResultPage
+          resources={resources}
+          activeResource={activeResource}
+          onBrowseResource={onBrowse}
+        />
+      )}
       <ResourcePager
         currentPage={currentPage}
         pageCount={pageCount}
@@ -1380,31 +1445,6 @@ function getInitialRecipeBookSize() {
   };
 }
 
-function buildResourceIndex(
-  datasetResourceIndex: DatasetResourceIndexEntry[] | undefined,
-  datasetRecipes: Recipe[],
-  projectRecipes: Recipe[],
-): Map<ResourceKey, IndexedResource> {
-  const index = new Map<ResourceKey, IndexedResource>();
-  if (datasetResourceIndex) {
-    for (const resource of datasetResourceIndex) {
-      index.set(`${resource.kind}:${resource.id}` as ResourceKey, resource);
-    }
-  } else {
-    addRecipesToResourceIndex(index, datasetRecipes);
-  }
-
-  if (projectRecipes.length > 0) {
-    const datasetRecipeIds = new Set(datasetRecipes.map((recipe) => recipe.id));
-    addRecipesToResourceIndex(
-      index,
-      projectRecipes.filter((recipe) => !datasetRecipeIds.has(recipe.id)),
-    );
-  }
-
-  return index;
-}
-
 function getRecipeQueryCacheKey({
   versionId,
   query,
@@ -1434,6 +1474,20 @@ function getRecipeQueryCacheKey({
     offset,
     limit,
   ].join("|");
+}
+
+function getResourceQueryCacheKey({
+  versionId,
+  query,
+  offset,
+  limit,
+}: {
+  versionId: string;
+  query: string;
+  offset: number;
+  limit: number;
+}) {
+  return [versionId, query.trim().toLowerCase(), offset, limit].join("|");
 }
 
 function getCachedRecipeQuery(cache: Map<string, RecipeQueryCacheEntry>, key: string) {
@@ -1471,54 +1525,47 @@ function trimRecipeQueryCache(cache: Map<string, RecipeQueryCacheEntry>) {
   }
 }
 
-function addRecipesToResourceIndex(index: Map<ResourceKey, IndexedResource>, recipes: Recipe[]) {
-  for (const recipe of recipes) {
-    for (const resource of [...recipe.inputs, ...recipe.outputs]) {
-      const key = getResourceKey(resource);
-      const existing = index.get(key);
-      if (existing) {
-        existing.recipeCount += 1;
-        if (!existing.iconPath && resource.iconPath) {
-          existing.iconPath = resource.iconPath;
-        }
-        if (!existing.iconAtlas && resource.iconAtlas) {
-          existing.iconAtlas = resource.iconAtlas;
-        }
-        if (!existing.displayName && resource.displayName) {
-          existing.displayName = resource.displayName;
-        }
-      } else {
-        index.set(key, {
-          kind: resource.kind,
-          id: resource.id,
-          displayName: resource.displayName,
-          iconPath: resource.iconPath,
-          iconAtlas: resource.iconAtlas,
-          recipeCount: 1,
-        });
-      }
-    }
+function getCachedResourceQuery(cache: Map<string, ResourceQueryCacheEntry>, key: string) {
+  const entry = cache.get(key);
+  if (!entry) {
+    return undefined;
   }
+
+  if (entry.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return undefined;
+  }
+
+  return entry.result;
 }
 
-function resourceMatchesQuery(resource: IndexedResource, query: string): boolean {
-  return [resource.displayName, resource.id, resource.kind]
-    .filter(Boolean)
-    .some((value) => value?.toLowerCase().includes(query));
+function setCachedResourceQuery(
+  cache: Map<string, ResourceQueryCacheEntry>,
+  key: string,
+  result: RecipeDatasetResourceQueryResult,
+) {
+  cache.set(key, {
+    result,
+    expiresAt: Date.now() + RESOURCE_QUERY_CACHE_TTL_MS,
+  });
 }
 
-function compareResourcesByRecipeCount(left: IndexedResource, right: IndexedResource) {
-  return (
-    right.recipeCount - left.recipeCount || resourceLabel(left).localeCompare(resourceLabel(right))
-  );
+function trimResourceQueryCache(cache: Map<string, ResourceQueryCacheEntry>) {
+  while (cache.size > 160) {
+    const oldestKey = cache.keys().next().value;
+    if (!oldestKey) {
+      return;
+    }
+    cache.delete(oldestKey);
+  }
 }
 
 function buildRecipeMapTabs(
   recipeMaps: string[],
-  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
+  icons: Record<string, DatasetResourceIndexEntry>,
 ): RecipeMapTab[] {
   return recipeMaps.map((recipeMap) => {
-    const resource = findRecipeMapIcon(recipeMap, resources);
+    const resource = icons[recipeMap];
     return {
       id: recipeMap,
       label: recipeMap,
@@ -1534,105 +1581,6 @@ function buildRecipeMapTabs(
         : undefined,
     };
   });
-}
-
-function findRecipeMapIcon(
-  recipeMap: string,
-  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
-): DatasetResource | DatasetResourceIndexEntry | undefined {
-  let resultCache = recipeMapIconResultCache.get(resources);
-  if (!resultCache) {
-    resultCache = new Map();
-    recipeMapIconResultCache.set(resources, resultCache);
-  }
-  if (resultCache.has(recipeMap)) {
-    return resultCache.get(recipeMap);
-  }
-
-  const candidates = getRecipeMapIconCandidates(resources);
-  const recipeMapTokens = tokenizeRecipeMap(recipeMap);
-  const normalizedMap = normalizeText(recipeMap);
-  let best: { resource: DatasetResource | DatasetResourceIndexEntry; score: number } | undefined;
-
-  for (const candidate of candidates) {
-    let score = 0;
-
-    if (candidate.label === normalizedMap) {
-      score += 120;
-    } else if (candidate.label.includes(normalizedMap)) {
-      score += 80;
-    }
-
-    for (const token of recipeMapTokens) {
-      if (candidate.tokens.has(token) || candidate.label.includes(token)) {
-        score += 14;
-      }
-    }
-
-    if (candidate.exactMachineBonus) {
-      score += 35;
-    }
-    if (candidate.prefixBonus) {
-      score += 12;
-    }
-    if (candidate.penalty) {
-      score -= 30;
-    }
-
-    if (score > (best?.score ?? 0)) {
-      best = { resource: candidate.resource, score };
-    }
-  }
-
-  const result = best && best.score >= 35 ? best.resource : undefined;
-  resultCache.set(recipeMap, result);
-  return result;
-}
-
-function getRecipeMapIconCandidates(
-  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
-): RecipeMapIconCandidate[] {
-  const cached = recipeMapIconCandidateCache.get(resources);
-  if (cached) {
-    return cached;
-  }
-
-  const candidates = resources
-    .filter((resource) => resource.kind === "item" && (resource.iconPath || resource.iconAtlas))
-    .map((resource) => {
-      const label = normalizeText(resource.displayName ?? resource.id);
-      return {
-        resource,
-        label,
-        tokens: new Set(label.split(" ").filter(Boolean)),
-        exactMachineBonus: resource.id.startsWith("gregtech:gt.blockmachines@"),
-        prefixBonus: /^(basic|steam|simple|large) /.test(label),
-        penalty: /\b(pipe|cover|upgrade|part|component)\b/.test(label),
-      };
-    });
-
-  recipeMapIconCandidateCache.set(resources, candidates);
-  return candidates;
-}
-
-function tokenizeRecipeMap(value: string): string[] {
-  const aliases: Record<string, string[]> = {
-    washer: ["washing", "wash"],
-    wash: ["washing", "washer"],
-    extractor: ["extractor", "extract"],
-  };
-
-  return normalizeText(value)
-    .split(" ")
-    .filter((token) => token.length > 2)
-    .flatMap((token) => [token, ...(aliases[token] ?? [])]);
-}
-
-function normalizeText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
 }
 
 function neiTabClass(active: boolean): string {

@@ -29,6 +29,7 @@ interface LoadedRecipeIndex {
   recipes?: RecipeSummary[];
   shards: RecipeIndexShard[];
   indexes?: QueryIndexes;
+  resourceIndexes?: ResourceQueryIndexes;
 }
 
 interface QueryIndexes {
@@ -36,10 +37,16 @@ interface QueryIndexes {
   recipeIndexesByResourceAndMap: Map<string, number[]>;
   recipeMaps: string[];
   recipeMapsByResource: Map<string, string[]>;
+  recipeMapIcons: Map<string, DatasetResourceIndexEntry | undefined>;
   tierIndexes: number[];
   searchText: string[];
   iconScores: number[];
   allRecipeIndexes: number[];
+}
+
+interface ResourceQueryIndexes {
+  sortedResourceIndexes: number[];
+  searchText: string[];
 }
 
 interface RecipeShardPayload {
@@ -63,12 +70,48 @@ export async function getDatasetCatalog(versionId: string) {
     gtnhVersion: catalog.version.gtnhVersion,
     sourceInfo: catalog.version.sourceInfo,
     resources: [],
-    resourceIndex: catalog.resourceIndex,
+    resourceIndex: [],
     recipes: [],
     recipeCount: catalog.recipeCount,
     oreDictionary: {},
     recipeMaps: catalog.recipeMaps,
     generatedAt: catalog.version.publishedAt,
+  };
+}
+
+export async function queryDatasetResources(
+  versionId: string,
+  request: {
+    query: string;
+    offset: number;
+    limit: number;
+  },
+) {
+  const catalog = await loadCatalog(versionId);
+  const indexes = ensureResourceIndexes(catalog);
+  const query = normalizeText(request.query);
+  const matches: number[] = [];
+
+  for (const resourceIndex of indexes.sortedResourceIndexes) {
+    const resource = catalog.resourceIndex[resourceIndex];
+    if (!resource || (!resource.iconPath && !resource.iconAtlas)) {
+      continue;
+    }
+    if (query && !indexes.searchText[resourceIndex]?.includes(query)) {
+      continue;
+    }
+    matches.push(resourceIndex);
+  }
+
+  return {
+    resources: matches
+      .slice(request.offset, request.offset + request.limit)
+      .map((index) => catalog.resourceIndex[index])
+      .filter(Boolean),
+    total: matches.length,
+    offset: request.offset,
+    limit: request.limit,
+    hasMore: request.offset + request.limit < matches.length,
   };
 }
 
@@ -134,6 +177,11 @@ export async function queryDatasetRecipes(
     recipes: recipeIndexes.map((index) => catalog.recipes?.[index]).filter(Boolean),
     total,
     recipeMaps: sortedRecipeMaps,
+    recipeMapIcons: Object.fromEntries(
+      sortedRecipeMaps
+        .map((recipeMap) => [recipeMap, indexes.recipeMapIcons.get(recipeMap)] as const)
+        .filter((entry): entry is readonly [string, DatasetResourceIndexEntry] => Boolean(entry[1])),
+    ),
     offset: request.offset,
     limit: request.limit,
     hasMore: request.offset + request.limit < total,
@@ -314,6 +362,7 @@ function ensureIndexes(catalog: LoadedRecipeIndex): QueryIndexes {
   const recipeIndexesByResource = new Map<string, number[]>();
   const recipeIndexesByResourceAndMap = new Map<string, number[]>();
   const recipeMapSetsByResource = new Map<string, Set<string>>();
+  const recipeMapSet = new Set<string>();
   const recipeMaps: string[] = [];
   const tierIndexes: number[] = [];
   const searchText: string[] = [];
@@ -323,6 +372,7 @@ function ensureIndexes(catalog: LoadedRecipeIndex): QueryIndexes {
   catalog.recipes?.forEach((recipe, recipeIndex) => {
     allRecipeIndexes.push(recipeIndex);
     recipeMaps[recipeIndex] = recipe.recipeMap;
+    recipeMapSet.add(recipe.recipeMap);
     tierIndexes[recipeIndex] = getTierIndex(getRecipeTier(recipe));
     searchText[recipeIndex] = buildRecipeSearchText(recipe);
     iconScores[recipeIndex] = recipeIconScore(recipe);
@@ -359,12 +409,40 @@ function ensureIndexes(catalog: LoadedRecipeIndex): QueryIndexes {
     recipeIndexesByResourceAndMap,
     recipeMaps,
     recipeMapsByResource,
+    recipeMapIcons: buildRecipeMapIconMap([...recipeMapSet], catalog.resourceIndex),
     tierIndexes,
     searchText,
     iconScores,
     allRecipeIndexes,
   };
   return catalog.indexes;
+}
+
+function ensureResourceIndexes(catalog: LoadedRecipeIndex): ResourceQueryIndexes {
+  if (catalog.resourceIndexes) {
+    return catalog.resourceIndexes;
+  }
+
+  const searchText: string[] = [];
+  const sortedResourceIndexes = catalog.resourceIndex
+    .map((resource, index) => {
+      searchText[index] = normalizeResourceSearchText(resource);
+      return index;
+    })
+    .sort((leftIndex, rightIndex) => {
+      const left = catalog.resourceIndex[leftIndex];
+      const right = catalog.resourceIndex[rightIndex];
+      return (
+        (right?.recipeCount ?? 0) - (left?.recipeCount ?? 0) ||
+        (left?.displayName ?? left?.id ?? "").localeCompare(right?.displayName ?? right?.id ?? "")
+      );
+    });
+
+  catalog.resourceIndexes = {
+    sortedResourceIndexes,
+    searchText,
+  };
+  return catalog.resourceIndexes;
 }
 
 function addRecipeIndex(index: Map<string, number[]>, key: string, recipeIndex: number) {
@@ -412,6 +490,97 @@ function buildRecipeSearchText(recipe: RecipeSummary): string {
       .filter(Boolean)
       .join(" "),
   );
+}
+
+function normalizeResourceSearchText(resource: DatasetResourceIndexEntry): string {
+  return normalizeText([resource.displayName, resource.id, resource.kind].filter(Boolean).join(" "));
+}
+
+function buildRecipeMapIconMap(
+  recipeMaps: string[],
+  resources: DatasetResourceIndexEntry[],
+): Map<string, DatasetResourceIndexEntry | undefined> {
+  const candidates = getRecipeMapIconCandidates(resources);
+  return new Map(recipeMaps.map((recipeMap) => [recipeMap, findRecipeMapIcon(recipeMap, candidates)]));
+}
+
+interface RecipeMapIconCandidate {
+  resource: DatasetResourceIndexEntry;
+  label: string;
+  tokens: Set<string>;
+  exactMachineBonus: boolean;
+  prefixBonus: boolean;
+  penalty: boolean;
+}
+
+function getRecipeMapIconCandidates(resources: DatasetResourceIndexEntry[]): RecipeMapIconCandidate[] {
+  return resources
+    .filter((resource) => resource.kind === "item" && (resource.iconPath || resource.iconAtlas))
+    .map((resource) => {
+      const label = normalizeText(resource.displayName ?? resource.id);
+      return {
+        resource,
+        label,
+        tokens: new Set(label.split(" ").filter(Boolean)),
+        exactMachineBonus: resource.id.startsWith("gregtech:gt.blockmachines@"),
+        prefixBonus: /^(basic|steam|simple|large) /.test(label),
+        penalty: /\b(pipe|cover|upgrade|part|component)\b/.test(label),
+      };
+    });
+}
+
+function findRecipeMapIcon(
+  recipeMap: string,
+  candidates: RecipeMapIconCandidate[],
+): DatasetResourceIndexEntry | undefined {
+  const recipeMapTokens = tokenizeRecipeMap(recipeMap);
+  const normalizedMap = normalizeText(recipeMap);
+  let best: { resource: DatasetResourceIndexEntry; score: number } | undefined;
+
+  for (const candidate of candidates) {
+    let score = 0;
+
+    if (candidate.label === normalizedMap) {
+      score += 120;
+    } else if (candidate.label.includes(normalizedMap)) {
+      score += 80;
+    }
+
+    for (const token of recipeMapTokens) {
+      if (candidate.tokens.has(token) || candidate.label.includes(token)) {
+        score += 14;
+      }
+    }
+
+    if (candidate.exactMachineBonus) {
+      score += 35;
+    }
+    if (candidate.prefixBonus) {
+      score += 12;
+    }
+    if (candidate.penalty) {
+      score -= 30;
+    }
+
+    if (score > (best?.score ?? 0)) {
+      best = { resource: candidate.resource, score };
+    }
+  }
+
+  return best && best.score >= 35 ? best.resource : undefined;
+}
+
+function tokenizeRecipeMap(value: string): string[] {
+  const aliases: Record<string, string[]> = {
+    washer: ["washing", "wash"],
+    wash: ["washing", "washer"],
+    extractor: ["extractor", "extract"],
+  };
+
+  return normalizeText(value)
+    .split(" ")
+    .filter((token) => token.length > 2)
+    .flatMap((token) => [token, ...(aliases[token] ?? [])]);
 }
 
 function recipeMatchesTierIndex(indexes: QueryIndexes, recipeIndex: number, maxTier: TierFilter) {
