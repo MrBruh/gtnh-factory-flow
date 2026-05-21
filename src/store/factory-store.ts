@@ -564,12 +564,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         return state;
       }
 
-      const project = touchProject(
-        pruneInvalidEdgesAndOrphanStorages({
-          ...state.project,
-          edges: [...state.project.edges, ...missingEdges],
-        }),
-      );
+      const project = touchProject({
+        ...state.project,
+        edges: [...state.project.edges, ...missingEdges],
+      });
 
       return {
         project,
@@ -624,12 +622,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         };
       }
 
-      const project = touchProject(
-        pruneInvalidEdgesAndOrphanStorages({
-          ...state.project,
-          edges: [...state.project.edges, edge],
-        }),
-      );
+      const project = touchProject({
+        ...state.project,
+        edges: [...state.project.edges, edge],
+      });
       return {
         project,
         lastResult: calculateThroughput(project),
@@ -733,12 +729,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         return state;
       }
 
-      const project = touchProject(
-        pruneInvalidEdgesAndOrphanStorages({
-          ...state.project,
-          edges: [...state.project.edges, ...edges],
-        }),
-      );
+      const project = touchProject({
+        ...state.project,
+        edges: [...state.project.edges, ...edges],
+      });
 
       return {
         project,

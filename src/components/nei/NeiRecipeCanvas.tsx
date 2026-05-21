@@ -22,6 +22,7 @@ interface NeiRecipeCanvasProps {
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
+  slotTooltip?: boolean;
 }
 
 export function NeiRecipeCanvas({
@@ -33,9 +34,10 @@ export function NeiRecipeCanvas({
   renderHandle,
   getSlotConnectionAttributes,
   onSlotClick,
+  slotTooltip = true,
 }: NeiRecipeCanvasProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
-  const layout = getNeiRecipeLayout(recipe);
+  const layout = useMemo(() => getNeiRecipeLayout(recipe), [recipe]);
   const renderLayout = useMemo(
     () => getRenderLayout(layout.frames, layout.logo.y, layout.overflowGroups, expandedGroups),
     [expandedGroups, layout.frames, layout.logo.y, layout.overflowGroups],
@@ -79,6 +81,7 @@ export function NeiRecipeCanvas({
             renderHandle={renderHandle}
             getSlotConnectionAttributes={getSlotConnectionAttributes}
             onSlotClick={onSlotClick}
+            slotTooltip={slotTooltip}
             onOverflowClick={
               frame.action === "overflow"
                 ? () =>
@@ -287,6 +290,7 @@ function NeiSlotFrameView({
   renderHandle,
   getSlotConnectionAttributes,
   onSlotClick,
+  slotTooltip,
   onOverflowClick,
   onCollapseClick,
 }: {
@@ -295,6 +299,7 @@ function NeiSlotFrameView({
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
+  slotTooltip: boolean;
   onOverflowClick?: () => void;
   onCollapseClick?: () => void;
 }) {
@@ -302,6 +307,15 @@ function NeiSlotFrameView({
   const isOverflow = frame.action === "overflow";
   const isCollapse = frame.action === "collapse";
   const connectionAttributes = slot ? getSlotConnectionAttributes?.(slot) : undefined;
+  const backgroundStyle = {
+    backgroundImage: `url('${getSlotTexture(frame)}')`,
+    backgroundSize: "100% 100%",
+    imageRendering: "pixelated" as const,
+  };
+
+  if (!slot && !isOverflow && !isCollapse) {
+    return <div className="h-full w-full" style={backgroundStyle} />;
+  }
 
   return (
     <button
@@ -349,11 +363,7 @@ function NeiSlotFrameView({
           ? "cursor-pointer hover:ring-2 hover:ring-cyan-300"
           : "",
       ].join(" ")}
-      style={{
-        backgroundImage: `url('${getSlotTexture(frame)}')`,
-        backgroundSize: "100% 100%",
-        imageRendering: "pixelated",
-      }}
+      style={backgroundStyle}
     >
       {slot ? renderHandle?.(slot) : null}
       {isOverflow || isCollapse ? (
@@ -368,6 +378,7 @@ function NeiSlotFrameView({
           showName={false}
           className="!h-full !w-full"
           iconPixelSize={iconPixelSize}
+          tooltip={slotTooltip}
           bare
         />
       ) : null}

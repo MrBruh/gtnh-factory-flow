@@ -1,7 +1,16 @@
 "use client";
 
 import { Archive, GitBranchPlus, Plus, Search, X } from "lucide-react";
-import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import type { PointerEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
@@ -22,7 +31,7 @@ import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
-const RECIPE_QUERY_LIMIT = 24;
+const RECIPE_QUERY_LIMIT = 12;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 
 export function RecipeBrowser() {
@@ -590,20 +599,21 @@ function VirtualResourceResultList({
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const [page, setPage] = useState(0);
+  const [, startPageTransition] = useTransition();
   const pageSize = 10;
   const pageCount = Math.max(1, Math.ceil(resources.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
-  const warmPages = getWarmResourcePages(currentPage, pageCount);
-  const warmedResources = warmPages.flatMap((warmPage) =>
-    resources.slice(warmPage * pageSize, (warmPage + 1) * pageSize),
-  );
   const handlePreviousPage = useCallback(() => {
-    setPage((current) => Math.max(0, current - 1));
-  }, []);
+    startPageTransition(() => {
+      setPage((current) => Math.max(0, current - 1));
+    });
+  }, [startPageTransition]);
   const handleNextPage = useCallback(() => {
-    setPage((current) => Math.min(pageCount - 1, current + 1));
-  }, [pageCount]);
+    startPageTransition(() => {
+      setPage((current) => Math.min(pageCount - 1, current + 1));
+    });
+  }, [pageCount, startPageTransition]);
 
   return (
     <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
@@ -613,10 +623,9 @@ function VirtualResourceResultList({
             key={`${resource.kind}:${resource.id}`}
             resource={resource}
             active={activeResource?.kind === resource.kind && activeResource.id === resource.id}
-            onBrowse={(mode) => onBrowse(resource, mode)}
+            onBrowseResource={onBrowse}
           />
         ))}
-        <ResourcePageWarmup resources={warmedResources} />
       </div>
       <ResourcePager
         currentPage={currentPage}
@@ -668,59 +677,31 @@ function ResourcePager({
   );
 }
 
-function getWarmResourcePages(currentPage: number, pageCount: number) {
-  const pages: number[] = [];
-  for (const page of [currentPage - 1, currentPage + 1, currentPage + 2]) {
-    if (page >= 0 && page < pageCount && !pages.includes(page)) {
-      pages.push(page);
-    }
-  }
-  return pages;
-}
-
-const ResourcePageWarmup = memo(function ResourcePageWarmup({
-  resources,
-}: {
-  resources: IndexedResource[];
-}) {
-  if (resources.length === 0) {
-    return null;
-  }
-
-  return (
-    <div
-      aria-hidden="true"
-      className="pointer-events-none absolute -left-[10000px] top-0 h-1 w-1 overflow-hidden opacity-0"
-    >
-      {resources.map((resource) => (
-        <ResourceIcon
-          key={`${resource.kind}:${resource.id}`}
-          resource={{ ...resource, amount: 1 }}
-          size="sm"
-          showAmount={false}
-          tooltip={false}
-        />
-      ))}
-    </div>
-  );
-});
-
 const ResourceResult = memo(function ResourceResult({
   resource,
   active,
-  onBrowse,
+  onBrowseResource,
 }: {
   resource: IndexedResource;
   active?: boolean;
-  onBrowse: (mode: "recipes" | "uses") => void;
+  onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
+  const [, startBrowseTransition] = useTransition();
+  const iconResource = useMemo(() => ({ ...resource, amount: 1 }), [resource]);
+  const browse = useCallback(
+    (mode: "recipes" | "uses") => {
+      startBrowseTransition(() => onBrowseResource(resource, mode));
+    },
+    [onBrowseResource, resource, startBrowseTransition],
+  );
+
   return (
     <button
       type="button"
-      onClick={() => onBrowse("recipes")}
+      onClick={() => browse("recipes")}
       onContextMenu={(event) => {
         event.preventDefault();
-        onBrowse("uses");
+        browse("uses");
       }}
       className={[
         "flex items-center gap-2 rounded-[4px] border bg-[#303238] p-2 text-left",
@@ -728,7 +709,7 @@ const ResourceResult = memo(function ResourceResult({
       ].join(" ")}
       title="Left click: recipes. Right click: uses."
     >
-      <ResourceIcon resource={{ ...resource, amount: 1 }} size="sm" showAmount={false} />
+      <ResourceIcon resource={iconResource} size="sm" showAmount={false} tooltip={false} />
       <span className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-neutral-50">
           {resourceLabel(resource)}
@@ -875,6 +856,7 @@ function RecipeBookOverlay({
   const initialPanelSize = getInitialRecipeBookSize();
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [panelSize, setPanelSize] = useState(initialPanelSize);
+  const [, startRecipePageTransition] = useTransition();
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -1061,9 +1043,15 @@ function RecipeBookOverlay({
               pageCount={recipePageCount}
               total={queryTotal}
               isLoading={isLoading}
-              onPreviousPage={() => onRecipePageChange(Math.max(0, currentRecipePage - 1))}
+              onPreviousPage={() =>
+                startRecipePageTransition(() =>
+                  onRecipePageChange(Math.max(0, currentRecipePage - 1)),
+                )
+              }
               onNextPage={() =>
-                onRecipePageChange(Math.min(recipePageCount - 1, currentRecipePage + 1))
+                startRecipePageTransition(() =>
+                  onRecipePageChange(Math.min(recipePageCount - 1, currentRecipePage + 1)),
+                )
               }
             />
           ) : null}
@@ -1218,7 +1206,7 @@ function RecipePagePager({
   );
 }
 
-function RecipeResultCard({
+const RecipeResultCard = memo(function RecipeResultCard({
   recipe,
   selected,
   onSelectRecipe,
@@ -1269,6 +1257,7 @@ function RecipeResultCard({
           scale={2}
           compact
           className="mx-auto"
+          slotTooltip={false}
           onSlotClick={
             onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined
           }
@@ -1281,7 +1270,7 @@ function RecipeResultCard({
       ) : null}
     </article>
   );
-}
+});
 
 function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
   return {
