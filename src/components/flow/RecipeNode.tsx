@@ -163,6 +163,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                   id={handleId}
                   type={isInput ? "target" : "source"}
                   position={isInput ? Position.Left : Position.Right}
+                  data-resource-handle="true"
+                  data-resource-node-id={projectNode.id}
+                  data-resource-handle-id={handleId}
                   title={`${isInput ? "Input" : "Output"}: ${
                     slot.resource.displayName ?? slot.resource.id
                   }`}

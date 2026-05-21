@@ -55,8 +55,8 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
         <FileJson className="h-5 w-5 text-cyan-700" />
         <div className="grid min-w-0 gap-1">
           <h1 className="truncate text-lg font-semibold text-neutral-950">GTNH Factory Flow</h1>
-          <label className="grid max-w-52 gap-0.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-            GTNH version
+          <label className="grid max-w-52 gap-0.5">
+            <span className="sr-only">GTNH version</span>
             <select
               value={selectedDatasetVersionId ?? ""}
               disabled={isDatasetLoading || !manifest?.versions.length}
@@ -95,7 +95,11 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
             onNotice("Board cleaned.");
           }}
         />
-        <ToolbarButton icon={Upload} label="Import plan JSON" onClick={() => projectInputRef.current?.click()} />
+        <ToolbarButton
+          icon={Upload}
+          label="Import plan JSON"
+          onClick={() => projectInputRef.current?.click()}
+        />
         <ToolbarButton icon={Download} label="Export plan JSON" onClick={exportJson} />
       </div>
 

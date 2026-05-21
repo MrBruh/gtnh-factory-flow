@@ -465,8 +465,8 @@ function ResourceHistoryPanel({
   }
 
   return (
-    <div className="pointer-events-auto z-20 max-h-[116px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
-      <div className="flex flex-wrap gap-2">
+    <div className="pointer-events-auto z-20 h-[58px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
+      <div className="flex flex-nowrap gap-2 overflow-hidden">
         {resources.map((resource) => (
           <button
             key={`${resource.kind}:${resource.id}`}

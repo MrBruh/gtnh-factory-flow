@@ -32,6 +32,14 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
   const net = result?.netPerSecond ?? 0;
   const unit = storage.kind === "fluid" ? "L/s" : "/s";
   const title = storage.displayName ?? storage.resourceId;
+  const inputHandleId = makeResourceHandleId("input", {
+    kind: storage.kind,
+    id: storage.resourceId,
+  });
+  const outputHandleId = makeResourceHandleId("output", {
+    kind: storage.kind,
+    id: storage.resourceId,
+  });
 
   return (
     <div
@@ -45,15 +53,21 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
       title={`${title}\nIn ${formatRate(produced, 3)}${unit}\nOut ${formatRate(consumed, 3)}${unit}\nNet ${net >= 0 ? "+" : ""}${formatRate(net, 3)}${unit}`}
     >
       <Handle
-        id={makeResourceHandleId("input", { kind: storage.kind, id: storage.resourceId })}
+        id={inputHandleId}
         type="target"
         position={Position.Left}
+        data-resource-handle="true"
+        data-resource-node-id={storage.id}
+        data-resource-handle-id={inputHandleId}
         className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
       <Handle
-        id={makeResourceHandleId("output", { kind: storage.kind, id: storage.resourceId })}
+        id={outputHandleId}
         type="source"
         position={Position.Right}
+        data-resource-handle="true"
+        data-resource-node-id={storage.id}
+        data-resource-handle-id={outputHandleId}
         className="nodrag !absolute !bottom-0 !left-1/2 !right-auto !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
 

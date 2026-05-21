@@ -21,6 +21,7 @@ import type {
 
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
 export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
+const RESOURCE_HISTORY_LIMIT = 8;
 
 interface FactoryStore {
   project: FactoryProject;
@@ -1162,7 +1163,7 @@ function updateResourceHistory(
   };
   const key = getResourceKey(entry);
 
-  return [entry, ...history.filter((item) => getResourceKey(item) !== key)].slice(0, 80);
+  return [entry, ...history.filter((item) => getResourceKey(item) !== key)].slice(0, RESOURCE_HISTORY_LIMIT);
 }
 
 export function loadResourceHistory(): RecipeBrowserResource[] {
@@ -1224,7 +1225,7 @@ function normalizeResourceHistory(value: unknown): RecipeBrowserResource[] {
 
     seen.add(key);
     history.push(entry);
-    if (history.length >= 80) {
+    if (history.length >= RESOURCE_HISTORY_LIMIT) {
       break;
     }
   }

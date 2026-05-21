@@ -298,6 +298,47 @@ export function FactoryFlow() {
     (event: MouseEvent | TouchEvent, connectionState: { toHandle: unknown | null }) => {
       const draggedResource = draggedResourceRef.current;
       draggedResourceRef.current = undefined;
+      const targetHandle = getResourceHandleAtPointer(event);
+
+      if (draggedResource && targetHandle) {
+        if (
+          draggedResource.nodeId !== targetHandle.nodeId &&
+          draggedResource.side !== targetHandle.side &&
+          draggedResource.kind === targetHandle.kind &&
+          draggedResource.id === targetHandle.resourceId
+        ) {
+          const source =
+            draggedResource.side === "output"
+              ? {
+                  nodeId: draggedResource.nodeId,
+                  handleId: draggedResource.handleId,
+                }
+              : {
+                  nodeId: targetHandle.nodeId,
+                  handleId: targetHandle.handleId,
+                };
+          const target =
+            draggedResource.side === "input"
+              ? {
+                  nodeId: draggedResource.nodeId,
+                  handleId: draggedResource.handleId,
+                }
+              : {
+                  nodeId: targetHandle.nodeId,
+                  handleId: targetHandle.handleId,
+                };
+
+          connectCompletedRef.current = true;
+          connectNodes(source.nodeId, target.nodeId, {
+            kind: draggedResource.kind,
+            id: draggedResource.id,
+            displayName: draggedResource.displayName,
+            sourceHandle: source.handleId,
+            targetHandle: target.handleId,
+          });
+        }
+        return;
+      }
 
       const flowInstance = flowInstanceRef.current;
       if (
@@ -324,7 +365,7 @@ export function FactoryFlow() {
         draggedResource.handleId,
       );
     },
-    [addStorageForConnection],
+    [addStorageForConnection, connectNodes],
   );
 
   const handleReconnect = useCallback(
@@ -661,6 +702,10 @@ function ResourceConnectionLine({
 }
 
 function isPointerOverFlowHandle(event: MouseEvent | TouchEvent) {
+  if (getResourceHandleAtPointer(event)) {
+    return true;
+  }
+
   const position = getClientPosition(event);
   if (!position || typeof document === "undefined") {
     return false;
@@ -669,6 +714,32 @@ function isPointerOverFlowHandle(event: MouseEvent | TouchEvent) {
   return document
     .elementsFromPoint(position.x, position.y)
     .some((element) => element.classList.contains("react-flow__handle"));
+}
+
+function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {
+  const position = getClientPosition(event);
+  if (!position || typeof document === "undefined") {
+    return undefined;
+  }
+
+  for (const element of document.elementsFromPoint(position.x, position.y)) {
+    const handleElement = element.closest<HTMLElement>("[data-resource-handle='true']");
+    const nodeId = handleElement?.dataset.resourceNodeId;
+    const handleId = handleElement?.dataset.resourceHandleId;
+    const handle = parseResourceHandleId(handleId);
+
+    if (nodeId && handleId && handle) {
+      return {
+        nodeId,
+        handleId,
+        side: handle.side,
+        kind: handle.kind,
+        resourceId: handle.resourceId,
+      };
+    }
+  }
+
+  return undefined;
 }
 
 const sampledResourceColorCache = new Map<string, string>();
