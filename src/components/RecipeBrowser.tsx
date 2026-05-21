@@ -108,8 +108,8 @@ export function RecipeBrowser() {
   );
 
   const recipeMapTabs = useMemo(
-    () => buildRecipeMapTabs(recipeMaps, dataset?.resources ?? []),
-    [dataset?.resources, recipeMaps],
+    () => buildRecipeMapTabs(recipeMaps, dataset?.resourceIndex ?? dataset?.resources ?? []),
+    [dataset?.resourceIndex, dataset?.resources, recipeMaps],
   );
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
@@ -1178,7 +1178,10 @@ function resourceMatchesQuery(resource: IndexedResource, query: string): boolean
     .some((value) => value?.toLowerCase().includes(query));
 }
 
-function buildRecipeMapTabs(recipeMaps: string[], resources: DatasetResource[]): RecipeMapTab[] {
+function buildRecipeMapTabs(
+  recipeMaps: string[],
+  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
+): RecipeMapTab[] {
   return recipeMaps.map((recipeMap) => {
     const resource = findRecipeMapIcon(recipeMap, resources);
     return {
@@ -1200,18 +1203,18 @@ function buildRecipeMapTabs(recipeMaps: string[], resources: DatasetResource[]):
 
 function findRecipeMapIcon(
   recipeMap: string,
-  resources: DatasetResource[],
-): DatasetResource | undefined {
+  resources: Array<DatasetResource | DatasetResourceIndexEntry>,
+): DatasetResource | DatasetResourceIndexEntry | undefined {
   const recipeMapTokens = tokenizeRecipeMap(recipeMap);
   const normalizedMap = normalizeText(recipeMap);
-  let best: { resource: DatasetResource; score: number } | undefined;
+  let best: { resource: DatasetResource | DatasetResourceIndexEntry; score: number } | undefined;
 
   for (const resource of resources) {
     if (resource.kind !== "item" || (!resource.iconPath && !resource.iconAtlas)) {
       continue;
     }
 
-    const label = normalizeText(resource.displayName);
+    const label = normalizeText(resource.displayName ?? resource.id);
     const tokens = new Set(label.split(" ").filter(Boolean));
     let score = 0;
 

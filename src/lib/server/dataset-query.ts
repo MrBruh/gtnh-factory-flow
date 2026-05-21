@@ -57,7 +57,7 @@ export async function getDatasetCatalog(versionId: string) {
     datasetVersionId: catalog.version.id,
     gtnhVersion: catalog.version.gtnhVersion,
     sourceInfo: catalog.version.sourceInfo,
-    resources: catalog.resources,
+    resources: [],
     resourceIndex: catalog.resourceIndex,
     recipes: [],
     recipeCount: catalog.recipeCount,
