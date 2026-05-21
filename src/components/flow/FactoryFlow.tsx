@@ -90,6 +90,9 @@ export function FactoryFlow() {
   const connectNodes = useFactoryStore((state) => state.connectNodes);
   const reconnectEdge = useFactoryStore((state) => state.reconnectEdge);
   const addStorageForConnection = useFactoryStore((state) => state.addStorageForConnection);
+  const selectedNodeId = useFactoryStore((state) => state.selectedNodeId);
+  const deleteNode = useFactoryStore((state) => state.deleteNode);
+  const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
@@ -403,11 +406,29 @@ export function FactoryFlow() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (isEditableKeyboardTarget(event.target)) {
+          return;
+        }
+
         if (selectedEdgeIds.length > 0) {
           selectedEdgeIds.forEach((edgeId) => deleteEdge(edgeId));
           setSelectedEdgeIds([]);
           return;
         }
+
+        if (selectedNodeId) {
+          if (project.nodes.some((node) => node.id === selectedNodeId)) {
+            deleteNode(selectedNodeId);
+            return;
+          }
+
+          if ((project.storages ?? []).some((storage) => storage.id === selectedNodeId)) {
+            deleteStorage(selectedNodeId);
+            selectNode(undefined);
+            return;
+          }
+        }
+
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
       }
@@ -415,7 +436,18 @@ export function FactoryFlow() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cancelResourceConnection, deleteEdge, selectedEdgeIds, setNodeColorPaintMode]);
+  }, [
+    cancelResourceConnection,
+    deleteEdge,
+    deleteNode,
+    deleteStorage,
+    project.nodes,
+    project.storages,
+    selectNode,
+    selectedEdgeIds,
+    selectedNodeId,
+    setNodeColorPaintMode,
+  ]);
 
   const handleSelectionChange = useCallback(({ edges: selectedEdges }: OnSelectionChangeParams) => {
     setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
@@ -714,6 +746,14 @@ function isPointerOverFlowHandle(event: MouseEvent | TouchEvent) {
   return document
     .elementsFromPoint(position.x, position.y)
     .some((element) => element.classList.contains("react-flow__handle"));
+}
+
+function isEditableKeyboardTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
 }
 
 function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {

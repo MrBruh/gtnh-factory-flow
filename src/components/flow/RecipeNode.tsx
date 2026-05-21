@@ -333,7 +333,8 @@ function MachineCountStat({
           onClick={(event) => event.stopPropagation()}
           inputMode="numeric"
           aria-label="Machine count"
-          className="nodrag w-0 min-w-0 flex-1 bg-transparent text-[12px] font-medium leading-4 text-black outline-none"
+          title="Edit machine count"
+          className="nodrag h-[18px] w-0 min-w-0 flex-1 border border-[#777] bg-[#d8d8d8] px-1 text-[12px] font-medium leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white focus:ring-1 focus:ring-cyan-400"
         />
         <button
           type="button"

@@ -1,7 +1,6 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Cable } from "lucide-react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
 import { formatRate, makeResourceKey } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -18,8 +17,6 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
-  const deleteStorage = useFactoryStore((state) => state.deleteStorage);
-  const autoRouteStorage = useFactoryStore((state) => state.autoRouteStorage);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const setHoveredStorageResourceKey = useFactoryStore(
     (state) => state.setHoveredStorageResourceKey,
@@ -59,7 +56,7 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
         data-resource-handle="true"
         data-resource-node-id={storage.id}
         data-resource-handle-id={inputHandleId}
-        className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+        className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-3 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
       <Handle
         id={outputHandleId}
@@ -68,7 +65,7 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
         data-resource-handle="true"
         data-resource-node-id={storage.id}
         data-resource-handle-id={outputHandleId}
-        className="nodrag !absolute !bottom-0 !left-1/2 !right-auto !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+        className="nodrag !absolute !bottom-0 !left-auto !right-0 !top-0 !z-30 !h-full !w-3 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
 
       {storage.kind === "fluid" ? (
@@ -79,8 +76,6 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           consumed={consumed}
           net={net}
           unit={unit}
-          onDelete={() => deleteStorage(storage.id)}
-          onAutoRoute={() => autoRouteStorage(storage.id)}
         />
       ) : (
         <ItemStorageCard
@@ -89,8 +84,6 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           consumed={consumed}
           net={net}
           unit={unit}
-          onDelete={() => deleteStorage(storage.id)}
-          onAutoRoute={() => autoRouteStorage(storage.id)}
         />
       )}
     </div>
@@ -99,13 +92,9 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
 
 function StorageHeader({
   title,
-  onDelete,
-  onAutoRoute,
   variant,
 }: {
   title: string;
-  onDelete: () => void;
-  onAutoRoute: () => void;
   variant: "tank" | "drawer";
 }) {
   return (
@@ -115,33 +104,11 @@ function StorageHeader({
         variant === "tank" ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
     >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onDelete();
-        }}
-        className="nodrag h-4 w-4 border border-[#252525] bg-[#7d7d7d] text-xs leading-[9px] text-white hover:bg-red-700"
-        title="Delete storage"
-        aria-label="Delete storage"
-      >
-        -
-      </button>
+      <span className="h-4 w-4 border border-[#252525] bg-[#7d7d7d] shadow-[inset_1px_1px_0_rgba(255,255,255,0.35),inset_-1px_-1px_0_rgba(0,0,0,0.45)]" />
       <div className="minecraft-title min-w-0 flex-1 truncate text-center text-[13px] leading-4">
         {title}
       </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          onAutoRoute();
-        }}
-        className="nodrag h-4 w-4 border border-[#252525] bg-[#7d7d7d] text-white hover:bg-[#9b9b9b]"
-        title="Auto-route matching recipes through this storage"
-        aria-label="Auto-route matching recipes through this storage"
-      >
-        <Cable className="mx-auto h-2.5 w-2.5" />
-      </button>
+      <span className="h-4 w-4 border border-[#252525] bg-[#7d7d7d] shadow-[inset_1px_1px_0_rgba(255,255,255,0.35),inset_-1px_-1px_0_rgba(0,0,0,0.45)]" />
     </div>
   );
 }
@@ -153,8 +120,6 @@ function FluidStorageCard({
   consumed,
   net,
   unit,
-  onDelete,
-  onAutoRoute,
 }: {
   storage: FactoryStorage;
   result?: StorageThroughputResult;
@@ -162,17 +127,10 @@ function FluidStorageCard({
   consumed: number;
   net: number;
   unit: string;
-  onDelete: () => void;
-  onAutoRoute: () => void;
 }) {
   return (
     <div className="w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[0_0_0_3px_#53e5ef,inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]">
-      <StorageHeader
-        title="Super Tank"
-        variant="tank"
-        onDelete={onDelete}
-        onAutoRoute={onAutoRoute}
-      />
+      <StorageHeader title="Super Tank" variant="tank" />
       <div className="border-2 border-[#80889c] bg-[#9fa9bd] p-2 shadow-[inset_2px_2px_0_#d8deeb,inset_-2px_-2px_0_#767f91]">
         <div className="relative h-[92px] border-2 border-[#1a1a1a] bg-black p-1 shadow-[2px_2px_0_#e2e7f0,-2px_-2px_0_#70798b]">
           <div
@@ -203,25 +161,16 @@ function ItemStorageCard({
   consumed,
   net,
   unit,
-  onDelete,
-  onAutoRoute,
 }: {
   storage: FactoryStorage;
   produced: number;
   consumed: number;
   net: number;
   unit: string;
-  onDelete: () => void;
-  onAutoRoute: () => void;
 }) {
   return (
     <div className="w-[174px] border-2 border-[#2b1c0e] bg-[#8a6030] p-1 shadow-[0_0_0_3px_#53e5ef,inset_3px_3px_0_#ad7b3e,inset_-3px_-3px_0_#3e2a13]">
-      <StorageHeader
-        title="Drawer"
-        variant="drawer"
-        onDelete={onDelete}
-        onAutoRoute={onAutoRoute}
-      />
+      <StorageHeader title="Drawer" variant="drawer" />
       <div className="mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]">
         <div className="grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <ResourceIcon
