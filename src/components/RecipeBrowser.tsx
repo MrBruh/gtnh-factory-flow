@@ -110,7 +110,7 @@ export function RecipeBrowser() {
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap)
     ? selectedRecipeMap
-    : "";
+    : (recipeMaps[0] ?? "");
 
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
