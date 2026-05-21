@@ -201,7 +201,7 @@ async function loadDataset(
   }
 
   const response = await fetch(datasetUrl, {
-    cache: "force-cache",
+    cache: "no-store",
     headers: {
       Accept: "application/json, application/gzip, application/octet-stream",
     },

@@ -90,7 +90,7 @@ export async function initRecipeDatasetVersion(
   manifestUrl: string,
   version: DatasetVersion,
 ): Promise<RecipeDataset> {
-  const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
+  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
   const cacheKey = getDatasetCacheKey(version);
   const response = await sendDatasetWorkerRequest({
     type: "init",
@@ -111,7 +111,7 @@ export async function getRecipeDatasetRecipe(
   version: DatasetVersion,
   recipeId: string,
 ): Promise<Recipe> {
-  const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
+  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
   const cacheKey = getDatasetCacheKey(version);
   const response = await sendDatasetWorkerRequest({
     type: "getRecipe",
@@ -133,7 +133,7 @@ export async function queryRecipeDatasetRecipes(
   version: DatasetVersion,
   query: RecipeDatasetQuery,
 ): Promise<RecipeDatasetQueryResult> {
-  const datasetUrl = resolveDatasetUrl(manifestUrl, version.recipeDatasetPath);
+  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
   const cacheKey = getDatasetCacheKey(version);
   const response = await sendDatasetWorkerRequest({
     type: "queryRecipes",
@@ -155,6 +155,15 @@ export async function queryRecipeDatasetRecipes(
 }
 
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
+
+function getVersionedDatasetUrl(manifestUrl: string, version: DatasetVersion): string {
+  const datasetUrl = new URL(resolveDatasetUrl(manifestUrl, version.recipeDatasetPath));
+  datasetUrl.searchParams.set(
+    "datasetVersion",
+    version.checksumSha256 ?? version.publishedAt ?? version.id,
+  );
+  return datasetUrl.toString();
+}
 
 function sendDatasetWorkerRequest(
   request: WorkerRequestInput,
@@ -212,7 +221,7 @@ function getDatasetWorker(): Worker {
 
 function getDatasetCacheKey(version: DatasetVersion): string {
   return [
-    "worker-v4",
+    "worker-v5",
     version.id,
     version.recipeDatasetPath,
     version.checksumSha256,
