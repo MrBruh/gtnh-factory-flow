@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { AlertTriangle, WandSparkles } from "lucide-react";
 import type { FactoryNode, MachineTier, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
@@ -18,6 +18,7 @@ import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
+import { GT_TIER_COLORS } from "./tier-colors";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -43,6 +44,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const recipePowerTier = getRecipePowerTier(recipe);
   const tierControl = getNodeTierControl(recipe, projectNode);
   const overclockedRecipe = { ...recipe, ...getOverclockedRecipeStats(recipe, projectNode) };
+  const tierColor = GT_TIER_COLORS[tierControl.current];
   const exceedsMaxTier =
     maxTierFilter !== "all" && isVoltageTierAbove(recipePowerTier, maxTierFilter);
   const updateTier = (direction: -1 | 1) => {
@@ -80,7 +82,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         </div>
       ) : null}
       <div className="px-2 pb-2 pt-1">
-        <div className="mb-1 grid min-w-0 grid-cols-[24px_minmax(0,1fr)_36px] items-center">
+        <div className="mb-1 grid min-w-0 grid-cols-[24px_minmax(0,1fr)_50px] items-center">
           <button
             type="button"
             onClick={(event) => {
@@ -110,90 +112,113 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               event.stopPropagation();
               updateTier(-1);
             }}
-            className="nodrag h-6 w-9 border-2 border-[#252525] bg-[#7d7d7d] text-[12px] font-bold leading-[18px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#8d8d8d]"
+            className="nodrag h-6 w-[50px] border-2 px-1 text-[11px] font-bold leading-[18px] shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+            style={{
+              backgroundColor: tierColor.background,
+              borderColor: tierColor.border,
+              color: tierColor.text,
+              textShadow: `1px 1px 0 ${tierColor.shadow}`,
+            }}
             title={`Tier ${tierControl.current}. Left click up, right click down.`}
             aria-label={`Tier ${tierControl.current}`}
           >
             {tierControl.current}
           </button>
         </div>
-        <NeiRecipeWindow
-          recipe={overclockedRecipe}
-          scale={2}
-          compact
-          getSlotConnectionAttributes={(slot) => {
-            if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
-              return undefined;
-            }
+        <div
+          className={nodeColor ? "recipe-node-tinted-area" : undefined}
+          style={
+            nodeColor
+              ? ({
+                  "--recipe-node-tint": nodeColor.panel,
+                  "--recipe-node-tint-header": nodeColor.header,
+                  "--recipe-node-tint-border": nodeColor.border,
+                } as CSSProperties)
+              : undefined
+          }
+        >
+          <NeiRecipeWindow
+            recipe={overclockedRecipe}
+            scale={2}
+            compact
+            className={nodeColor ? "recipe-node-nei-tint" : undefined}
+            getSlotConnectionAttributes={(slot) => {
+              if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
+                return undefined;
+              }
 
-            const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
-            return {
-              "data-resource-handle": "true",
-              "data-resource-node-id": projectNode.id,
-              "data-resource-handle-id": handleId,
-            };
-          }}
-          onSlotClick={(slot, mode) => {
-            browseResource(
-              {
-                kind: slot.resource.kind,
-                id: slot.resource.id,
-                displayName: slot.resource.displayName,
-                iconPath: slot.resource.iconPath,
-                iconAtlas: slot.resource.iconAtlas,
-                anchorNodeId: projectNode.id,
-              },
-              mode,
-            );
-          }}
-          renderHandle={(slot) => {
-            const isInput = slot.side === "input";
-            if (isInput && !isRecipeInputConsumed(slot.resource)) {
-              return null;
-            }
-            const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
-            const slotState = getConnectionSlotState(
-              pendingResourceConnection,
-              projectNode.id,
-              slot.side,
-              slot.resource.kind,
-              slot.resource.id,
-              handleId,
-            );
+              const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+              return {
+                "data-resource-handle": "true",
+                "data-resource-node-id": projectNode.id,
+                "data-resource-handle-id": handleId,
+              };
+            }}
+            onSlotClick={(slot, mode) => {
+              browseResource(
+                {
+                  kind: slot.resource.kind,
+                  id: slot.resource.id,
+                  displayName: slot.resource.displayName,
+                  iconPath: slot.resource.iconPath,
+                  iconAtlas: slot.resource.iconAtlas,
+                  anchorNodeId: projectNode.id,
+                },
+                mode,
+              );
+            }}
+            renderHandle={(slot) => {
+              const isInput = slot.side === "input";
+              if (isInput && !isRecipeInputConsumed(slot.resource)) {
+                return null;
+              }
+              const handleId = makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex);
+              const slotState = getConnectionSlotState(
+                pendingResourceConnection,
+                projectNode.id,
+                slot.side,
+                slot.resource.kind,
+                slot.resource.id,
+                handleId,
+              );
 
-            return (
-              <>
-                {slotState !== "idle" ? (
-                  <span
+              return (
+                <>
+                  {slotState !== "idle" ? (
+                    <span
+                      className={[
+                        "pointer-events-none absolute inset-0 z-20",
+                        slotState === "selected" ? "ring-2 ring-amber-300" : "",
+                        slotState === "compatible" ? "ring-2 ring-cyan-300" : "",
+                      ].join(" ")}
+                    />
+                  ) : null}
+                  <Handle
+                    id={handleId}
+                    type={isInput ? "target" : "source"}
+                    position={isInput ? Position.Left : Position.Right}
+                    data-resource-handle="true"
+                    data-resource-node-id={projectNode.id}
+                    data-resource-handle-id={handleId}
+                    title={`${isInput ? "Input" : "Output"}: ${
+                      slot.resource.displayName ?? slot.resource.id
+                    }`}
                     className={[
-                      "pointer-events-none absolute inset-0 z-20",
-                      slotState === "selected" ? "ring-2 ring-amber-300" : "",
-                      slotState === "compatible" ? "ring-2 ring-cyan-300" : "",
+                      "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+                      "!rounded-none !border-0 !bg-transparent !opacity-0",
+                      "cursor-crosshair",
                     ].join(" ")}
                   />
-                ) : null}
-                <Handle
-                  id={handleId}
-                  type={isInput ? "target" : "source"}
-                  position={isInput ? Position.Left : Position.Right}
-                  data-resource-handle="true"
-                  data-resource-node-id={projectNode.id}
-                  data-resource-handle-id={handleId}
-                  title={`${isInput ? "Input" : "Output"}: ${
-                    slot.resource.displayName ?? slot.resource.id
-                  }`}
-                  className={[
-                    "resource-slot-handle nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
-                    "!rounded-none !border-0 !bg-transparent !opacity-0",
-                    "cursor-crosshair",
-                  ].join(" ")}
-                />
-              </>
-            );
-          }}
-        />
+                </>
+              );
+            }}
+          />
+        </div>
 
-        <div className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black">
+        <div
+          className="mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black"
+          style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
+        >
           <MachineCountStat
             machineCount={projectNode.machineCount}
             suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}

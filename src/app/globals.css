@@ -115,3 +115,22 @@ textarea {
     1px 1px 0 #3f3f3f,
     2px 2px 0 #3f3f3f;
 }
+
+.recipe-node-tinted-area {
+  background: color-mix(in srgb, var(--recipe-node-tint) 55%, #c6c6c6);
+  box-shadow:
+    inset 1px 1px 0 rgba(255, 255, 255, 0.45),
+    inset -1px -1px 0 rgba(0, 0, 0, 0.25);
+}
+
+.recipe-node-tinted-area .recipe-node-nei-tint {
+  background: color-mix(in srgb, var(--recipe-node-tint) 72%, #c6c6c6);
+}
+
+.recipe-node-tinted-area .recipe-node-nei-tint > div {
+  background: color-mix(in srgb, var(--recipe-node-tint) 42%, #c6c6c6);
+}
+
+.recipe-node-tinted-area .recipe-node-nei-tint > div > div {
+  background: color-mix(in srgb, var(--recipe-node-tint) 24%, #c6c6c6);
+}
