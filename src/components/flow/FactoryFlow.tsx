@@ -6,7 +6,6 @@ import {
   Controls,
   EdgeLabelRenderer,
   MarkerType,
-  MiniMap,
   ReactFlow,
   applyNodeChanges,
   getSmoothStepPath,
@@ -18,7 +17,7 @@ import {
   type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatRate } from "@/lib/model";
 import type { FactoryEdge, FactoryProject, ResourceAmount } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
@@ -256,36 +255,6 @@ export function FactoryFlow() {
       >
         <Background gap={24} color="#d4d4d4" />
         <Controls position="bottom-left" />
-        <MiniMap
-          pannable
-          zoomable
-          position="bottom-right"
-          bgColor="#f8fafc"
-          maskColor="rgba(15, 23, 42, 0.12)"
-          maskStrokeColor="#0f172a"
-          maskStrokeWidth={1}
-          nodeBorderRadius={3}
-          nodeStrokeWidth={3}
-          nodeComponent={FlowMiniMapNode}
-          nodeStrokeColor={(node) => {
-            if (node.type === "storageNode") return "#111827";
-            const status = result.nodes[node.id]?.status;
-            if (status === "balanced") return "#047857";
-            if (status === "bottleneck" || status === "missing-recipe") return "#b91c1c";
-            if (status === "disabled") return "#737373";
-            return "#b45309";
-          }}
-          nodeColor={(node) => {
-            if (node.type === "storageNode") {
-              return "#38bdf8";
-            }
-            const status = result.nodes[node.id]?.status;
-            if (status === "balanced") return "#10b981";
-            if (status === "bottleneck" || status === "missing-recipe") return "#ef4444";
-            if (status === "disabled") return "#a3a3a3";
-            return "#f59e0b";
-          }}
-        />
       </ReactFlow>
       {pendingResourceConnection ? (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
@@ -295,52 +264,6 @@ export function FactoryFlow() {
         </div>
       ) : null}
     </div>
-  );
-}
-
-function FlowMiniMapNode({
-  id,
-  x,
-  y,
-  width,
-  height,
-  color,
-  strokeColor,
-  strokeWidth,
-  borderRadius,
-  selected,
-  onClick,
-}: {
-  id: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  color?: string;
-  strokeColor?: string;
-  strokeWidth?: number;
-  borderRadius: number;
-  selected: boolean;
-  onClick?: (event: MouseEvent, id: string) => void;
-}) {
-  const visibleWidth = Math.max(width, 96);
-  const visibleHeight = Math.max(height, 64);
-  const visibleX = x - (visibleWidth - width) / 2;
-  const visibleY = y - (visibleHeight - height) / 2;
-
-  return (
-    <rect
-      x={visibleX}
-      y={visibleY}
-      width={visibleWidth}
-      height={visibleHeight}
-      rx={borderRadius}
-      ry={borderRadius}
-      fill={color ?? "#94a3b8"}
-      stroke={selected ? "#0e7490" : strokeColor ?? "#334155"}
-      strokeWidth={selected ? Math.max(strokeWidth ?? 2, 6) : strokeWidth}
-      onClick={onClick ? (event) => onClick(event, id) : undefined}
-    />
   );
 }
 

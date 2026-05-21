@@ -63,16 +63,6 @@ textarea {
   pointer-events: auto;
 }
 
-.factory-flow-board .react-flow__minimap {
-  background: #f8fafc;
-  border: 1px solid #d4d4d4;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
-}
-
-.factory-flow-board .react-flow__minimap-svg {
-  display: block;
-}
-
 .nei-tab-scroll {
   scrollbar-color: #8b8b8b #d0d0d0;
   scrollbar-width: thin;
