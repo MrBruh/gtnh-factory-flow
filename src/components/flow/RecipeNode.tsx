@@ -37,8 +37,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const utilization = result?.utilization ?? 0;
   const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
-  const status = result?.status ?? "underutilized";
-  const color = getStatusColor(status);
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
   const recipePowerTier = getRecipePowerTier(recipe);
@@ -60,7 +58,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
-        nodeColor ? "" : color.ring,
       ].join(" ")}
       style={
         nodeColor
@@ -355,20 +352,4 @@ function MachineCountStat({
       </div>
     </div>
   );
-}
-
-function getStatusColor(status: NodeThroughputResult["status"]) {
-  if (status === "balanced") {
-    return { ring: "border-emerald-500", spinner: "border-yellow-300" };
-  }
-
-  if (status === "bottleneck" || status === "missing-recipe") {
-    return { ring: "border-red-500", spinner: "border-red-400" };
-  }
-
-  if (status === "disabled") {
-    return { ring: "opacity-70", spinner: "border-neutral-500" };
-  }
-
-  return { ring: "border-amber-500", spinner: "border-yellow-300" };
 }
