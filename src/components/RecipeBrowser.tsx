@@ -526,6 +526,16 @@ function VirtualResourceResultList({
   const pageCount = Math.max(1, Math.ceil(resources.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  const warmPages = getWarmResourcePages(currentPage, pageCount);
+  const warmedResources = warmPages.flatMap((warmPage) =>
+    resources.slice(warmPage * pageSize, (warmPage + 1) * pageSize),
+  );
+  const handlePreviousPage = useCallback(() => {
+    setPage((current) => Math.max(0, current - 1));
+  }, []);
+  const handleNextPage = useCallback(() => {
+    setPage((current) => Math.min(pageCount - 1, current + 1));
+  }, [pageCount]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -538,11 +548,13 @@ function VirtualResourceResultList({
             onBrowse={(mode) => onBrowse(resource, mode)}
           />
         ))}
+        <ResourcePageWarmup resources={warmedResources} />
       </div>
       <ResourcePager
         currentPage={currentPage}
         pageCount={pageCount}
-        onPageChange={setPage}
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
       />
     </div>
   );
@@ -551,17 +563,19 @@ function VirtualResourceResultList({
 function ResourcePager({
   currentPage,
   pageCount,
-  onPageChange,
+  onPreviousPage,
+  onNextPage,
 }: {
   currentPage: number;
   pageCount: number;
-  onPageChange: (page: number) => void;
+  onPreviousPage: () => void;
+  onNextPage: () => void;
 }) {
   return (
     <div className="mt-2 grid h-8 shrink-0 grid-cols-[32px_minmax(0,1fr)_32px] items-center border border-neutral-700 bg-[#111317] text-center font-mono text-sm text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.08),inset_-1px_-1px_0_rgba(0,0,0,0.45)]">
       <button
         type="button"
-        onClick={() => onPageChange(Math.max(0, currentPage - 1))}
+        onClick={onPreviousPage}
         disabled={currentPage === 0}
         className="h-full border-r border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
         aria-label="Previous resource page"
@@ -574,7 +588,7 @@ function ResourcePager({
       </div>
       <button
         type="button"
-        onClick={() => onPageChange(Math.min(pageCount - 1, currentPage + 1))}
+        onClick={onNextPage}
         disabled={currentPage >= pageCount - 1}
         className="h-full border-l border-neutral-700 bg-[#1b1d21] text-red-400 disabled:opacity-35"
         aria-label="Next resource page"
@@ -585,6 +599,43 @@ function ResourcePager({
     </div>
   );
 }
+
+function getWarmResourcePages(currentPage: number, pageCount: number) {
+  const pages: number[] = [];
+  for (const page of [currentPage - 1, currentPage + 1, currentPage + 2]) {
+    if (page >= 0 && page < pageCount && !pages.includes(page)) {
+      pages.push(page);
+    }
+  }
+  return pages;
+}
+
+const ResourcePageWarmup = memo(function ResourcePageWarmup({
+  resources,
+}: {
+  resources: IndexedResource[];
+}) {
+  if (resources.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none absolute -left-[10000px] top-0 h-1 w-1 overflow-hidden opacity-0"
+    >
+      {resources.map((resource) => (
+        <ResourceIcon
+          key={`${resource.kind}:${resource.id}`}
+          resource={{ ...resource, amount: 1 }}
+          size="sm"
+          showAmount={false}
+          tooltip={false}
+        />
+      ))}
+    </div>
+  );
+});
 
 const ResourceResult = memo(function ResourceResult({
   resource,
