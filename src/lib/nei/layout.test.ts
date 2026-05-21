@@ -193,27 +193,31 @@ describe("NEI layout", () => {
   });
 
   it("uses machine-specific GregTech progress textures", () => {
-    expect(
-      getNeiRecipeLayout(
-        recipe({
-          machineType: "Extruder",
-          sourceRecipeMap: "Extruder",
-          inputs: [{ kind: "item", id: "ingot", amount: 1 }],
-          outputs: [{ kind: "item", id: "rod", amount: 2 }],
-        }),
-      ).progressBars[0]?.texture,
-    ).toBe("extrude");
+    const cases = [
+      ["Extruder", "extrude"],
+      ["Wiremill", "wiremill"],
+      ["Fluid Heater", "arrow_multiple"],
+      ["Distillery", "arrow_multiple"],
+      ["Chemical Reactor", "arrow_multiple"],
+      ["Centrifuge", "extract"],
+      ["Electrolyzer", "extract"],
+      ["Electromagnetic Separator", "magnet"],
+      ["Temperature Fluctuation", "water_plasma_heater"],
+      ["Slicer", "slice"],
+    ] as const;
 
-    expect(
-      getNeiRecipeLayout(
-        recipe({
-          machineType: "Wiremill",
-          sourceRecipeMap: "Wiremill",
-          inputs: [{ kind: "item", id: "ingot", amount: 1 }],
-          outputs: [{ kind: "item", id: "wire", amount: 2 }],
-        }),
-      ).progressBars[0]?.texture,
-    ).toBe("wiremill");
+    for (const [sourceRecipeMap, texture] of cases) {
+      expect(
+        getNeiRecipeLayout(
+          recipe({
+            machineType: sourceRecipeMap,
+            sourceRecipeMap,
+            inputs: [{ kind: "item", id: "input", amount: 1 }],
+            outputs: [{ kind: "item", id: "output", amount: 1 }],
+          }),
+        ).progressBars[0]?.texture,
+      ).toBe(texture);
+    }
   });
 });
 

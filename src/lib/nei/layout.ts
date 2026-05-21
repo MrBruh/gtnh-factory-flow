@@ -246,16 +246,58 @@ function getProgressBarsForRecipeMap(
 }
 
 function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
-  const normalized = recipeMap.toLowerCase();
+  const normalized = recipeMap.trim().toLowerCase();
   const exact: Record<string, NeiProgressTexture> = {
+    "bacterial vat": "arrow_multiple",
+    "bending machine": "bending",
+    "bio lab": "arrow_multiple",
+    brewery: "arrow_multiple",
+    "chemical reactor": "arrow_multiple",
+    "circuit assembly line": "circuit_assembler",
+    "cold trap": "sift",
+    "component assembly line": "arrow",
+    "distillation tower": "arrow_multiple",
+    distillery: "arrow_multiple",
+    "electric implosion compressor": "compress",
+    electrolyzer: "extract",
+    "electromagnetic polarizer": "magnet",
+    "electromagnetic separator": "magnet",
+    fermenter: "arrow_multiple",
+    flocculation: "flocculation",
+    "fluid heater": "arrow_multiple",
+    "fluid solidifier": "arrow",
+    "forming press": "compress",
+    "gt.recipe.multiblockrockbreaker": "macerate",
+    "high energy laser treatment": "uvtreatment",
+    "large chemical reactor": "arrow_multiple",
+    "matter amplifier": "arrow",
+    milling: "arrow",
+    "multiblock centrifuge": "extract",
+    "multiblock electrolyzer": "extract",
+    "multiblock mixer": "mixer",
+    "nano forge": "assemble",
+    "neutronium compressor": "compress",
+    "oil cracker": "arrow_multiple",
+    "pcb factory": "assemble",
+    "precise assembler": "arrow_multiple",
+    "quantum force transformer": "arrow_multiple",
+    "reactor processing unit": "sift",
+    "rock breaker": "macerate",
+    "simple dust washer": "arrow_multiple",
+    slicer: "slice",
+    "temperature fluctuation": "water_plasma_heater",
+    "tree growth simulator": "arrow",
+    "zhuhai - fishing port": "fishing",
     assembler: "assemble",
     canner: "canner",
-    centrifuge: "macerate",
+    centrifuge: "extract",
     "chemical bath": "bath",
     "circuit assembler": "circuit_assembler",
     clarifier: "clarifier",
+    "coke oven": "sift",
     compressor: "compress",
     "cutting machine": "cut",
+    dehydrator: "sift",
     extractor: "extract",
     extruder: "extrude",
     "fluid canner": "canner",
@@ -268,7 +310,6 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
     "ph neutralization": "phneutralization",
     sifter: "sift",
     wiremill: "wiremill",
-    "zhuhai - fishing port": "fishing",
   };
 
   const exactMatch = exact[normalized];
@@ -286,7 +327,7 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
   if (normalized.includes("extrud")) return "extrude";
   if (normalized.includes("hammer")) return "hammer";
   if (normalized.includes("lathe")) return "lathe";
-  if (normalized.includes("macerat") || normalized.includes("mill")) return "macerate";
+  if (normalized.includes("macerat")) return "macerate";
   if (normalized.includes("mix")) return "mixer";
   if (normalized.includes("sift")) return "sift";
   if (normalized.includes("wire")) return "wiremill";
