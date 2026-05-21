@@ -14,6 +14,7 @@ export interface DatasetResource {
   displayName: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
   modId?: string;
   tooltip?: string[];
   oreDictionary?: string[];
@@ -25,6 +26,7 @@ export interface DatasetResourceIndexEntry {
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
   recipeCount: number;
 }
 

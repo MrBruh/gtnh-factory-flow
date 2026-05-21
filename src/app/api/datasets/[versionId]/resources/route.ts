@@ -39,6 +39,6 @@ function parseLimit(value: string | null): number {
 
 function datasetCacheHeaders() {
   return {
-    "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+    "Cache-Control": "no-store",
   };
 }

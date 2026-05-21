@@ -70,7 +70,7 @@ if (!existsSync(recipeDatasetPath)) {
 let dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
 validateDataset(dataset);
 await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
-await buildIconAtlas(recipeDatasetPath, outDir);
+await finalizeRenderedIcons(recipeDatasetPath, outDir);
 await buildResourceIndex(recipeDatasetPath);
 await buildRecipeIndex(recipeDatasetPath, outDir);
 dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
@@ -155,25 +155,21 @@ async function pruneRenderedIcons(datasetPath, renderedDir) {
   }
 }
 
-async function buildIconAtlas(datasetPath, datasetOutDir) {
+async function finalizeRenderedIcons(datasetPath, datasetOutDir) {
   const exitCode = await new Promise((resolve) => {
     const child = spawn(
       "node",
-      ["tools/dataset-pipeline/scripts/build-icon-atlas.mjs", datasetPath, datasetOutDir],
+      ["tools/dataset-pipeline/scripts/finalize-rendered-icons.mjs", datasetPath, datasetOutDir],
       {
         stdio: "inherit",
-        env: {
-          ...process.env,
-          GTNH_ATLAS_ICON_SIZE: process.env.GTNH_ATLAS_ICON_SIZE ?? "256",
-          GTNH_ATLAS_MAX_SIZE: process.env.GTNH_ATLAS_MAX_SIZE ?? "8192",
-        },
+        env: process.env,
       },
     );
     child.on("exit", (code) => resolve(code ?? 1));
   });
 
   if (exitCode !== 0) {
-    throw new Error(`Icon atlas build failed with exit code ${exitCode}.`);
+    throw new Error(`Standalone icon finalization failed with exit code ${exitCode}.`);
   }
 }
 

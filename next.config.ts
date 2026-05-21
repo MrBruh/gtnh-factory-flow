@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/datasets/gtnh/:version/textures/atlas/:path*",
+        source: "/datasets/gtnh/:version/textures/icons/:path*",
         headers: [
           {
             key: "Cache-Control",

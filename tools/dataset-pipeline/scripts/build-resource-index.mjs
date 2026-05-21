@@ -54,6 +54,11 @@ function buildResourceIndex(dataset) {
         displayName: resource.displayName ?? indexed?.displayName,
         iconPath: currentIconPath(resource.iconPath, indexed?.iconPath),
         iconAtlas: indexed?.iconAtlas ?? resource.iconAtlas,
+        dominantColor:
+          indexed?.dominantColor ??
+          resource.dominantColor ??
+          indexed?.iconAtlas?.dominantColor ??
+          resource.iconAtlas?.dominantColor,
         recipeCount: 1,
       });
     }
@@ -71,6 +76,13 @@ function mergeResourceIcon(target, resource, indexed) {
   }
   if (!target.iconAtlas) {
     target.iconAtlas = indexed?.iconAtlas ?? resource.iconAtlas;
+  }
+  if (!target.dominantColor) {
+    target.dominantColor =
+      indexed?.dominantColor ??
+      resource.dominantColor ??
+      indexed?.iconAtlas?.dominantColor ??
+      resource.iconAtlas?.dominantColor;
   }
 }
 

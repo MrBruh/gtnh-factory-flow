@@ -42,8 +42,9 @@ artifacts.
    - Copy only matched PNGs into `/public/datasets/gtnh/<version>/textures/`.
    - Render item-stack icons in a headless GTNH client when the exporter runs with
      `GTNH_RENDER_STACK_ICONS=true`. These PNGs are written under
-     `/public/datasets/gtnh/<version>/textures/rendered/` and take priority over static
-     jar texture matches.
+     `/public/datasets/gtnh/<version>/textures/rendered/`, finalized to
+     `/public/datasets/gtnh/<version>/textures/icons/`, and take priority over static jar
+     texture matches.
    - Never generate substitute icons. If a stack cannot be rendered by the real client
      and no exact PNG exists, leave the icon blank.
 
@@ -93,8 +94,9 @@ The default runner is `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh`.
 - Launches the pack headlessly as a client unless `GTNH_EXPORT_PACK_KIND=server` is set.
 - Uses the real runtime recipe registry from the GTNH build/exporter.
 - Normalize raw output into the internal `RecipeDataset` shape.
-- Stores rendered client stack icons first, then extracts real matching texture PNGs
-  from the selected GTNH mods for resources that still do not have an icon.
+- Stores rendered client stack icons first, publishes them as standalone `textures/icons`
+  PNGs, then extracts real matching texture PNGs from the selected GTNH mods for resources
+  that still do not have an icon.
 - Write `$GTNH_DATASET_OUT_DIR/recipes.json`.
 
 `GTNH_CLIENT_EXPORT_COMMAND` can still override this default with another private runner,

@@ -163,6 +163,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                   displayName: slot.resource.displayName,
                   iconPath: slot.resource.iconPath,
                   iconAtlas: slot.resource.iconAtlas,
+                  dominantColor:
+                    slot.resource.dominantColor ?? slot.resource.iconAtlas?.dominantColor,
                   anchorNodeId: projectNode.id,
                 },
                 mode,

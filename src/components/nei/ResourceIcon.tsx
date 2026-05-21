@@ -23,12 +23,6 @@ const sizeClasses = {
   lg: "h-14 w-14",
 };
 
-const renderedIconSize = {
-  sm: 64,
-  md: 88,
-  lg: 104,
-};
-
 export function ResourceIcon({
   resource,
   size = "md",
@@ -54,7 +48,7 @@ export function ResourceIcon({
         className,
       ].join(" ")}
     >
-      <IconImage resource={resource} size={size} iconPixelSize={iconPixelSize} />
+      <IconImage resource={resource} iconPixelSize={iconPixelSize} />
 
       {resource && showAmount ? <AmountLabel resource={resource} /> : null}
       {resource?.chance !== undefined ? <ChanceLabel chance={resource.chance} /> : null}
@@ -95,54 +89,16 @@ function ChanceLabel({ chance }: { chance: number }) {
 
 function IconImage({
   resource,
-  size,
   iconPixelSize,
 }: {
   resource?: Pick<ResourceAmount, "id" | "displayName" | "iconPath" | "iconAtlas">;
-  size: "sm" | "md" | "lg";
   iconPixelSize?: number;
 }) {
   if (!resource) {
     return null;
   }
 
-  const displaySize = iconPixelSize ?? renderedIconSize[size];
-
-  if (resource.iconAtlas) {
-    const scale = displaySize / resource.iconAtlas.width;
-    return (
-      <span
-        role="img"
-        aria-label={resource.displayName ?? resource.id}
-        className="pixelated-image absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2 overflow-hidden"
-        style={{
-          width: displaySize,
-          height: displaySize,
-          imageRendering: "pixelated",
-        }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={resource.iconAtlas.imagePath}
-          alt=""
-          aria-hidden="true"
-          loading="lazy"
-          decoding="async"
-          className="pixelated-image block max-w-none"
-          style={{
-            width: resource.iconAtlas.atlasWidth * scale,
-            height: resource.iconAtlas.atlasHeight * scale,
-            transform: `translate(-${resource.iconAtlas.x * scale}px, -${
-              resource.iconAtlas.y * scale
-            }px)`,
-            imageRendering: "pixelated",
-          }}
-        />
-      </span>
-    );
-  }
-
-  if (!resource.iconPath || isLegacyRenderedIconPath(resource.iconPath)) {
+  if (!resource.iconPath) {
     return null;
   }
 
@@ -162,10 +118,6 @@ function IconImage({
       }}
     />
   );
-}
-
-function isLegacyRenderedIconPath(iconPath: string): boolean {
-  return iconPath.includes("/textures/rendered/");
 }
 
 function AmountLabel({ resource }: { resource: Pick<ResourceAmount, "kind" | "amount"> }) {

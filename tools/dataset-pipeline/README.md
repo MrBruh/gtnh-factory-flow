@@ -75,22 +75,22 @@ inspired by IconExporter. When `GTNH_RENDER_STACK_ICONS=true`, the recipe export
 queues icon keys while writing RecEx JSON. After the recipe JSON is complete, the client
 opens a temporary GUI screen, renders just those queued item/fluid icons in batches,
 filters blank and Minecraft missing-texture outputs, reuses a shared cache across
-stable/daily when the rendered filename key matches, then the Node pipeline packs the
-referenced PNGs into atlases.
+stable/daily when the rendered filename key matches, then the Node pipeline publishes
+the referenced PNGs as standalone files under `textures/icons/`.
 
 Useful knobs:
 
 - `GTNH_RENDER_STACK_ICONS=true|false` enables the Forge 1.7.10 exporter.
 - `GTNH_ICON_EXPORT_BATCH_SIZE=64` controls how many icons are rendered per client frame.
-- `GTNH_ATLAS_ICON_SIZE=256` controls the rendered icon size and atlas cell size.
+- `GTNH_ATLAS_ICON_SIZE=256` controls the rendered icon size. The historical name is
+  kept because the Minecraft renderer and cache already use it.
 - `GTNH_ICON_CACHE_DIR=$HOME/.cache/gtnh-factory-flow/icons/<size>` stores rendered
   icons reused between stable and daily when the item/fluid key resolves to the same
   filename. It intentionally lives outside the Actions workspace so `actions/checkout`
   cannot delete it between matrix jobs.
-- `GTNH_ATLAS_MAX_SIZE=8192` controls each atlas page size. At 256px cells this stores
-  1024 icons per page.
-- `GTNH_ATLAS_KEEP_RENDERED=true` keeps the intermediate per-icon PNGs for debugging.
-  The default removes them after `textures/atlas/*.png` has been written.
+- `GTNH_ATLAS_MAX_SIZE` and `GTNH_ATLAS_KEEP_RENDERED` are legacy knobs for the old
+  atlas packer. The default pipeline now removes `textures/rendered/` after writing
+  `textures/icons/*.png`.
 - `GTNH_RENDERED_ICON_DIR` is set by the runner and receives PNGs plus `icon-map.json`.
 
 The scripts do not synthesize missing icons. If a stack cannot be rendered by the GTNH

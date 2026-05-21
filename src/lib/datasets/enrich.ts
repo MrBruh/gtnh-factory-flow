@@ -49,6 +49,9 @@ export function buildDatasetResourceIndex(recipes: Recipe[]): DatasetResourceInd
         if (!existing.iconAtlas && resource.iconAtlas) {
           existing.iconAtlas = resource.iconAtlas;
         }
+        if (!existing.dominantColor) {
+          existing.dominantColor = resource.dominantColor ?? resource.iconAtlas?.dominantColor;
+        }
         if (!existing.displayName && resource.displayName) {
           existing.displayName = resource.displayName;
         }
@@ -59,6 +62,7 @@ export function buildDatasetResourceIndex(recipes: Recipe[]): DatasetResourceInd
           displayName: resource.displayName,
           iconPath: resource.iconPath,
           iconAtlas: resource.iconAtlas,
+          dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
           recipeCount: 1,
         });
       }
@@ -102,8 +106,15 @@ function enrichResource<T extends ResourceAmount>(
     ...indexed,
     ...resource,
     displayName: resource.displayName ?? indexed.displayName,
-    iconPath: isLegacyRenderedIconPath(resource.iconPath) ? indexed.iconPath : (resource.iconPath ?? indexed.iconPath),
+    iconPath: isLegacyRenderedIconPath(resource.iconPath)
+      ? indexed.iconPath
+      : (resource.iconPath ?? indexed.iconPath),
     iconAtlas: resource.iconAtlas ?? indexed.iconAtlas,
+    dominantColor:
+      resource.dominantColor ??
+      indexed.dominantColor ??
+      resource.iconAtlas?.dominantColor ??
+      indexed.iconAtlas?.dominantColor,
     tooltip: resource.tooltip ?? indexed.tooltip,
     modId: resource.modId ?? indexed.modId,
   };

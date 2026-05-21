@@ -61,6 +61,7 @@ export interface ResourceAmount {
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
   modId?: string;
   tooltip?: string[];
   neiSlot?: {
@@ -153,6 +154,7 @@ export interface FactoryStorage {
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
+  dominantColor?: string;
   capacity?: number;
   position: {
     x: number;

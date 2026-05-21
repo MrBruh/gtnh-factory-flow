@@ -111,7 +111,7 @@ export function RecipeBrowser() {
     (recipeMap: string, page: number) =>
       selectedDatasetVersion
         ? getRecipeQueryCacheKey({
-            versionId: selectedDatasetVersion.id,
+            versionId: getDatasetVersionCacheKey(selectedDatasetVersion),
             query: deferredRecipeSearch.trim(),
             resource: activeResource,
             mode: browserMode,
@@ -128,7 +128,7 @@ export function RecipeBrowser() {
     (page: number) =>
       selectedDatasetVersion
         ? getResourceQueryCacheKey({
-            versionId: selectedDatasetVersion.id,
+            versionId: getDatasetVersionCacheKey(selectedDatasetVersion),
             query: deferredRecipeSearch.trim(),
             offset: page * RESOURCE_QUERY_LIMIT,
             limit: RESOURCE_QUERY_LIMIT,
@@ -536,6 +536,7 @@ export function RecipeBrowser() {
                 displayName: resource.displayName,
                 iconPath: resource.iconPath,
                 iconAtlas: resource.iconAtlas,
+                dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
                 anchorNodeId: activeResource.anchorNodeId,
               },
               mode,
@@ -558,9 +559,14 @@ function ResourceHistoryPanel({
   resources,
   onBrowse,
 }: {
-  resources: Array<Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">>;
+  resources: Array<
+    Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor">
+  >;
   onBrowse: (
-    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
+    resource: Pick<
+      ResourceAmount,
+      "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+    >,
     mode: "recipes" | "uses",
   ) => void;
 }) {
@@ -634,7 +640,7 @@ function useVisibleResourceHistorySlots() {
 
 interface IndexedResource extends Pick<
   ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
 > {
   recipeCount: number;
 }
@@ -642,7 +648,10 @@ interface IndexedResource extends Pick<
 interface RecipeMapTab {
   id: string;
   label: string;
-  icon?: Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas">;
+  icon?: Pick<
+    ResourceAmount,
+    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+  >;
 }
 
 interface RecipeQueryCacheEntry {
@@ -1469,6 +1478,14 @@ function getInitialRecipeBookSize() {
   };
 }
 
+function getDatasetVersionCacheKey(version: {
+  id: string;
+  checksumSha256?: string;
+  publishedAt: string;
+}) {
+  return [version.id, version.checksumSha256 ?? version.publishedAt].join("@");
+}
+
 function getRecipeQueryCacheKey({
   versionId,
   query,
@@ -1601,6 +1618,7 @@ function buildRecipeMapTabs(
             displayName: resource.displayName,
             iconPath: resource.iconPath,
             iconAtlas: resource.iconAtlas,
+            dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
           }
         : undefined,
     };

@@ -58,7 +58,7 @@ const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 type ResourceEdgeData = {
   resource: Pick<
     ResourceAmount,
-    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas"
+    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
   >;
   color: string;
   demand: string;
@@ -75,7 +75,7 @@ type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
 > & {
   nodeId: string;
   side: "input" | "output";
@@ -1027,6 +1027,9 @@ function useResourceEdgeColor(
     if (!resource || !key) {
       return;
     }
+    if (resource.dominantColor) {
+      return;
+    }
 
     let cancelled = false;
     const cachedColor = sampledResourceColorCache.get(key);
@@ -1068,6 +1071,7 @@ function useResourceEdgeColor(
 
 function getInitialResourceColor(resource: ResourceEdgeData["resource"]) {
   return (
+    resource.dominantColor ??
     resource.iconAtlas?.dominantColor ??
     (resource.kind === "fluid" ? DEFAULT_FLUID_EDGE_COLOR : DEFAULT_ITEM_EDGE_COLOR)
   );
@@ -1267,6 +1271,7 @@ function getDraggedResourceForHandle(
       displayName: storage.displayName,
       iconPath: storage.iconPath,
       iconAtlas: storage.iconAtlas,
+      dominantColor: storage.dominantColor ?? storage.iconAtlas?.dominantColor,
     };
   }
 
@@ -1293,6 +1298,7 @@ function getDraggedResourceForHandle(
     displayName: resource.displayName,
     iconPath: resource.iconPath,
     iconAtlas: resource.iconAtlas,
+    dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
   };
 }
 
@@ -1317,7 +1323,10 @@ function getClientPosition(event: MouseEvent | TouchEvent) {
 function getEdgeResource(
   project: FactoryProject,
   edge: FactoryEdge,
-): Pick<ResourceAmount, "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas"> {
+): Pick<
+  ResourceAmount,
+  "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+> {
   const sourceNode = project.nodes.find((node) => node.id === edge.source);
   const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
   const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
@@ -1334,6 +1343,11 @@ function getEdgeResource(
     displayName: output?.displayName ?? storage?.displayName ?? edge.label,
     iconPath: output?.iconPath ?? storage?.iconPath,
     iconAtlas: output?.iconAtlas ?? storage?.iconAtlas,
+    dominantColor:
+      output?.dominantColor ??
+      storage?.dominantColor ??
+      output?.iconAtlas?.dominantColor ??
+      storage?.iconAtlas?.dominantColor,
   };
 }
 

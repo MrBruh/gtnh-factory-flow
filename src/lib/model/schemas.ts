@@ -15,6 +15,10 @@ export const resourceIconAtlasRefSchema = z.object({
     .regex(/^#[0-9a-fA-F]{6}$/)
     .optional(),
 });
+export const dominantColorSchema = z
+  .string()
+  .regex(/^#[0-9a-fA-F]{6}$/)
+  .optional();
 export const factoryNodeColorTagSchema = z.enum([
   "white",
   "orange",
@@ -41,6 +45,7 @@ export const resourceAmountSchema = z.object({
   displayName: z.string().min(1).optional(),
   iconPath: z.string().min(1).optional(),
   iconAtlas: resourceIconAtlasRefSchema.optional(),
+  dominantColor: dominantColorSchema,
   modId: z.string().min(1).optional(),
   tooltip: z.array(z.string()).optional(),
   neiSlot: z
@@ -141,6 +146,7 @@ export const factoryStorageSchema = z.object({
   displayName: z.string().optional(),
   iconPath: z.string().optional(),
   iconAtlas: resourceIconAtlasRefSchema.optional(),
+  dominantColor: dominantColorSchema,
   capacity: z.number().positive().optional(),
   position: z.object({
     x: z.number(),

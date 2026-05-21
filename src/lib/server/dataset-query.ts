@@ -496,6 +496,11 @@ function hydrateResource<T extends ResourceAmount>(
     displayName: resource.displayName ?? indexed.displayName,
     iconPath: resource.iconPath ?? indexed.iconPath,
     iconAtlas: resource.iconAtlas ?? indexed.iconAtlas,
+    dominantColor:
+      resource.dominantColor ??
+      indexed.dominantColor ??
+      resource.iconAtlas?.dominantColor ??
+      indexed.iconAtlas?.dominantColor,
   };
 }
 

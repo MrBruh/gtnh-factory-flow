@@ -48,7 +48,12 @@ export async function initRecipeDatasetVersion(
   _manifestUrl: string,
   version: DatasetVersion,
 ): Promise<RecipeDataset> {
-  return fetchJson<RecipeDataset>(`/api/datasets/${encodeURIComponent(version.id)}/catalog`);
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/catalog`,
+    window.location.origin,
+  );
+  addDatasetCacheKey(url, version);
+  return fetchJson<RecipeDataset>(url.toString());
 }
 
 export async function getRecipeDatasetRecipe(
@@ -56,9 +61,12 @@ export async function getRecipeDatasetRecipe(
   version: DatasetVersion,
   recipeId: string,
 ): Promise<Recipe> {
-  return fetchJson<Recipe>(
+  const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipes/${encodeURIComponent(recipeId)}`,
+    window.location.origin,
   );
+  addDatasetCacheKey(url, version);
+  return fetchJson<Recipe>(url.toString());
 }
 
 export async function queryRecipeDatasetRecipes(
@@ -75,6 +83,7 @@ export async function queryRecipeDatasetRecipes(
   url.searchParams.set("maxTier", query.maxTier);
   url.searchParams.set("offset", String(query.offset));
   url.searchParams.set("limit", String(query.limit));
+  addDatasetCacheKey(url, version);
   if (query.recipeMap) {
     url.searchParams.set("recipeMap", query.recipeMap);
   }
@@ -98,6 +107,7 @@ export async function queryRecipeDatasetResources(
   url.searchParams.set("query", query.query);
   url.searchParams.set("offset", String(query.offset));
   url.searchParams.set("limit", String(query.limit));
+  addDatasetCacheKey(url, version);
 
   return fetchJson<RecipeDatasetResourceQueryResult>(url.toString());
 }
@@ -106,7 +116,7 @@ export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
 
 async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
-    cache: "force-cache",
+    cache: "no-store",
     headers: {
       Accept: "application/json",
     },
@@ -122,4 +132,8 @@ async function fetchJson<T>(url: string): Promise<T> {
   }
 
   return payload as T;
+}
+
+function addDatasetCacheKey(url: URL, version: DatasetVersion) {
+  url.searchParams.set("datasetHash", version.checksumSha256 ?? version.publishedAt ?? version.id);
 }

@@ -83,10 +83,16 @@ interface FactoryStore {
   updateNode: (nodeId: string, patch: Partial<FactoryNode>) => void;
   deleteNode: (nodeId: string) => void;
   addResourceStorage: (
-    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
+    resource: Pick<
+      ResourceAmount,
+      "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+    >,
   ) => void;
   addStorageForConnection: (
-    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
+    resource: Pick<
+      ResourceAmount,
+      "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+    >,
     nodeId: string,
     side: "input" | "output",
     position: FactoryStorage["position"],
@@ -130,6 +136,7 @@ export interface RecipeBrowserResource {
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceAmount["iconAtlas"];
+  dominantColor?: string;
   anchorNodeId?: string;
 }
 
@@ -141,6 +148,7 @@ export interface PendingResourceConnection {
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceAmount["iconAtlas"];
+  dominantColor?: string;
   handleId: string;
 }
 
@@ -454,6 +462,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         displayName: resource.displayName,
         iconPath: resource.iconPath,
         iconAtlas: resource.iconAtlas,
+        dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
         position: {
           x: 180 + (state.project.storages?.length ?? 0) * 80,
           y: 180 + (state.project.storages?.length ?? 0) * 60,
@@ -483,6 +492,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         displayName: resource.displayName,
         iconPath: resource.iconPath,
         iconAtlas: resource.iconAtlas,
+        dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
         position,
       };
       const projectWithStorage: FactoryProject = existing
@@ -1244,6 +1254,7 @@ function updateResourceHistory(
     displayName: resource.displayName,
     iconPath: resource.iconPath,
     iconAtlas: resource.iconAtlas,
+    dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
   };
   const key = getResourceKey(entry);
 
@@ -1321,6 +1332,7 @@ function normalizeResourceHistory(value: unknown): RecipeBrowserResource[] {
       displayName: item.displayName,
       iconPath: item.iconPath,
       iconAtlas: item.iconAtlas,
+      dominantColor: item.dominantColor ?? item.iconAtlas?.dominantColor,
     };
     const key = getResourceKey(entry);
     if (seen.has(key)) {
@@ -1349,11 +1361,15 @@ function isStoredRecipeBrowserResource(value: unknown): value is RecipeBrowserRe
     resource.id.length > 0 &&
     (resource.displayName === undefined || typeof resource.displayName === "string") &&
     (resource.iconPath === undefined || typeof resource.iconPath === "string") &&
-    (resource.iconAtlas === undefined || typeof resource.iconAtlas === "object")
+    (resource.iconAtlas === undefined || typeof resource.iconAtlas === "object") &&
+    (resource.dominantColor === undefined || typeof resource.dominantColor === "string")
   );
 }
 
-type IconResource = Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">;
+type IconResource = Pick<
+  ResourceAmount,
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+>;
 
 function refreshProjectResourceIcons(
   project: FactoryProject,
@@ -1404,6 +1420,8 @@ function refreshPendingResourceConnectionIcon(
     displayName: resource.displayName ?? indexed.displayName,
     iconPath: indexed.iconPath,
     iconAtlas: indexed.iconAtlas,
+    dominantColor:
+      indexed.dominantColor ?? indexed.iconAtlas?.dominantColor ?? resource.dominantColor,
   };
 }
 
@@ -1423,6 +1441,8 @@ function refreshStorageIcon(
     displayName: storage.displayName ?? indexed.displayName,
     iconPath: indexed.iconPath,
     iconAtlas: indexed.iconAtlas,
+    dominantColor:
+      indexed.dominantColor ?? indexed.iconAtlas?.dominantColor ?? storage.dominantColor,
   };
 }
 
@@ -1442,6 +1462,8 @@ function refreshResourceIcon<T extends IconResource>(
     displayName: resource.displayName ?? indexed.displayName,
     iconPath: indexed.iconPath,
     iconAtlas: indexed.iconAtlas,
+    dominantColor:
+      indexed.dominantColor ?? indexed.iconAtlas?.dominantColor ?? resource.dominantColor,
   };
 }
 
@@ -1454,7 +1476,11 @@ function getDatasetIconLookup(dataset: RecipeDataset): Map<string, IconResource>
 
     const key = getResourceKey(resource);
     const existing = iconsByResource.get(key);
-    if (!existing || (!existing.iconAtlas && resource.iconAtlas)) {
+    if (
+      !existing ||
+      (!existing.iconPath && resource.iconPath) ||
+      (!existing.iconAtlas && resource.iconAtlas)
+    ) {
       iconsByResource.set(key, resource);
     }
   }
