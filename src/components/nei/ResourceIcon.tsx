@@ -114,29 +114,20 @@ function IconImage({
       <span
         role="img"
         aria-label={resource.displayName ?? resource.id}
-        className="pixelated-image absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2 overflow-hidden"
+        className="pixelated-image absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2 bg-no-repeat"
         style={{
           width: displaySize,
           height: displaySize,
+          backgroundImage: `url(${resource.iconAtlas.imagePath})`,
+          backgroundSize: `${resource.iconAtlas.atlasWidth * scale}px ${
+            resource.iconAtlas.atlasHeight * scale
+          }px`,
+          backgroundPosition: `-${resource.iconAtlas.x * scale}px -${
+            resource.iconAtlas.y * scale
+          }px`,
           imageRendering: "pixelated",
         }}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={resource.iconAtlas.imagePath}
-          alt=""
-          aria-hidden="true"
-          className="pixelated-image absolute left-0 top-0 max-w-none"
-          style={{
-            width: resource.iconAtlas.atlasWidth * scale,
-            height: resource.iconAtlas.atlasHeight * scale,
-            transform: `translate(-${resource.iconAtlas.x * scale}px, -${
-              resource.iconAtlas.y * scale
-            }px)`,
-            imageRendering: "pixelated",
-          }}
-        />
-      </span>
+      />
     );
   }
 

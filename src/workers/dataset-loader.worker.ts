@@ -1,4 +1,3 @@
-import { parseRecipeDatasetJson } from "@/lib/import-export";
 import { enrichDatasetRecipes } from "@/lib/datasets/enrich";
 import type { DatasetResourceIndexEntry, RecipeDataset, RecipeSummary } from "@/lib/datasets";
 import { getRecipePowerTier, GT_VOLTAGE_TIERS } from "@/lib/model";
@@ -212,7 +211,10 @@ async function loadDataset(
   }
 
   const text = await readDatasetResponseText(response, datasetUrl);
-  const dataset = enrichDatasetRecipes(parseRecipeDatasetJson(text));
+  const parsedDataset = parseTrustedRecipeDatasetJson(text);
+  const dataset = isBrowserReadyDataset(parsedDataset)
+    ? parsedDataset
+    : enrichDatasetRecipes(parsedDataset);
 
   if (dataset.datasetVersionId !== expectedVersionId) {
     throw new Error(
@@ -227,6 +229,28 @@ async function loadDataset(
 function hasUsableIconAtlas(dataset: RecipeDataset): boolean {
   const indexedResources = dataset.resourceIndex ?? dataset.resources;
   return indexedResources.some((resource) => Boolean(resource.iconAtlas));
+}
+
+function isBrowserReadyDataset(dataset: RecipeDataset): boolean {
+  return Boolean(dataset.resourceIndex?.length) && hasUsableIconAtlas(dataset);
+}
+
+function parseTrustedRecipeDatasetJson(source: string): RecipeDataset {
+  const dataset = JSON.parse(source) as Partial<RecipeDataset>;
+  if (
+    dataset.schemaVersion !== 1 ||
+    typeof dataset.datasetVersionId !== "string" ||
+    typeof dataset.gtnhVersion !== "string" ||
+    !Array.isArray(dataset.resources) ||
+    !Array.isArray(dataset.recipes) ||
+    !Array.isArray(dataset.recipeMaps) ||
+    !dataset.oreDictionary ||
+    typeof dataset.oreDictionary !== "object"
+  ) {
+    throw new Error("Invalid GTNH recipe dataset.");
+  }
+
+  return dataset as RecipeDataset;
 }
 
 function summarizeDataset(dataset: RecipeDataset): DatasetSummary {
