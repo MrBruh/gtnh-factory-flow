@@ -1,6 +1,6 @@
 "use client";
 
-import { Cable, Power, Trash2, X } from "lucide-react";
+import { Power, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
 import { formatRate, formatResourceRate, makeResourceKey, primaryOutput } from "@/lib/model";
@@ -17,7 +17,6 @@ export function InspectorPanel() {
   const updateNode = useFactoryStore((state) => state.updateNode);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
-  const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
   const selectFuelProfile = useFactoryStore((state) => state.selectFuelProfile);
   const datasetRecipes = dataset?.recipes;
 
@@ -164,14 +163,6 @@ export function InspectorPanel() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                 Resource links
               </h3>
-              <button
-                type="button"
-                onClick={() => autoConnectNode(selectedNode.id)}
-                className="inline-flex h-8 items-center gap-1 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                <Cable className="h-3.5 w-3.5" />
-                Auto
-              </button>
             </div>
             {selectedNodeEdges.length === 0 ? (
               <p className="text-sm text-neutral-500">No links yet.</p>
@@ -335,7 +326,6 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
 function StorageSummary({ className = "" }: { className?: string }) {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
-  const autoRouteStorage = useFactoryStore((state) => state.autoRouteStorage);
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const setHoveredStorageResourceKey = useFactoryStore((state) => state.setHoveredStorageResourceKey);
   const storages = project.storages ?? [];
@@ -385,20 +375,11 @@ function StorageSummary({ className = "" }: { className?: string }) {
                     {producerCount} in / {consumerCount} out
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1">
-                  <button
-                    type="button"
-                    onClick={() => autoRouteStorage(storage.id)}
-                    className="h-7 rounded border border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100"
-                    title="Auto-route matching recipes"
-                    aria-label="Auto-route matching recipes"
-                  >
-                    <Cable className="mx-auto h-3.5 w-3.5" />
-                  </button>
+                <div>
                   <button
                     type="button"
                     onClick={() => deleteStorage(storage.id)}
-                    className="h-7 rounded border border-neutral-300 bg-white text-red-700 hover:bg-red-50"
+                    className="h-7 w-8 rounded border border-neutral-300 bg-white text-red-700 hover:bg-red-50"
                     title="Delete bus"
                     aria-label="Delete bus"
                   >

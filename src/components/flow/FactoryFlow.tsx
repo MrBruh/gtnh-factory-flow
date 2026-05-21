@@ -16,6 +16,7 @@ import {
   type Node,
   type NodeChange,
   type NodeTypes,
+  type OnSelectionChangeParams,
 } from "@xyflow/react";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -118,6 +119,7 @@ export function FactoryFlow() {
   const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
     () => nodesFromProject,
   );
+  const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const draggingNodeRef = useRef(false);
 
   useEffect(() => {
@@ -231,6 +233,11 @@ export function FactoryFlow() {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
+        if (selectedEdgeIds.length > 0) {
+          selectedEdgeIds.forEach((edgeId) => deleteEdge(edgeId));
+          setSelectedEdgeIds([]);
+          return;
+        }
         cancelResourceConnection();
         setNodeColorPaintMode(undefined);
       }
@@ -238,7 +245,11 @@ export function FactoryFlow() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [cancelResourceConnection, setNodeColorPaintMode]);
+  }, [cancelResourceConnection, deleteEdge, selectedEdgeIds, setNodeColorPaintMode]);
+
+  const handleSelectionChange = ({ edges: selectedEdges }: OnSelectionChangeParams) => {
+    setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
+  };
 
   return (
     <div className="factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
@@ -257,6 +268,7 @@ export function FactoryFlow() {
           selectNode(node.id);
         }}
         onNodesChange={handleNodesChange}
+        onSelectionChange={handleSelectionChange}
         onPaneClick={() => {
           selectNode(undefined);
           cancelResourceConnection();
@@ -349,6 +361,7 @@ function ResourceEdge({
   targetPosition,
   markerEnd,
   style,
+  selected,
   data,
 }: EdgeProps<ResourceFlowEdge>) {
   const [edgePath, labelX, labelY] = getSmoothStepPath({
@@ -366,7 +379,15 @@ function ResourceEdge({
 
   return (
     <>
-      <BaseEdge path={edgePath} markerEnd={markerEnd} style={style} />
+      <BaseEdge
+        path={edgePath}
+        markerEnd={markerEnd}
+        style={{
+          ...style,
+          strokeWidth: selected ? 5 : style?.strokeWidth,
+          filter: selected ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
+        }}
+      />
       {data?.showLabel ? (
         <EdgeLabelRenderer>
           <div
@@ -376,6 +397,7 @@ function ResourceEdge({
               pointerEvents: "all",
               color: data.isLimited ? "#fecaca" : "#f8fafc",
               borderColor: data.color,
+              boxShadow: selected ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
             }}
             title={`${data.resource.displayName ?? data.resource.id}: ${rate}`}
           >

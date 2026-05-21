@@ -1,7 +1,6 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { Cable } from "lucide-react";
 import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import { formatRate, isRecipeInputConsumed, resourceLabel } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
@@ -21,13 +20,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const browseResource = useFactoryStore((state) => state.browseResource);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
-  const autoConnectNode = useFactoryStore((state) => state.autoConnectNode);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
-  const selectResourceConnectionSlot = useFactoryStore(
-    (state) => state.selectResourceConnectionSlot,
-  );
   const utilization = result?.utilization ?? 0;
   const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
   const status = result?.status ?? "underutilized";
@@ -74,53 +69,24 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           >
             {recipe.source?.recipeMap ?? recipe.machineType}
           </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              autoConnectNode(projectNode.id);
-            }}
-            className="nodrag h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#9b9b9b]"
-            title="Auto-connect compatible resources"
-            aria-label="Auto-connect compatible resources"
-          >
-            <Cable className="mx-auto h-3.5 w-3.5" />
-          </button>
+          <div />
         </div>
         <NeiRecipeWindow
           recipe={recipe}
           scale={2}
           compact
           onSlotClick={(slot, mode) => {
-            if (mode === "uses") {
-              browseResource(
-                {
-                  kind: slot.resource.kind,
-                  id: slot.resource.id,
-                  displayName: slot.resource.displayName,
-                  iconPath: slot.resource.iconPath,
-                  iconAtlas: slot.resource.iconAtlas,
-                  anchorNodeId: projectNode.id,
-                },
-                mode,
-              );
-              return;
-            }
-
-            if (slot.side === "input" && !isRecipeInputConsumed(slot.resource)) {
-              return;
-            }
-
-            selectResourceConnectionSlot({
-              nodeId: projectNode.id,
-              side: slot.side,
-              kind: slot.resource.kind,
-              resourceId: slot.resource.id,
-              displayName: slot.resource.displayName,
-              iconPath: slot.resource.iconPath,
-              iconAtlas: slot.resource.iconAtlas,
-              handleId: makeResourceHandleId(slot.side, slot.resource, slot.resourceIndex),
-            });
+            browseResource(
+              {
+                kind: slot.resource.kind,
+                id: slot.resource.id,
+                displayName: slot.resource.displayName,
+                iconPath: slot.resource.iconPath,
+                iconAtlas: slot.resource.iconAtlas,
+                anchorNodeId: projectNode.id,
+              },
+              mode,
+            );
           }}
           renderHandle={(slot) => {
             const isInput = slot.side === "input";

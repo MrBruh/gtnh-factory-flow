@@ -280,10 +280,24 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         targetHandle: target.handleId,
       });
 
-      if (!edge || hasDuplicateEdge(state.project.edges, edge)) {
+      if (!edge) {
         return {
           pendingResourceConnection: undefined,
           selectedNodeId: slot.nodeId,
+        };
+      }
+
+      const duplicateEdge = findDuplicateEdge(state.project.edges, edge);
+      if (duplicateEdge) {
+        const project = touchProject({
+          ...state.project,
+          edges: state.project.edges.filter((entry) => entry.id !== duplicateEdge.id),
+        });
+        return {
+          project,
+          pendingResourceConnection: undefined,
+          selectedNodeId: slot.nodeId,
+          lastResult: calculateThroughput(project),
         };
       }
 
@@ -390,22 +404,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         (storage) => storage.kind === resource.kind && storage.resourceId === resource.id,
       );
       if (existing) {
-        const edges = buildCompatibleEdgesForStorage(state.project, existing);
-        const missingEdges = edges.filter((edge) => !hasDuplicateEdge(state.project.edges, edge));
-        if (missingEdges.length === 0) {
-          return { selectedNodeId: undefined };
-        }
-
-        const project = touchProject({
-          ...state.project,
-          edges: [...state.project.edges, ...missingEdges],
-        });
-
-        return {
-          project,
-          selectedNodeId: undefined,
-          lastResult: calculateThroughput(project),
-        };
+        return { selectedNodeId: undefined, hoveredStorageResourceKey: getResourceKey(resource) };
       }
 
       const storage: FactoryStorage = {
@@ -420,14 +419,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           y: 180 + (state.project.storages?.length ?? 0) * 60,
         },
       };
-      const projectWithStorage = {
+      const project = touchProject({
         ...state.project,
         storages: [...(state.project.storages ?? []), storage],
-      };
-      const edges = buildCompatibleEdgesForStorage(projectWithStorage, storage);
-      const project = touchProject({
-        ...projectWithStorage,
-        edges: [...projectWithStorage.edges, ...edges],
       });
 
       return {
@@ -514,8 +508,16 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         return state;
       }
 
-      if (hasDuplicateEdge(state.project.edges, edge)) {
-        return state;
+      const duplicateEdge = findDuplicateEdge(state.project.edges, edge);
+      if (duplicateEdge) {
+        const project = touchProject({
+          ...state.project,
+          edges: state.project.edges.filter((entry) => entry.id !== duplicateEdge.id),
+        });
+        return {
+          project,
+          lastResult: calculateThroughput(project),
+        };
       }
 
       const project = touchProject({
@@ -690,15 +692,7 @@ function addConnectedRecipeNodeToState(
     nodes: [...state.project.nodes, nextNode],
   };
 
-  const edge =
-    resource.mode === "recipes"
-      ? buildEdgeBetweenNodes(projectWithNode, nextNode.id, anchorNode.id, resource)
-      : buildEdgeBetweenNodes(projectWithNode, anchorNode.id, nextNode.id, resource);
-
-  const project = touchProject({
-    ...projectWithNode,
-    edges: edge ? [...projectWithNode.edges, edge] : projectWithNode.edges,
-  });
+  const project = touchProject(projectWithNode);
 
   return {
     project,
@@ -915,7 +909,11 @@ function buildCompatibleEdgesForStorage(
 }
 
 function hasDuplicateEdge(edges: FactoryEdge[], edge: FactoryEdge): boolean {
-  return edges.some(
+  return Boolean(findDuplicateEdge(edges, edge));
+}
+
+function findDuplicateEdge(edges: FactoryEdge[], edge: FactoryEdge): FactoryEdge | undefined {
+  return edges.find(
     (existing) =>
       existing.source === edge.source &&
       existing.target === edge.target &&

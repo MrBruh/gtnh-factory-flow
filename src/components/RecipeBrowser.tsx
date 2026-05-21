@@ -43,9 +43,6 @@ export function RecipeBrowser() {
   const clearResourceBrowser = useFactoryStore((state) => state.clearResourceBrowser);
   const selectRecipe = useFactoryStore((state) => state.selectRecipe);
   const addNodeForRecipe = useFactoryStore((state) => state.addNodeForRecipeObject);
-  const addConnectedNodeForRecipe = useFactoryStore(
-    (state) => state.addConnectedNodeForRecipeObject,
-  );
   const addResourceStorage = useFactoryStore((state) => state.addResourceStorage);
   const [selectedRecipeMap, setSelectedRecipeMap] = useState("all");
   const [maxTier, setMaxTier] = useState<TierFilter>("all");
@@ -229,21 +226,6 @@ export function RecipeBrowser() {
     },
     [addNodeForRecipe, getFullRecipe],
   );
-
-  const handleAddConnectedRecipe = useMemo(() => {
-    if (!activeResource?.anchorNodeId) {
-      return undefined;
-    }
-
-    return async (recipeId: string) => {
-      addConnectedNodeForRecipe(await getFullRecipe(recipeId), activeResource.anchorNodeId!, {
-        kind: activeResource.kind,
-        id: activeResource.id,
-        displayName: activeResource.displayName,
-        mode: browserMode,
-      });
-    };
-  }, [activeResource, addConnectedNodeForRecipe, browserMode, getFullRecipe]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
@@ -447,7 +429,7 @@ export function RecipeBrowser() {
           recipeMapTabs={recipeMapTabs}
           selectedRecipeId={selectedRecipeId}
           onAdd={handleAddRecipe}
-          onAddConnected={handleAddConnectedRecipe}
+          onAddConnected={undefined}
           onClose={clearResourceBrowser}
           onAddStorage={() => {
             addResourceStorage(activeResource);
