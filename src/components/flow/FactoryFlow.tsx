@@ -17,12 +17,19 @@ import {
   type NodeChange,
   type NodeTypes,
 } from "@xyflow/react";
+import { Paintbrush, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatRate } from "@/lib/model";
-import type { FactoryEdge, FactoryProject, ResourceAmount } from "@/lib/model/types";
+import type {
+  FactoryEdge,
+  FactoryNodeColorTag,
+  FactoryProject,
+  ResourceAmount,
+} from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
+import { GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { parseResourceHandleId } from "./resource-handles";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
 
@@ -267,6 +274,10 @@ export function FactoryFlow() {
         <Background gap={24} color="#d4d4d4" />
         <Controls position="bottom-left" />
       </ReactFlow>
+      <PaintToolbar
+        paintMode={nodeColorPaintMode}
+        onPaintModeChange={setNodeColorPaintMode}
+      />
       {pendingResourceConnection ? (
         <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
@@ -281,6 +292,70 @@ export function FactoryFlow() {
             type="button"
             onClick={() => setNodeColorPaintMode(undefined)}
             className="pointer-events-auto nodrag ml-3 border border-[#252525] bg-[#7d7d7d] px-2 text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]"
+          >
+            stop
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PaintToolbar({
+  paintMode,
+  onPaintModeChange,
+}: {
+  paintMode?: FactoryNodeColorTag | null;
+  onPaintModeChange: (tag: FactoryNodeColorTag | null | undefined) => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="nodrag absolute bottom-[116px] left-3 z-20">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className={[
+          "flex h-8 w-8 items-center justify-center border-2 border-[#252525] bg-[#7d7d7d] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#9b9b9b]",
+          paintMode !== undefined ? "bg-[#4f8f4f]" : "",
+        ].join(" ")}
+        title="Paint recipe nodes"
+        aria-label="Paint recipe nodes"
+      >
+        <Paintbrush className="h-4 w-4" />
+      </button>
+      {open ? (
+        <div className="mt-1 grid w-[156px] grid-cols-5 gap-1 border-2 border-[#252525] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+          <button
+            type="button"
+            onClick={() => onPaintModeChange(null)}
+            className={[
+              "flex h-7 w-7 items-center justify-center border-2 bg-[#7d7d7d] text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]",
+              paintMode === null ? "border-white" : "border-[#252525]",
+            ].join(" ")}
+            title="Erase colors"
+            aria-label="Erase colors"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+          {GT_NODE_COLOR_PALETTE.map((entry) => (
+            <button
+              key={entry.tag}
+              type="button"
+              onClick={() => onPaintModeChange(entry.tag)}
+              className={[
+                "h-7 w-7 border-2 shadow-[inset_1px_1px_0_rgba(255,255,255,0.45),inset_-1px_-1px_0_rgba(0,0,0,0.45)]",
+                paintMode === entry.tag ? "border-white" : "border-[#252525]",
+              ].join(" ")}
+              style={{ backgroundColor: entry.color.swatch }}
+              title={entry.tag}
+              aria-label={`Paint ${entry.tag}`}
+            />
+          ))}
+          <button
+            type="button"
+            onClick={() => onPaintModeChange(undefined)}
+            className="col-span-4 h-7 border-2 border-[#252525] bg-[#7d7d7d] text-[12px] text-white shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]"
           >
             stop
           </button>
