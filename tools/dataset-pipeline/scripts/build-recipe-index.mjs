@@ -54,11 +54,27 @@ const recipeIndex = {
   recipes: dataset.recipes.map(toRecipeSummary),
 };
 
+const resourceCatalog = {
+  schemaVersion: 1,
+  datasetVersionId: versionId,
+  gtnhVersion: dataset.gtnhVersion,
+  sourceInfo: dataset.sourceInfo,
+  resources: dataset.resources ?? [],
+  resourceIndex: dataset.resourceIndex ?? [],
+  recipeMaps: dataset.recipeMaps ?? [],
+  generatedAt: dataset.generatedAt,
+  recipeCount: dataset.recipes.length,
+  shardSize,
+  shards,
+};
+
+const resourceIndexPath = path.join(datasetOutDir, "resource-index.json.gz");
 const indexPath = path.join(datasetOutDir, "recipe-index.json.gz");
+await fs.writeFile(resourceIndexPath, gzipSync(JSON.stringify(resourceCatalog), { level: 9 }));
 await fs.writeFile(indexPath, gzipSync(JSON.stringify(recipeIndex), { level: 9 }));
 
 console.log(
-  `Wrote recipe index with ${recipeIndex.recipes.length} summaries and ${shards.length} shard(s).`,
+  `Wrote resource catalog, recipe index with ${recipeIndex.recipes.length} summaries, and ${shards.length} shard(s).`,
 );
 
 function toRecipeSummary(recipe, index) {
@@ -73,10 +89,26 @@ function toRecipeSummary(recipe, index) {
     programmedCircuit: recipe.programmedCircuit,
     inputs: (recipe.inputs ?? []).map(toCompactResource),
     outputs: (recipe.outputs ?? []).map(toCompactResource),
-    source: recipe.source,
-    nei: recipe.nei,
+    source: recipe.source?.recipeMap ? { recipeMap: recipe.source.recipeMap } : undefined,
+    nei: compactNei(recipe.nei),
     shardIndex: Math.floor(index / shardSize),
   };
+}
+
+function compactNei(nei) {
+  if (!nei) {
+    return undefined;
+  }
+
+  return removeUndefined({
+    itemInputGrid: nei.itemInputGrid,
+    itemOutputGrid: nei.itemOutputGrid,
+    fluidInputGrid: nei.fluidInputGrid,
+    fluidOutputGrid: nei.fluidOutputGrid,
+    slotCapacity: nei.slotCapacity,
+    requiresCleanroom: nei.requiresCleanroom,
+    requiresLowGravity: nei.requiresLowGravity,
+  });
 }
 
 async function readDataset(filePath) {
@@ -92,7 +124,6 @@ function toCompactResource(resource) {
     kind: resource.kind,
     id: resource.id,
     amount: resource.amount,
-    displayName: resource.displayName,
     optional: resource.optional,
     consumed: resource.consumed,
     chance: resource.chance,

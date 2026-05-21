@@ -1,7 +1,6 @@
 "use client";
 
 import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
-import { resolveDatasetUrl } from "./remote";
 import type { DatasetVersion, RecipeDataset, RecipeSummary } from "./types";
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
@@ -21,242 +20,65 @@ export interface RecipeDatasetQueryResult {
   recipeMaps: string[];
 }
 
-type DatasetSummary = Omit<RecipeDataset, "recipes"> & {
-  recipeCount: number;
-  recipes: [];
-};
-
-type WorkerRequest =
-  | {
-      id: number;
-      type: "init";
-      datasetUrl: string;
-      indexUrl?: string;
-      expectedVersionId: string;
-      cacheKey: string;
-    }
-  | ({
-      id: number;
-      type: "queryRecipes";
-      datasetUrl: string;
-      indexUrl?: string;
-      expectedVersionId: string;
-      cacheKey: string;
-    } & RecipeDatasetQuery)
-  | {
-      id: number;
-      type: "getRecipe";
-      datasetUrl: string;
-      indexUrl?: string;
-      expectedVersionId: string;
-      cacheKey: string;
-      recipeId: string;
-    };
-
-type WorkerResponse =
-  | {
-      id: number;
-      ok: true;
-      type: "init";
-      summary: DatasetSummary;
-    }
-  | {
-      id: number;
-      ok: true;
-      type: "queryRecipes";
-      recipes: RecipeSummary[];
-      total: number;
-      recipeMaps: string[];
-    }
-  | {
-      id: number;
-      ok: true;
-      type: "getRecipe";
-      recipe: Recipe;
-    }
-  | {
-      id: number;
-      ok: false;
-      error: string;
-    };
-
-type WorkerRequestInput = WorkerRequest extends infer Request
-  ? Request extends { id: number }
-    ? Omit<Request, "id">
-    : never
-  : never;
-
-let nextWorkerRequestId = 1;
-let datasetWorker: Worker | undefined;
-
 export async function initRecipeDatasetVersion(
-  manifestUrl: string,
+  _manifestUrl: string,
   version: DatasetVersion,
 ): Promise<RecipeDataset> {
-  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
-  const indexUrl = getVersionedRecipeIndexUrl(manifestUrl, version);
-  const cacheKey = getDatasetCacheKey(version);
-  const response = await sendDatasetWorkerRequest({
-    type: "init",
-    datasetUrl,
-    indexUrl,
-    expectedVersionId: version.id,
-    cacheKey,
-  });
-
-  if (response.type !== "init") {
-    throw new Error("Dataset worker returned an unexpected response.");
-  }
-
-  return response.summary;
+  return fetchJson<RecipeDataset>(`/api/datasets/${encodeURIComponent(version.id)}/catalog`);
 }
 
 export async function getRecipeDatasetRecipe(
-  manifestUrl: string,
+  _manifestUrl: string,
   version: DatasetVersion,
   recipeId: string,
 ): Promise<Recipe> {
-  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
-  const indexUrl = getVersionedRecipeIndexUrl(manifestUrl, version);
-  const cacheKey = getDatasetCacheKey(version);
-  const response = await sendDatasetWorkerRequest({
-    type: "getRecipe",
-    datasetUrl,
-    indexUrl,
-    expectedVersionId: version.id,
-    cacheKey,
-    recipeId,
-  });
-
-  if (response.type !== "getRecipe") {
-    throw new Error("Dataset worker returned an unexpected response.");
-  }
-
-  return response.recipe;
+  return fetchJson<Recipe>(
+    `/api/datasets/${encodeURIComponent(version.id)}/recipes/${encodeURIComponent(recipeId)}`,
+  );
 }
 
 export async function queryRecipeDatasetRecipes(
-  manifestUrl: string,
+  _manifestUrl: string,
   version: DatasetVersion,
   query: RecipeDatasetQuery,
 ): Promise<RecipeDatasetQueryResult> {
-  const datasetUrl = getVersionedDatasetUrl(manifestUrl, version);
-  const indexUrl = getVersionedRecipeIndexUrl(manifestUrl, version);
-  const cacheKey = getDatasetCacheKey(version);
-  const response = await sendDatasetWorkerRequest({
-    type: "queryRecipes",
-    datasetUrl,
-    indexUrl,
-    expectedVersionId: version.id,
-    cacheKey,
-    ...query,
-  });
-
-  if (response.type !== "queryRecipes") {
-    throw new Error("Dataset worker returned an unexpected response.");
+  const url = new URL(
+    `/api/datasets/${encodeURIComponent(version.id)}/recipes`,
+    window.location.origin,
+  );
+  url.searchParams.set("query", query.query);
+  url.searchParams.set("mode", query.mode);
+  url.searchParams.set("maxTier", query.maxTier);
+  url.searchParams.set("limit", String(query.limit));
+  if (query.recipeMap) {
+    url.searchParams.set("recipeMap", query.recipeMap);
+  }
+  if (query.resource) {
+    url.searchParams.set("resourceKind", query.resource.kind);
+    url.searchParams.set("resourceId", query.resource.id);
   }
 
-  return {
-    recipes: response.recipes,
-    total: response.total,
-    recipeMaps: response.recipeMaps,
-  };
+  return fetchJson<RecipeDatasetQueryResult>(url.toString());
 }
 
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
 
-function getVersionedDatasetUrl(manifestUrl: string, version: DatasetVersion): string {
-  const datasetUrl = new URL(
-    resolveDatasetUrl(manifestUrl, version.recipeDatasetPath),
-    window.location.origin,
-  );
-  datasetUrl.searchParams.set(
-    "datasetVersion",
-    version.checksumSha256 ?? version.publishedAt ?? version.id,
-  );
-  return datasetUrl.toString();
-}
-
-function getVersionedRecipeIndexUrl(
-  manifestUrl: string,
-  version: DatasetVersion,
-): string | undefined {
-  if (!version.recipeIndexPath) {
-    return undefined;
-  }
-
-  const indexUrl = new URL(resolveDatasetUrl(manifestUrl, version.recipeIndexPath), window.location.origin);
-  indexUrl.searchParams.set(
-    "datasetVersion",
-    version.checksumSha256 ?? version.publishedAt ?? version.id,
-  );
-  return indexUrl.toString();
-}
-
-function sendDatasetWorkerRequest(
-  request: WorkerRequestInput,
-): Promise<Extract<WorkerResponse, { ok: true }>> {
-  return new Promise((resolve, reject) => {
-    if (typeof Worker === "undefined") {
-      reject(new Error("Web Workers are not available."));
-      return;
-    }
-
-    const worker = getDatasetWorker();
-    const id = nextWorkerRequestId;
-    nextWorkerRequestId += 1;
-
-    const cleanup = () => {
-      worker.removeEventListener("message", onMessage);
-      worker.removeEventListener("error", onError);
-    };
-
-    const onMessage = (event: MessageEvent<WorkerResponse>) => {
-      if (event.data.id !== id) {
-        return;
-      }
-
-      cleanup();
-      if (event.data.ok) {
-        resolve(event.data);
-      } else {
-        reject(new Error(event.data.error));
-      }
-    };
-
-    const onError = (event: ErrorEvent) => {
-      cleanup();
-      datasetWorker?.terminate();
-      datasetWorker = undefined;
-      reject(new Error(event.message || "Dataset worker failed."));
-    };
-
-    worker.addEventListener("message", onMessage);
-    worker.addEventListener("error", onError);
-    worker.postMessage({ ...request, id } as WorkerRequest);
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
   });
-}
 
-function getDatasetWorker(): Worker {
-  if (!datasetWorker) {
-    datasetWorker = new Worker(new URL("../../workers/dataset-loader.worker.ts", import.meta.url), {
-      type: "module",
-    });
+  const payload = (await response.json()) as T | { error?: string };
+  if (!response.ok) {
+    throw new Error(
+      typeof payload === "object" && payload && "error" in payload && payload.error
+        ? payload.error
+        : `Request failed (${response.status}).`,
+    );
   }
 
-  return datasetWorker;
-}
-
-function getDatasetCacheKey(version: DatasetVersion): string {
-  return [
-    "worker-v6",
-    version.id,
-    version.recipeDatasetPath,
-    version.recipeIndexPath,
-    version.checksumSha256,
-    version.sourceInfo.gitCommit,
-    version.publishedAt,
-  ]
-    .filter(Boolean)
-    .join("|");
+  return payload as T;
 }

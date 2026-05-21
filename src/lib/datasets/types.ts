@@ -35,6 +35,7 @@ export interface DatasetVersion {
   publishedAt: string;
   manifestPath: string;
   recipeDatasetPath: string;
+  resourceIndexPath?: string;
   recipeIndexPath?: string;
   checksumSha256?: string;
   sourceInfo: DatasetSourceInfo;
