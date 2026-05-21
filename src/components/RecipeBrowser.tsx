@@ -1066,7 +1066,7 @@ function RecipeBookOverlay({
                 Loading recipes...
               </div>
             ) : displayedRecipes.length === 0 ? (
-              <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+              <div className="grid min-h-[260px] place-items-center border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 No matching recipes.
               </div>
             ) : (

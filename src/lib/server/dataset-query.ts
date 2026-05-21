@@ -170,8 +170,20 @@ export async function queryDatasetRecipes(
   const eligibleRecipeMaps = request.resource
     ? (indexes.recipeMapsByResource.get(getResourceModeKey(request.resource, request.mode)) ?? [])
     : [...new Set(indexes.recipeMaps.filter(Boolean))];
-  const sortedRecipeMaps = [...eligibleRecipeMaps].sort((a, b) => a.localeCompare(b));
-  const effectiveMap = request.recipeMap || (request.resource ? sortedRecipeMaps[0] : undefined);
+  const sortedRecipeMaps = eligibleRecipeMaps
+    .filter((recipeMap) =>
+      recipeMapHasMatchingIndexedRecipe(indexes, candidates, recipeMap, request.maxTier, query, {
+        resource: request.resource,
+        mode: request.mode,
+      }),
+    )
+    .sort((a, b) => a.localeCompare(b));
+  const effectiveMap =
+    request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
+      ? request.recipeMap
+      : request.resource
+        ? sortedRecipeMaps[0]
+        : undefined;
   const scopedCandidates =
     request.resource && effectiveMap
       ? (indexes.recipeIndexesByResourceAndMap.get(
@@ -240,11 +252,19 @@ async function queryDatasetRecipesFromLookup(
   const recipesByMap = lookup.entries.get(resourceKey);
   const sortedRecipeMaps = recipesByMap
     ? [...recipesByMap.keys()]
+        .filter((recipeMapId) =>
+          (recipesByMap.get(recipeMapId) ?? []).some((recipeIndex) =>
+            recipeMatchesLookupTier(lookup, recipeIndex, request.maxTier),
+          ),
+        )
         .map((recipeMapId) => lookup.recipeMaps[recipeMapId])
         .filter((recipeMap): recipeMap is string => Boolean(recipeMap))
         .sort((a, b) => a.localeCompare(b))
     : [];
-  const effectiveMap = request.recipeMap || sortedRecipeMaps[0];
+  const effectiveMap =
+    request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
+      ? request.recipeMap
+      : sortedRecipeMaps[0];
   const effectiveMapId = effectiveMap ? lookup.recipeMapIds.get(effectiveMap) : undefined;
   const scopedCandidates =
     recipesByMap && effectiveMapId !== undefined ? (recipesByMap.get(effectiveMapId) ?? []) : [];
@@ -691,6 +711,33 @@ function addRecipeMap(index: Map<string, Set<string>>, key: string, recipeMap: s
   } else {
     index.set(key, new Set([recipeMap]));
   }
+}
+
+function recipeMapHasMatchingIndexedRecipe(
+  indexes: QueryIndexes,
+  candidates: number[],
+  recipeMap: string,
+  maxTier: TierFilter,
+  query: string,
+  scope: { resource?: Pick<ResourceAmount, "kind" | "id">; mode: "recipes" | "uses" },
+) {
+  const scopedCandidates = scope.resource
+    ? (indexes.recipeIndexesByResourceAndMap.get(
+        getResourceModeMapKey(scope.resource, scope.mode, recipeMap),
+      ) ?? [])
+    : candidates;
+
+  return scopedCandidates.some((recipeIndex) => {
+    if (indexes.recipeMaps[recipeIndex] !== recipeMap) {
+      return false;
+    }
+
+    if (!recipeMatchesTierIndex(indexes, recipeIndex, maxTier)) {
+      return false;
+    }
+
+    return Boolean(scope.resource || !query || indexes.searchText[recipeIndex]?.includes(query));
+  });
 }
 
 function getResourceModeKey(
