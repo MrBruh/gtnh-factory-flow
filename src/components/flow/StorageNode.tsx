@@ -84,7 +84,6 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
       {storage.kind === "fluid" ? (
         <FluidStorageCard
           storage={storage}
-          result={result}
           produced={produced}
           consumed={consumed}
           net={net}
@@ -142,7 +141,6 @@ type StorageColor = (typeof GT_NODE_COLORS)[keyof typeof GT_NODE_COLORS] | undef
 
 function FluidStorageCard({
   storage,
-  result,
   produced,
   consumed,
   net,
@@ -153,7 +151,6 @@ function FluidStorageCard({
   outputHandleId,
 }: {
   storage: FactoryStorage;
-  result?: StorageThroughputResult;
   produced: number;
   consumed: number;
   net: number;
@@ -181,32 +178,25 @@ function FluidStorageCard({
     >
       <StorageHeader title="Super Tank" variant="tank" storageColor={storageColor} />
       <div
-        className="storage-node-body border-2 border-[#80889c] bg-[#9fa9bd] p-2 shadow-[inset_2px_2px_0_#d8deeb,inset_-2px_-2px_0_#767f91]"
+        className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#80889c] bg-[#9fa9bd] shadow-[inset_7px_7px_0_#858fa4,inset_-7px_-7px_0_#6f788a]"
         style={{
           backgroundColor: storageColor?.panel,
           borderColor: storageColor?.border,
         }}
       >
-        <div className="relative h-[92px] overflow-hidden border-2 border-[#1a1a1a] bg-black shadow-[2px_2px_0_#e2e7f0,-2px_-2px_0_#70798b]">
+        <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8e2f3] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d8798]">
           <StorageEdgeAnchors
             nodeId={storage.id}
             inputHandleId={inputHandleId}
             outputHandleId={outputHandleId}
           />
-          <div
-            className="absolute bottom-0 left-0 right-0 overflow-hidden bg-[#0d3b69]"
-            style={{ height: `${Math.max(8, Math.min(88, getFillPercent(result) * 0.88))}px` }}
-          >
-            <ResourceIcon
-              resource={{ ...storage, id: storage.resourceId, amount: 1 }}
-              size="sm"
-              showAmount={false}
-              bare
-              className="absolute inset-0 !h-full !w-full opacity-85"
-            />
-          </div>
-          <div className="pointer-events-none absolute inset-x-3 top-2 h-1 bg-[#2a87d5]/70" />
-          <div className="pointer-events-none absolute bottom-5 left-7 h-2 w-20 bg-[#2a87d5]/55" />
+          <ResourceIcon
+            resource={{ ...storage, id: storage.resourceId, amount: 1 }}
+            size="sm"
+            showAmount={false}
+            bare
+            className="!h-12 !w-12"
+          />
         </div>
       </div>
       <StorageStats
@@ -406,13 +396,4 @@ function trimFlow(value: number) {
   const abs = Math.abs(value);
   const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
   return value.toFixed(decimals).replace(/\.?0+$/, "");
-}
-
-function getFillPercent(result?: StorageThroughputResult) {
-  if (!result || result.producedPerSecond <= 0) {
-    return 12;
-  }
-
-  const ratio = result.consumedPerSecond / result.producedPerSecond;
-  return Math.max(18, Math.min(100, 52 + (1 - ratio) * 38));
 }
