@@ -18,6 +18,11 @@ const monocraft = localFont({
 export const metadata: Metadata = {
   title: "GTNH Factory Flow",
   description: "Manual GTNH factory flowchart and throughput planner.",
+  icons: {
+    icon: "/site-icon.png",
+    shortcut: "/site-icon.png",
+    apple: "/site-icon.png",
+  },
 };
 
 export default function RootLayout({

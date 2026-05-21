@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileJson, Trash2, Upload } from "lucide-react";
+import { Download, Trash2, Upload } from "lucide-react";
 import { useRef } from "react";
 import {
   cloneImportedProject,
@@ -52,7 +52,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
   return (
     <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
       <div className="flex min-w-[260px] flex-1 items-start gap-2">
-        <FileJson className="h-5 w-5 text-cyan-700" />
         <div className="grid min-w-0 gap-1">
           <h1 className="truncate text-lg font-semibold text-neutral-950">GTNH Factory Flow</h1>
           <label className="grid max-w-52 gap-0.5">
