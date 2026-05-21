@@ -721,10 +721,25 @@ function ResourceEdge({
     data?.color ?? DEFAULT_ITEM_EDGE_COLOR,
   );
   const viewportTransform = useStore((state) => state.transform);
+  const [measurementTick, setMeasurementTick] = useState(0);
   const { screenToFlowPosition } = useReactFlow<
     RecipeFlowNode | StorageFlowNode,
     ResourceFlowEdge
   >();
+  useEffect(() => {
+    let secondFrame = 0;
+    const firstFrame = window.requestAnimationFrame(() => {
+      secondFrame = window.requestAnimationFrame(() => {
+        setMeasurementTick((tick) => tick + 1);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
+  }, [viewportTransform]);
+
   const edgeColor = resourceColor;
   const visualSource = getSlotEdgeEndpoint({
     nodeId: source,
@@ -735,6 +750,7 @@ function ResourceEdge({
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
     screenToFlowPosition,
     viewportTransform,
+    measurementTick,
   });
   const visualTarget = getSlotEdgeEndpoint({
     nodeId: target,
@@ -745,6 +761,7 @@ function ResourceEdge({
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
     screenToFlowPosition,
     viewportTransform,
+    measurementTick,
   });
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: visualSource.x,
@@ -857,6 +874,7 @@ function getSlotEdgeEndpoint({
   isRecipeSlotEndpoint,
   screenToFlowPosition,
   viewportTransform: _viewportTransform,
+  measurementTick: _measurementTick,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -866,8 +884,10 @@ function getSlotEdgeEndpoint({
   isRecipeSlotEndpoint?: boolean;
   screenToFlowPosition: (clientPosition: { x: number; y: number }) => { x: number; y: number };
   viewportTransform: [number, number, number];
+  measurementTick: number;
 }) {
   void _viewportTransform;
+  void _measurementTick;
 
   if (!isRecipeSlotEndpoint) {
     return { x: fallbackX, y: fallbackY };
