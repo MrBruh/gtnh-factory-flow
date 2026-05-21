@@ -9,6 +9,7 @@ import {
   ReactFlow,
   applyNodeChanges,
   getSmoothStepPath,
+  useStore,
   type Connection,
   type ConnectionLineComponentProps,
   type Edge,
@@ -677,9 +678,13 @@ function ResourceEdge({
   sourceX,
   sourceY,
   sourcePosition,
+  source,
+  sourceHandleId,
   targetX,
   targetY,
   targetPosition,
+  target,
+  targetHandleId,
   style,
   selected,
   data,
@@ -688,15 +693,32 @@ function ResourceEdge({
     data?.resource,
     data?.color ?? DEFAULT_ITEM_EDGE_COLOR,
   );
+  const viewportTransform = useStore((state) => state.transform);
   const edgeColor = resourceColor;
-  const visualSourceX = getSlotEdgeX(sourceX, sourcePosition, data?.sourceSlotEndpoint);
-  const visualTargetX = getSlotEdgeX(targetX, targetPosition, data?.targetSlotEndpoint);
+  const visualSource = getSlotEdgeEndpoint({
+    nodeId: source,
+    handleId: sourceHandleId,
+    position: sourcePosition,
+    fallbackX: sourceX,
+    fallbackY: sourceY,
+    isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
+    transform: viewportTransform,
+  });
+  const visualTarget = getSlotEdgeEndpoint({
+    nodeId: target,
+    handleId: targetHandleId,
+    position: targetPosition,
+    fallbackX: targetX,
+    fallbackY: targetY,
+    isRecipeSlotEndpoint: data?.targetSlotEndpoint,
+    transform: viewportTransform,
+  });
   const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX: visualSourceX,
-    sourceY,
+    sourceX: visualSource.x,
+    sourceY: visualSource.y,
     sourcePosition,
-    targetX: visualTargetX,
-    targetY,
+    targetX: visualTarget.x,
+    targetY: visualTarget.y,
     targetPosition,
   });
 
@@ -714,7 +736,7 @@ function ResourceEdge({
         }}
       />
       <polygon
-        points={getArrowHeadPoints(visualTargetX, targetY, targetPosition)}
+        points={getArrowHeadPoints(visualTarget.x, visualTarget.y, targetPosition)}
         fill={edgeColor}
         stroke="#252525"
         strokeWidth={selected ? 1.4 : 0.8}
@@ -793,19 +815,73 @@ function ResourceConnectionLine({
   );
 }
 
-function getSlotEdgeX(x: number, position: unknown, isRecipeSlotEndpoint?: boolean) {
+function getSlotEdgeEndpoint({
+  nodeId,
+  handleId,
+  position,
+  fallbackX,
+  fallbackY,
+  isRecipeSlotEndpoint,
+  transform,
+}: {
+  nodeId: string;
+  handleId?: string | null;
+  position: unknown;
+  fallbackX: number;
+  fallbackY: number;
+  isRecipeSlotEndpoint?: boolean;
+  transform: [number, number, number];
+}) {
   if (!isRecipeSlotEndpoint) {
-    return x;
+    return { x: fallbackX, y: fallbackY };
+  }
+
+  const domEndpoint = getSlotEdgeEndpointFromDom(nodeId, handleId, position, transform);
+  if (domEndpoint) {
+    return domEndpoint;
   }
 
   switch (String(position)) {
     case "right":
-      return x + RECIPE_SLOT_EDGE_OFFSET;
+      return { x: fallbackX + RECIPE_SLOT_EDGE_OFFSET, y: fallbackY };
     case "left":
-      return x - RECIPE_SLOT_EDGE_OFFSET;
+      return { x: fallbackX - RECIPE_SLOT_EDGE_OFFSET, y: fallbackY };
     default:
-      return x;
+      return { x: fallbackX, y: fallbackY };
   }
+}
+
+function getSlotEdgeEndpointFromDom(
+  nodeId: string,
+  handleId: string | null | undefined,
+  position: unknown,
+  transform: [number, number, number],
+) {
+  if (!handleId || typeof document === "undefined") {
+    return undefined;
+  }
+
+  const slotElement = [...document.querySelectorAll<HTMLElement>("[data-resource-handle='true']")]
+    .find(
+      (element) =>
+        element.dataset.resourceNodeId === nodeId &&
+        element.dataset.resourceHandleId === handleId,
+    );
+  const flowElement = document.querySelector<HTMLElement>(".factory-flow-board .react-flow");
+  if (!slotElement || !flowElement) {
+    return undefined;
+  }
+
+  const slotRect = slotElement.getBoundingClientRect();
+  const flowRect = flowElement.getBoundingClientRect();
+  const [translateX, translateY, zoom] = transform;
+  const screenX = String(position) === "left" ? slotRect.left : slotRect.right;
+  const screenY = slotRect.top + slotRect.height / 2;
+
+  return {
+    x: (screenX - flowRect.left - translateX) / zoom,
+    y: (screenY - flowRect.top - translateY) / zoom,
+  };
 }
 
 function formatEdgeRateLabel(data: ResourceEdgeData | undefined) {

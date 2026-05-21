@@ -45,7 +45,7 @@ export function NeiRecipeCanvas({
   const height = getCanvasHeight(renderLayout.frames, renderLayout.logoY) * renderScale;
   const slotSize = layout.slotSize * renderScale;
   const renderedIconPixelSize = iconPixelSize ?? slotSize;
-  const logoX = Math.min(layout.logo.x, layout.canvas.width - 20);
+  const logoX = Math.min(layout.logo.x, layout.canvas.width - 28);
 
   return (
     <div
