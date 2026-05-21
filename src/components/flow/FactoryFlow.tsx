@@ -236,8 +236,8 @@ export function FactoryFlow() {
             isLimited: edgeResult?.isLimited === true,
             isStorageEdge,
             showLabel: true,
-            sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
-            targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
+            sourceSlotEndpoint: Boolean(sourceHandle),
+            targetSlotEndpoint: Boolean(targetHandle),
           },
           style: {
             stroke: edgeColor,
@@ -919,7 +919,9 @@ function getSlotEdgeEndpointFromDom(
   }
 
   const slotElement = [
-    ...document.querySelectorAll<HTMLElement>("[data-resource-handle='true']"),
+    ...document.querySelectorAll<HTMLElement>(
+      "[data-resource-edge-anchor='true'], [data-resource-handle='true']",
+    ),
   ].find(
     (element) =>
       element.dataset.resourceNodeId === nodeId && element.dataset.resourceHandleId === handleId,

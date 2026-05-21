@@ -91,6 +91,8 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           unit={unit}
           isHighlighted={isHighlighted || isSearchHighlighted}
           storageColor={storageColor}
+          inputHandleId={inputHandleId}
+          outputHandleId={outputHandleId}
         />
       ) : (
         <ItemStorageCard
@@ -101,6 +103,8 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
           unit={unit}
           isHighlighted={isHighlighted || isSearchHighlighted}
           storageColor={storageColor}
+          inputHandleId={inputHandleId}
+          outputHandleId={outputHandleId}
         />
       )}
     </div>
@@ -145,6 +149,8 @@ function FluidStorageCard({
   unit,
   isHighlighted,
   storageColor,
+  inputHandleId,
+  outputHandleId,
 }: {
   storage: FactoryStorage;
   result?: StorageThroughputResult;
@@ -154,6 +160,8 @@ function FluidStorageCard({
   unit: string;
   isHighlighted: boolean;
   storageColor: StorageColor;
+  inputHandleId: string;
+  outputHandleId: string;
 }) {
   return (
     <div
@@ -180,6 +188,11 @@ function FluidStorageCard({
         }}
       >
         <div className="relative h-[92px] overflow-hidden border-2 border-[#1a1a1a] bg-black shadow-[2px_2px_0_#e2e7f0,-2px_-2px_0_#70798b]">
+          <StorageEdgeAnchors
+            nodeId={storage.id}
+            inputHandleId={inputHandleId}
+            outputHandleId={outputHandleId}
+          />
           <div
             className="absolute bottom-0 left-0 right-0 overflow-hidden bg-[#0d3b69]"
             style={{ height: `${Math.max(8, Math.min(88, getFillPercent(result) * 0.88))}px` }}
@@ -215,6 +228,8 @@ function ItemStorageCard({
   unit,
   isHighlighted,
   storageColor,
+  inputHandleId,
+  outputHandleId,
 }: {
   storage: FactoryStorage;
   produced: number;
@@ -223,6 +238,8 @@ function ItemStorageCard({
   unit: string;
   isHighlighted: boolean;
   storageColor: StorageColor;
+  inputHandleId: string;
+  outputHandleId: string;
 }) {
   return (
     <div
@@ -248,7 +265,12 @@ function ItemStorageCard({
           borderColor: storageColor?.border,
         }}
       >
-        <div className="grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
+        <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
+          <StorageEdgeAnchors
+            nodeId={storage.id}
+            inputHandleId={inputHandleId}
+            outputHandleId={outputHandleId}
+          />
           <ResourceIcon
             resource={{ ...storage, id: storage.resourceId, amount: 1 }}
             size="sm"
@@ -266,6 +288,33 @@ function ItemStorageCard({
         storageColor={storageColor}
       />
     </div>
+  );
+}
+
+function StorageEdgeAnchors({
+  nodeId,
+  inputHandleId,
+  outputHandleId,
+}: {
+  nodeId: string;
+  inputHandleId: string;
+  outputHandleId: string;
+}) {
+  return (
+    <>
+      <span
+        data-resource-edge-anchor="true"
+        data-resource-node-id={nodeId}
+        data-resource-handle-id={inputHandleId}
+        className="pointer-events-none absolute inset-0"
+      />
+      <span
+        data-resource-edge-anchor="true"
+        data-resource-node-id={nodeId}
+        data-resource-handle-id={outputHandleId}
+        className="pointer-events-none absolute inset-0"
+      />
+    </>
   );
 }
 
