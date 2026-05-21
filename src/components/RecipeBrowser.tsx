@@ -29,7 +29,7 @@ import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
-import { ResourceIconCanvas } from "./nei/ResourceIconCanvas";
+import { preloadResourceIconCanvas, ResourceIconCanvas } from "./nei/ResourceIconCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 6;
@@ -605,6 +605,23 @@ function VirtualResourceResultList({
   const pageCount = Math.max(1, Math.ceil(resources.length / pageSize));
   const currentPage = Math.min(page, pageCount - 1);
   const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+  useEffect(() => {
+    const preload = () => {
+      const start = Math.max(0, currentPage - 1) * pageSize;
+      const end = Math.min(resources.length, (currentPage + 3) * pageSize);
+      resources.slice(start, end).forEach((resource) => {
+        void preloadResourceIconCanvas(resource);
+      });
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preload, { timeout: 600 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeout = globalThis.setTimeout(preload, 80);
+    return () => globalThis.clearTimeout(timeout);
+  }, [currentPage, pageSize, resources]);
   const handlePreviousPage = useCallback(() => {
     startPageTransition(() => {
       setPage((current) => Math.max(0, current - 1));
@@ -750,6 +767,22 @@ function RecipeMapTabBar({
     const resizeObserver = new ResizeObserver(updateOverflow);
     resizeObserver.observe(element);
     return () => resizeObserver.disconnect();
+  }, [tabs]);
+
+  useEffect(() => {
+    const preload = () => {
+      tabs.forEach((tab) => {
+        void preloadResourceIconCanvas(tab.icon);
+      });
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(preload, { timeout: 800 });
+      return () => window.cancelIdleCallback(idleId);
+    }
+
+    const timeout = globalThis.setTimeout(preload, 120);
+    return () => globalThis.clearTimeout(timeout);
   }, [tabs]);
 
   const scrollTabs = (direction: -1 | 1) => {

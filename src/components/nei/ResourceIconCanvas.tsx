@@ -121,6 +121,35 @@ function loadIconBitmap(
   return bitmapPromise;
 }
 
+export function preloadResourceIconCanvas(
+  resource?: Pick<ResourceAmount, "iconPath" | "iconAtlas">,
+): Promise<ImageBitmap | HTMLImageElement | undefined> {
+  const source = resource?.iconAtlas?.imagePath ?? resource?.iconPath;
+  if (!source || source.includes("/textures/rendered/")) {
+    return Promise.resolve(undefined);
+  }
+
+  return loadIconImage(source).then((image) => {
+    if (resource?.iconAtlas) {
+      return loadIconBitmap(image, {
+        cacheKey: `${source}:${resource.iconAtlas.x}:${resource.iconAtlas.y}:${resource.iconAtlas.width}:${resource.iconAtlas.height}`,
+        x: resource.iconAtlas.x,
+        y: resource.iconAtlas.y,
+        width: resource.iconAtlas.width,
+        height: resource.iconAtlas.height,
+      });
+    }
+
+    return loadIconBitmap(image, {
+      cacheKey: source,
+      x: 0,
+      y: 0,
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+    });
+  });
+}
+
 function loadIconImage(src: string): Promise<HTMLImageElement> {
   const absoluteSrc = new URL(src, window.location.origin).toString();
   const cached = imageCache.get(absoluteSrc);
