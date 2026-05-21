@@ -774,13 +774,9 @@ function RecipeMapTabBar({
               className={neiTabClass(activeRecipeMap === tab.id)}
             >
               {tab.icon ? (
-                <ResourceIcon
-                  resource={tab.icon}
-                  size="sm"
-                  showAmount={false}
-                  bare
-                  tooltip={false}
-                />
+                <span className="flex h-9 w-9 items-center justify-center">
+                  <ResourceIconCanvas resource={tab.icon} size={30} />
+                </span>
               ) : (
                 <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
                   ?
