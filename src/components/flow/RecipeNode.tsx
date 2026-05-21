@@ -1,7 +1,8 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, WandSparkles } from "lucide-react";
 import type { FactoryNode, MachineTier, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import {
   formatRate,
@@ -180,7 +181,11 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         />
 
         <div className="mt-1 grid grid-cols-3 gap-1 text-[12px] leading-4 text-black">
-          <Stat label="Machines" value={`${projectNode.machineCount}x`} />
+          <MachineCountStat
+            machineCount={projectNode.machineCount}
+            suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
+            onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
+          />
           <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
           <Stat label="EU/t" value={formatRate(result?.euT ?? 0, 0)} />
         </div>
@@ -231,6 +236,15 @@ function resolveVoltageTier(value: string, fallback: VoltageTier): VoltageTier {
   return tier ?? fallback;
 }
 
+function getSuggestedMachineCount(result: NodeThroughputResult | undefined, current: number) {
+  const exact = result?.theoreticalMachinesRequired;
+  if (!Number.isFinite(exact) || exact === undefined || exact <= 0) {
+    return Math.max(1, Math.round(current));
+  }
+
+  return Math.max(1, Math.round(exact));
+}
+
 type ConnectionSlotState = "idle" | "selected" | "compatible";
 
 function getConnectionSlotState(
@@ -266,6 +280,79 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
       <div className="truncate text-[9px] uppercase text-[#424242]">{label}</div>
       <div className="truncate font-medium">{value}</div>
+    </div>
+  );
+}
+
+function MachineCountStat({
+  machineCount,
+  suggestedMachineCount,
+  onChange,
+}: {
+  machineCount: number;
+  suggestedMachineCount: number;
+  onChange: (machineCount: number) => void;
+}) {
+  const machineCountText = String(machineCount);
+  const [draftState, setDraftState] = useState({
+    machineCount,
+    draft: machineCountText,
+  });
+  const draft = draftState.machineCount === machineCount ? draftState.draft : machineCountText;
+
+  const commitDraft = (value: string) => {
+    const normalized = value.trim();
+    if (!/^\d+$/.test(normalized)) {
+      return;
+    }
+
+    const next = Math.max(1, Number.parseInt(normalized, 10));
+    if (Number.isFinite(next) && next !== machineCount) {
+      setDraftState({ machineCount: next, draft: String(next) });
+      onChange(next);
+    }
+  };
+
+  return (
+    <div className="border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="truncate text-[9px] uppercase text-[#424242]">Machines</div>
+      <div className="flex items-center gap-1">
+        <input
+          value={draft}
+          onChange={(event) => {
+            const nextDraft = event.target.value;
+            setDraftState({ machineCount, draft: nextDraft });
+            commitDraft(nextDraft);
+          }}
+          onBlur={() => {
+            if (!/^\d+$/.test(draft.trim())) {
+              setDraftState({ machineCount, draft: machineCountText });
+            }
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          inputMode="numeric"
+          aria-label="Machine count"
+          className="nodrag min-w-0 flex-1 bg-transparent text-[12px] font-medium leading-4 text-black outline-none"
+        />
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setDraftState({
+              machineCount: suggestedMachineCount,
+              draft: String(suggestedMachineCount),
+            });
+            onChange(suggestedMachineCount);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[#555] bg-[#d0d0d0] text-[#202020] shadow-[inset_1px_1px_0_#fff,inset_-1px_-1px_0_#777] hover:bg-white"
+          title={`Set to ${suggestedMachineCount}x`}
+          aria-label={`Set machines to ${suggestedMachineCount}`}
+        >
+          <WandSparkles className="h-3 w-3" />
+        </button>
+      </div>
     </div>
   );
 }
