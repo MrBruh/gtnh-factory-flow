@@ -408,13 +408,13 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   deleteNode: (nodeId) => {
     set((state) => {
-      const project = touchProject({
+      const project = touchProject(pruneOrphanStorages({
         ...state.project,
         nodes: state.project.nodes.filter((node) => node.id !== nodeId),
         edges: state.project.edges.filter(
           (edge) => edge.source !== nodeId && edge.target !== nodeId,
         ),
-      });
+      }));
       return {
         project,
         pendingResourceConnection:
@@ -509,12 +509,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       }
 
       const duplicateEdge = findDuplicateEdge(projectWithStorage.edges, edge);
-      const project = touchProject({
+      const project = touchProject(pruneOrphanStorages({
         ...projectWithStorage,
         edges: duplicateEdge
           ? projectWithStorage.edges.filter((entry) => entry.id !== duplicateEdge.id)
           : [...projectWithStorage.edges, edge],
-      });
+      }));
 
       return {
         project,
@@ -603,10 +603,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
 
       const duplicateEdge = findDuplicateEdge(state.project.edges, edge);
       if (duplicateEdge) {
-        const project = touchProject({
+        const project = touchProject(pruneOrphanStorages({
           ...state.project,
           edges: state.project.edges.filter((entry) => entry.id !== duplicateEdge.id),
-        });
+        }));
         return {
           project,
           lastResult: calculateThroughput(project),
@@ -667,7 +667,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       };
       const edge = buildEdgeBetweenNodes(projectWithoutOld, sourceNodeId, targetNodeId, resource);
       if (!edge) {
-        const project = touchProject(projectWithoutOld);
+        const project = touchProject(pruneOrphanStorages(projectWithoutOld));
         return {
           project,
           lastResult: calculateThroughput(project),
@@ -675,12 +675,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       }
 
       const duplicateEdge = findDuplicateEdge(projectWithoutOld.edges, edge);
-      const project = touchProject({
+      const project = touchProject(pruneOrphanStorages({
         ...projectWithoutOld,
         edges: duplicateEdge
           ? projectWithoutOld.edges.filter((entry) => entry.id !== duplicateEdge.id)
           : [...projectWithoutOld.edges, edge],
-      });
+      }));
 
       return {
         project,
@@ -731,10 +731,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   deleteEdge: (edgeId) => {
     set((state) => {
-      const project = touchProject({
+      const project = touchProject(pruneOrphanStorages({
         ...state.project,
         edges: state.project.edges.filter((edge) => edge.id !== edgeId),
-      });
+      }));
       return {
         project,
         lastResult: calculateThroughput(project),
@@ -864,6 +864,22 @@ function addConnectedRecipeNodeToState(
     selectedRecipeId: recipe.id,
     lastResult: calculateThroughput(project),
   };
+}
+
+function pruneOrphanStorages(project: FactoryProject): FactoryProject {
+  const storages = project.storages ?? [];
+  if (storages.length === 0) {
+    return project;
+  }
+
+  const linkedStorageIds = new Set<string>();
+  for (const edge of project.edges) {
+    linkedStorageIds.add(edge.source);
+    linkedStorageIds.add(edge.target);
+  }
+
+  const nextStorages = storages.filter((storage) => linkedStorageIds.has(storage.id));
+  return nextStorages.length === storages.length ? project : { ...project, storages: nextStorages };
 }
 
 function buildEdgeBetweenNodes(

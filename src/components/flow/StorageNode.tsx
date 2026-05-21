@@ -152,38 +152,30 @@ function FluidStorageCard({
   onAutoRoute: () => void;
 }) {
   return (
-    <div className="w-[154px] border-2 border-[#5f6677] bg-[#aeb7cc] shadow-[inset_3px_3px_0_#e5ebff,inset_-3px_-3px_0_#6a7286]">
+    <div className="w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[0_0_0_3px_#53e5ef,inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]">
       <StorageHeader
-        title="Super Tank I"
+        title="Super Tank"
         variant="tank"
         onDelete={onDelete}
         onAutoRoute={onAutoRoute}
       />
-      <div className="grid grid-cols-[1fr_30px] gap-2 p-2">
-        <div className="relative h-[74px] border-2 border-[#d7dcef] bg-black p-1 text-white shadow-[inset_-2px_-2px_0_#252525]">
-          <div className="minecraft-title text-left text-[13px] leading-[15px]">Fluid Amount</div>
-          <div className="minecraft-title text-left text-[16px] leading-[17px]">
-            {formatTankAmount(result)}
-          </div>
+      <div className="border-2 border-[#80889c] bg-[#9fa9bd] p-2 shadow-[inset_2px_2px_0_#d8deeb,inset_-2px_-2px_0_#767f91]">
+        <div className="relative h-[92px] border-2 border-[#1a1a1a] bg-black p-1 shadow-[2px_2px_0_#e2e7f0,-2px_-2px_0_#70798b]">
           <div
-            className="absolute bottom-1 right-1 w-7 border border-[#111] bg-cyan-400/75"
-            style={{ height: `${Math.max(10, Math.min(42, getFillPercent(result) * 0.42))}px` }}
-          />
-          <div className="absolute bottom-0 right-1 text-[8px] leading-none text-white">16kL</div>
+            className="absolute bottom-1 left-1 right-1 overflow-hidden bg-[#0d3b69]"
+            style={{ height: `${Math.max(8, Math.min(82, getFillPercent(result) * 0.82))}px` }}
+          >
+            <div className="h-full w-full opacity-80 [background:linear-gradient(180deg,#1968ad_0%,#0c5596_38%,#0a3f76_39%,#0b4b86_72%,#07365f_100%)]" />
+            <div className="absolute left-2 top-2 h-2 w-24 bg-[#2a87d5]/70" />
+            <div className="absolute bottom-3 left-4 h-2 w-12 bg-[#2a87d5]/55" />
+          </div>
           <ResourceIcon
             resource={{ ...storage, id: storage.resourceId, amount: 1 }}
             size="sm"
             showAmount={false}
             bare
-            className="absolute bottom-2 left-2 !h-8 !w-8 opacity-80"
+            className="absolute bottom-2 left-2 !h-8 !w-8 opacity-70"
           />
-        </div>
-        <div className="grid content-start gap-1 pt-1">
-          <PortLabel label="IN" active />
-          <div className="h-8 border-2 border-[#7b1414] bg-[#2b2b2b] px-1 py-0.5">
-            <div className="h-full border-l-2 border-[#d04444]" />
-          </div>
-          <PortLabel label="OUT" />
         </div>
       </div>
       <StorageStats produced={produced} consumed={consumed} net={net} unit={unit} />
@@ -209,40 +201,25 @@ function ItemStorageCard({
   onAutoRoute: () => void;
 }) {
   return (
-    <div className="w-[132px] border-2 border-[#2b1c0e] bg-[#76552b] shadow-[inset_4px_4px_0_#a67a3e,inset_-4px_-4px_0_#3b2915]">
+    <div className="w-[174px] border-2 border-[#2b1c0e] bg-[#8a6030] p-1 shadow-[0_0_0_3px_#53e5ef,inset_3px_3px_0_#ad7b3e,inset_-3px_-3px_0_#3e2a13]">
       <StorageHeader
         title="Drawer"
         variant="drawer"
         onDelete={onDelete}
         onAutoRoute={onAutoRoute}
       />
-      <div className="mx-auto mt-2 grid h-[76px] w-[100px] place-items-center border-2 border-[#3a260f] bg-[#8f6734] shadow-[inset_5px_5px_0_#6a4b28,inset_-5px_-5px_0_#3e2b16]">
-        <div className="grid h-[54px] w-[54px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
+      <div className="mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]">
+        <div className="grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <ResourceIcon
             resource={{ ...storage, id: storage.resourceId, amount: 1 }}
             size="sm"
             showAmount={false}
             bare
-            className="!h-11 !w-11"
+            className="!h-12 !w-12"
           />
         </div>
       </div>
       <StorageStats produced={produced} consumed={consumed} net={net} unit={unit} />
-    </div>
-  );
-}
-
-function PortLabel({ label, active = false }: { label: string; active?: boolean }) {
-  return (
-    <div
-      className={[
-        "h-7 border-2 px-1 text-center text-[10px] font-bold leading-[22px]",
-        active
-          ? "border-[#5a5f70] bg-[#9aa4bd] text-[#d8dcef]"
-          : "border-[#777] bg-[#8c8c8c] text-[#cfcfcf]",
-      ].join(" ")}
-    >
-      {label}
     </div>
   );
 }
@@ -259,7 +236,7 @@ function StorageStats({
   unit: string;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-1 p-2 pt-0 text-[9px]">
+    <div className="grid grid-cols-3 gap-1 pt-2 text-[9px]">
       <StorageStat label="In" value={formatCompact(produced, unit)} />
       <StorageStat label="Out" value={formatCompact(consumed, unit)} />
       <StorageStat label="Net" value={`${net >= 0 ? "+" : ""}${formatCompact(net, unit)}`} />
@@ -280,23 +257,41 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 
 function StorageStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-[#555] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
-      <div className="text-[7px] uppercase text-[#424242]">{label}</div>
-      <div className="truncate font-medium leading-3">{value}</div>
+    <div className="h-9 min-w-0 border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="text-[8px] uppercase leading-[10px] text-[#424242]">{label}</div>
+      <div
+        className={[
+          "whitespace-nowrap font-medium leading-[14px] text-[#111]",
+          value.length > 9 ? "text-[8px]" : value.length > 7 ? "text-[9px]" : "text-[11px]",
+        ].join(" ")}
+      >
+        {value}
+      </div>
     </div>
   );
 }
 
 function formatCompact(value: number, unit: string) {
-  return `${formatRate(value, 2)}${unit}`;
-}
-
-function formatTankAmount(result?: StorageThroughputResult) {
-  if (!result) {
-    return "0";
+  const abs = Math.abs(value);
+  if (!Number.isFinite(value) || abs < 0.005) {
+    return `0${unit}`;
   }
 
-  return formatRate(Math.max(0, result.storedAmount), 0);
+  if (abs >= 1_000_000) {
+    return `${trimFlow(value / 1_000_000)}M${unit}`;
+  }
+
+  if (abs >= 1_000) {
+    return `${trimFlow(value / 1_000)}k${unit}`;
+  }
+
+  return `${trimFlow(value)}${unit}`;
+}
+
+function trimFlow(value: number) {
+  const abs = Math.abs(value);
+  const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
+  return value.toFixed(decimals).replace(/\.?0+$/, "");
 }
 
 function getFillPercent(result?: StorageThroughputResult) {
