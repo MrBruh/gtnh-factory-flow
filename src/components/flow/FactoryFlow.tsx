@@ -936,14 +936,9 @@ function getSlotEdgeEndpointFromDom(
     return undefined;
   }
 
-  const slotElement = [
-    ...document.querySelectorAll<HTMLElement>(
-      "[data-resource-edge-anchor='true'], [data-resource-handle='true']",
-    ),
-  ].find(
-    (element) =>
-      element.dataset.resourceNodeId === nodeId && element.dataset.resourceHandleId === handleId,
-  );
+  const slotElement =
+    findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
+    findResourceEndpointElement("[data-resource-handle='true']", nodeId, handleId);
   if (!slotElement) {
     return undefined;
   }
@@ -952,6 +947,13 @@ function getSlotEdgeEndpointFromDom(
   const screenX = String(position) === "left" ? slotRect.left : slotRect.right;
   const screenY = slotRect.top + slotRect.height / 2;
   return screenToFlowPosition({ x: screenX, y: screenY });
+}
+
+function findResourceEndpointElement(selector: string, nodeId: string, handleId: string) {
+  return [...document.querySelectorAll<HTMLElement>(selector)].find(
+    (element) =>
+      element.dataset.resourceNodeId === nodeId && element.dataset.resourceHandleId === handleId,
+  );
 }
 
 function formatEdgeRateLabel(data: ResourceEdgeData | undefined) {
