@@ -1,21 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Pixelify_Sans } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
-const pixelifySans = Pixelify_Sans({
+const monocraft = localFont({
+  src: [
+    { path: "./fonts/Monocraft-ExtraLight.ttf", weight: "200", style: "normal" },
+    { path: "./fonts/Monocraft-Light.ttf", weight: "300", style: "normal" },
+    { path: "./fonts/Monocraft.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/Monocraft-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "./fonts/Monocraft-Bold.ttf", weight: "700", style: "normal" },
+    { path: "./fonts/Monocraft-Black.ttf", weight: "900", style: "normal" },
+  ],
   variable: "--font-minecraft",
-  weight: ["400", "500"],
-  subsets: ["latin"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -29,10 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${pixelifySans.variable} h-full antialiased`}
-    >
+    <html lang="en" className={`${monocraft.variable} h-full`}>
       <body className="min-h-full">{children}</body>
     </html>
   );
