@@ -14,7 +14,7 @@ export GTNH_EXPORT_MAX_MEMORY="${GTNH_EXPORT_MAX_MEMORY:-6G}"
 export GTNH_RENDER_STACK_ICONS="${GTNH_RENDER_STACK_ICONS:-true}"
 export GTNH_ICON_EXPORT_BATCH_SIZE="${GTNH_ICON_EXPORT_BATCH_SIZE:-64}"
 export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-256}"
-export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$(pwd)/.pipeline/icon-cache/$GTNH_ATLAS_ICON_SIZE}"
+export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$HOME/.cache/gtnh-factory-flow/icons/$GTNH_ATLAS_ICON_SIZE}"
 
 mkdir -p "$GTNH_DATASET_OUT_DIR" "$GTNH_RAW_EXPORT_DIR" "$GTNH_INSTANCE_DIR"
 
@@ -126,7 +126,7 @@ while (( SECONDS < deadline )); do
     next_size="$(stat -c%s "$raw_recex_json")"
     if [[ "$current_size" == "$next_size" ]]; then
       if [[ "$GTNH_RENDER_STACK_ICONS" == "true" ]]; then
-        echo "Detected stable RecEx JSON; waiting for queued icon batch and client shutdown: $raw_recex_json"
+        echo "Detected stable RecEx JSON file; waiting for queued icon batch and client shutdown: $raw_recex_json"
       else
         echo "Detected completed RecEx export: $raw_recex_json"
         break

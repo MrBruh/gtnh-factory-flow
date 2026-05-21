@@ -83,8 +83,10 @@ Useful knobs:
 - `GTNH_RENDER_STACK_ICONS=true|false` enables the Forge 1.7.10 exporter.
 - `GTNH_ICON_EXPORT_BATCH_SIZE=64` controls how many icons are rendered per client frame.
 - `GTNH_ATLAS_ICON_SIZE=256` controls the rendered icon size and atlas cell size.
-- `GTNH_ICON_CACHE_DIR=.pipeline/icon-cache/<size>` stores rendered icons reused between
-  stable and daily when the item/fluid key resolves to the same filename.
+- `GTNH_ICON_CACHE_DIR=$HOME/.cache/gtnh-factory-flow/icons/<size>` stores rendered
+  icons reused between stable and daily when the item/fluid key resolves to the same
+  filename. It intentionally lives outside the Actions workspace so `actions/checkout`
+  cannot delete it between matrix jobs.
 - `GTNH_ATLAS_MAX_SIZE=8192` controls each atlas page size. At 256px cells this stores
   1024 icons per page.
 - `GTNH_ATLAS_KEEP_RENDERED=true` keeps the intermediate per-icon PNGs for debugging.
