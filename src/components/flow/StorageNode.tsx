@@ -21,7 +21,9 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
   const deleteStorage = useFactoryStore((state) => state.deleteStorage);
   const autoRouteStorage = useFactoryStore((state) => state.autoRouteStorage);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
-  const setHoveredStorageResourceKey = useFactoryStore((state) => state.setHoveredStorageResourceKey);
+  const setHoveredStorageResourceKey = useFactoryStore(
+    (state) => state.setHoveredStorageResourceKey,
+  );
   const resourceKey = makeResourceKey(storage.kind, storage.resourceId);
   const isHighlighted = hoveredStorageResourceKey === resourceKey;
   const isSearchHighlighted = storageMatchesSearch(storage, recipeSearch);
@@ -46,13 +48,13 @@ export function StorageNode({ data }: NodeProps<StorageFlowNode>) {
         id={makeResourceHandleId("input", { kind: storage.kind, id: storage.resourceId })}
         type="target"
         position={Position.Left}
-        className="!-left-1.5 !h-3 !w-3 !border-2 !border-white !bg-cyan-600 !opacity-0 group-hover:!opacity-100"
+        className="nodrag !absolute !bottom-0 !left-0 !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
       <Handle
         id={makeResourceHandleId("output", { kind: storage.kind, id: storage.resourceId })}
         type="source"
         position={Position.Right}
-        className="!-right-1.5 !h-3 !w-3 !border-2 !border-white !bg-emerald-600 !opacity-0 group-hover:!opacity-100"
+        className="nodrag !absolute !bottom-0 !left-1/2 !right-auto !top-0 !z-30 !h-full !w-1/2 !min-w-0 !translate-x-0 !translate-y-0 !rounded-none !border-0 !bg-transparent !opacity-0"
       />
 
       {storage.kind === "fluid" ? (
@@ -96,9 +98,7 @@ function StorageHeader({
     <div
       className={[
         "flex h-6 items-center gap-1 border-b-2 px-1 shadow-[inset_1px_1px_0_rgba(255,255,255,0.55)]",
-        variant === "tank"
-          ? "border-[#747c91] bg-[#b8c1d9]"
-          : "border-[#4f3518] bg-[#8a6030]",
+        variant === "tank" ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
     >
       <button
@@ -153,7 +153,12 @@ function FluidStorageCard({
 }) {
   return (
     <div className="w-[154px] border-2 border-[#5f6677] bg-[#aeb7cc] shadow-[inset_3px_3px_0_#e5ebff,inset_-3px_-3px_0_#6a7286]">
-      <StorageHeader title="Super Tank I" variant="tank" onDelete={onDelete} onAutoRoute={onAutoRoute} />
+      <StorageHeader
+        title="Super Tank I"
+        variant="tank"
+        onDelete={onDelete}
+        onAutoRoute={onAutoRoute}
+      />
       <div className="grid grid-cols-[1fr_30px] gap-2 p-2">
         <div className="relative h-[74px] border-2 border-[#d7dcef] bg-black p-1 text-white shadow-[inset_-2px_-2px_0_#252525]">
           <div className="minecraft-title text-left text-[13px] leading-[15px]">Fluid Amount</div>
@@ -205,7 +210,12 @@ function ItemStorageCard({
 }) {
   return (
     <div className="w-[132px] border-2 border-[#2b1c0e] bg-[#76552b] shadow-[inset_4px_4px_0_#a67a3e,inset_-4px_-4px_0_#3b2915]">
-      <StorageHeader title="Drawer" variant="drawer" onDelete={onDelete} onAutoRoute={onAutoRoute} />
+      <StorageHeader
+        title="Drawer"
+        variant="drawer"
+        onDelete={onDelete}
+        onAutoRoute={onAutoRoute}
+      />
       <div className="mx-auto mt-2 grid h-[76px] w-[100px] place-items-center border-2 border-[#3a260f] bg-[#8f6734] shadow-[inset_5px_5px_0_#6a4b28,inset_-5px_-5px_0_#3e2b16]">
         <div className="grid h-[54px] w-[54px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <ResourceIcon
@@ -263,7 +273,9 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
     return false;
   }
 
-  return `${storage.displayName ?? ""} ${storage.resourceId}`.toLowerCase().includes(normalizedQuery);
+  return `${storage.displayName ?? ""} ${storage.resourceId}`
+    .toLowerCase()
+    .includes(normalizedQuery);
 }
 
 function StorageStat({ label, value }: { label: string; value: string }) {

@@ -4,6 +4,7 @@ import {
   Background,
   BaseEdge,
   Controls,
+  ConnectionMode,
   EdgeLabelRenderer,
   MarkerType,
   ReactFlow,
@@ -17,10 +18,11 @@ import {
   type NodeChange,
   type NodeTypes,
   type OnSelectionChangeParams,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import { X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { formatRate } from "@/lib/model";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatRate, isRecipeInputConsumed } from "@/lib/model";
 import type {
   FactoryEdge,
   FactoryNodeColorTag,
@@ -59,6 +61,15 @@ type ResourceEdgeData = {
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
+type DraggedResourceConnection = Pick<
+  ResourceAmount,
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
+> & {
+  nodeId: string;
+  side: "input" | "output";
+  handleId: string;
+};
+
 export function FactoryFlow() {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
@@ -67,8 +78,9 @@ export function FactoryFlow() {
   const updateNode = useFactoryStore((state) => state.updateNode);
   const setStoragePosition = useFactoryStore((state) => state.setStoragePosition);
   const connectNodes = useFactoryStore((state) => state.connectNodes);
+  const reconnectEdge = useFactoryStore((state) => state.reconnectEdge);
+  const addStorageForConnection = useFactoryStore((state) => state.addStorageForConnection);
   const deleteEdge = useFactoryStore((state) => state.deleteEdge);
-  const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const cancelResourceConnection = useFactoryStore((state) => state.cancelResourceConnection);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const setNodeColorPaintMode = useFactoryStore((state) => state.setNodeColorPaintMode);
@@ -121,6 +133,11 @@ export function FactoryFlow() {
   );
   const [selectedEdgeIds, setSelectedEdgeIds] = useState<string[]>([]);
   const draggingNodeRef = useRef(false);
+  const draggedResourceRef = useRef<DraggedResourceConnection | undefined>(undefined);
+  const flowInstanceRef = useRef<ReactFlowInstance<
+    RecipeFlowNode | StorageFlowNode,
+    ResourceFlowEdge
+  > | null>(null);
 
   useEffect(() => {
     if (draggingNodeRef.current) {
@@ -130,14 +147,15 @@ export function FactoryFlow() {
     setFlowNodes(nodesFromProject);
   }, [nodesFromProject]);
 
-  const handleNodesChange = (
-    changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[],
-  ) => {
-    setFlowNodes(
-      (currentNodes) =>
-        applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
-    );
-  };
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<Array<RecipeFlowNode | StorageFlowNode>[number]>[]) => {
+      setFlowNodes(
+        (currentNodes) =>
+          applyNodeChanges(changes, currentNodes) as Array<RecipeFlowNode | StorageFlowNode>,
+      );
+    },
+    [],
+  );
 
   const edges = useMemo<ResourceFlowEdge[]>(
     () =>
@@ -202,33 +220,105 @@ export function FactoryFlow() {
     [hoveredStorageResourceKey, project, recipeSearch, result.edges],
   );
 
-  const handleConnect = (connection: Connection) => {
-    if (connection.source && connection.target) {
-      const sourceHandle = parseResourceHandleId(connection.sourceHandle);
-      const targetHandle = parseResourceHandleId(connection.targetHandle);
+  const handleConnect = useCallback(
+    (connection: Connection) => {
+      if (connection.source && connection.target) {
+        const sourceHandle = parseResourceHandleId(connection.sourceHandle);
+        const targetHandle = parseResourceHandleId(connection.targetHandle);
 
-      if (
-        sourceHandle?.side === "output" &&
-        targetHandle?.side === "input" &&
-        sourceHandle.kind === targetHandle.kind &&
-        sourceHandle.resourceId === targetHandle.resourceId
-      ) {
-        connectNodes(connection.source, connection.target, {
-          kind: sourceHandle.kind,
-          id: sourceHandle.resourceId,
-          sourceHandle: connection.sourceHandle ?? undefined,
-          targetHandle: connection.targetHandle ?? undefined,
-        });
+        if (
+          sourceHandle &&
+          targetHandle &&
+          sourceHandle.side !== targetHandle.side &&
+          sourceHandle.kind === targetHandle.kind &&
+          sourceHandle.resourceId === targetHandle.resourceId
+        ) {
+          const output =
+            sourceHandle.side === "output"
+              ? {
+                  nodeId: connection.source,
+                  handleId: connection.sourceHandle ?? undefined,
+                  resource: sourceHandle,
+                }
+              : {
+                  nodeId: connection.target,
+                  handleId: connection.targetHandle ?? undefined,
+                  resource: targetHandle,
+                };
+          const input =
+            sourceHandle.side === "input"
+              ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
+              : { nodeId: connection.target, handleId: connection.targetHandle ?? undefined };
+
+          connectNodes(output.nodeId, input.nodeId, {
+            kind: output.resource.kind,
+            id: output.resource.resourceId,
+            sourceHandle: output.handleId,
+            targetHandle: input.handleId,
+          });
+          return;
+        }
+
+        if (connection.sourceHandle || connection.targetHandle) {
+          return;
+        }
+
+        connectNodes(connection.source, connection.target);
+      }
+    },
+    [connectNodes],
+  );
+
+  const handleConnectStart = useCallback(
+    (_: MouseEvent | TouchEvent, params: { nodeId: string | null; handleId: string | null }) => {
+      draggedResourceRef.current =
+        params.nodeId && params.handleId
+          ? getDraggedResourceForHandle(project, params.nodeId, params.handleId)
+          : undefined;
+    },
+    [project],
+  );
+
+  const handleConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: { toHandle: unknown | null }) => {
+      const draggedResource = draggedResourceRef.current;
+      draggedResourceRef.current = undefined;
+
+      const flowInstance = flowInstanceRef.current;
+      if (!draggedResource || connectionState.toHandle || !flowInstance) {
         return;
       }
 
-      if (connection.sourceHandle || connection.targetHandle) {
+      const clientPosition = getClientPosition(event);
+      if (!clientPosition) {
         return;
       }
 
-      connectNodes(connection.source, connection.target);
-    }
-  };
+      const position = flowInstance.screenToFlowPosition(clientPosition);
+      addStorageForConnection(
+        draggedResource,
+        draggedResource.nodeId,
+        draggedResource.side,
+        { x: position.x - 78, y: position.y - 62 },
+        draggedResource.handleId,
+      );
+    },
+    [addStorageForConnection],
+  );
+
+  const handleReconnect = useCallback(
+    (oldEdge: ResourceFlowEdge, connection: Connection) => {
+      reconnectEdge(oldEdge.id, connection);
+    },
+    [reconnectEdge],
+  );
+
+  const handleInit = useCallback(
+    (instance: ReactFlowInstance<RecipeFlowNode | StorageFlowNode, ResourceFlowEdge>) => {
+      flowInstanceRef.current = instance;
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -247,9 +337,57 @@ export function FactoryFlow() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [cancelResourceConnection, deleteEdge, selectedEdgeIds, setNodeColorPaintMode]);
 
-  const handleSelectionChange = ({ edges: selectedEdges }: OnSelectionChangeParams) => {
+  const handleSelectionChange = useCallback(({ edges: selectedEdges }: OnSelectionChangeParams) => {
     setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
-  };
+  }, []);
+
+  const handleNodeClick = useCallback(
+    (_: unknown, node: Node) => {
+      if (nodeColorPaintMode !== undefined && node.type === "recipeNode") {
+        updateNode(node.id, { colorTag: nodeColorPaintMode ?? undefined });
+        return;
+      }
+
+      selectNode(node.id);
+    },
+    [nodeColorPaintMode, selectNode, updateNode],
+  );
+
+  const handlePaneClick = useCallback(() => {
+    selectNode(undefined);
+    cancelResourceConnection();
+  }, [cancelResourceConnection, selectNode]);
+
+  const handleNodeDragStart = useCallback(() => {
+    draggingNodeRef.current = true;
+  }, []);
+
+  const handleNodeDragStop = useCallback(
+    (_: unknown, node: Node) => {
+      if (node.type === "storageNode") {
+        setStoragePosition(node.id, node.position);
+      } else {
+        setNodePosition(node.id, node.position);
+      }
+
+      draggingNodeRef.current = false;
+      setFlowNodes((currentNodes) =>
+        currentNodes.map((entry) =>
+          entry.id === node.id ? ({ ...entry, position: node.position } as typeof entry) : entry,
+        ),
+      );
+    },
+    [setNodePosition, setStoragePosition],
+  );
+
+  const handleEdgesDelete = useCallback(
+    (deletedEdges: Edge[]) => {
+      deletedEdges.forEach((edge) => deleteEdge(edge.id));
+    },
+    [deleteEdge],
+  );
+
+  const fitViewOptions = useMemo(() => ({ padding: 0.18 }), []);
 
   return (
     <div className="factory-flow-board relative h-full min-h-[520px] overflow-hidden border-x border-neutral-200 bg-neutral-100">
@@ -259,42 +397,24 @@ export function FactoryFlow() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onConnect={handleConnect}
-        onNodeClick={(_, node) => {
-          if (nodeColorPaintMode !== undefined && node.type === "recipeNode") {
-            updateNode(node.id, { colorTag: nodeColorPaintMode ?? undefined });
-            return;
-          }
-
-          selectNode(node.id);
-        }}
+        onConnectStart={handleConnectStart}
+        onConnectEnd={handleConnectEnd}
+        onReconnect={handleReconnect}
+        onInit={handleInit}
+        isValidConnection={isCompatibleResourceConnection}
+        connectionMode={ConnectionMode.Loose}
+        connectionRadius={18}
+        edgesReconnectable
+        reconnectRadius={12}
+        onNodeClick={handleNodeClick}
         onNodesChange={handleNodesChange}
         onSelectionChange={handleSelectionChange}
-        onPaneClick={() => {
-          selectNode(undefined);
-          cancelResourceConnection();
-        }}
-        onNodeDragStart={() => {
-          draggingNodeRef.current = true;
-        }}
-        onNodeDragStop={(_, node: Node) => {
-          if (node.type === "storageNode") {
-            setStoragePosition(node.id, node.position);
-          } else {
-            setNodePosition(node.id, node.position);
-          }
-
-          draggingNodeRef.current = false;
-          setFlowNodes((currentNodes) =>
-            currentNodes.map((entry) =>
-              entry.id === node.id
-                ? ({ ...entry, position: node.position } as typeof entry)
-                : entry,
-            ),
-          );
-        }}
-        onEdgesDelete={(deletedEdges) => deletedEdges.forEach((edge) => deleteEdge(edge.id))}
+        onPaneClick={handlePaneClick}
+        onNodeDragStart={handleNodeDragStart}
+        onNodeDragStop={handleNodeDragStop}
+        onEdgesDelete={handleEdgesDelete}
         fitView
-        fitViewOptions={{ padding: 0.18 }}
+        fitViewOptions={fitViewOptions}
         minZoom={0.15}
         maxZoom={1.8}
       >
@@ -302,13 +422,6 @@ export function FactoryFlow() {
         <Controls position="bottom-left" />
       </ReactFlow>
       <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
-      {pendingResourceConnection ? (
-        <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 border-2 border-[#252525] bg-[#c6c6c6] px-3 py-2 text-center text-xs font-medium text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
-          {pendingResourceConnection.side === "output" ? "Output" : "Input"}:{" "}
-          {pendingResourceConnection.displayName ?? pendingResourceConnection.resourceId}
-          <span className="ml-2 font-normal">click matching slot, Esc to cancel</span>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -414,6 +527,88 @@ function ResourceEdge({
       ) : null}
     </>
   );
+}
+
+function isCompatibleResourceConnection(connection: Connection | Edge): boolean {
+  const sourceHandle = parseResourceHandleId(connection.sourceHandle);
+  const targetHandle = parseResourceHandleId(connection.targetHandle);
+  if (!sourceHandle || !targetHandle) {
+    return false;
+  }
+
+  return (
+    sourceHandle.side !== targetHandle.side &&
+    sourceHandle.kind === targetHandle.kind &&
+    sourceHandle.resourceId === targetHandle.resourceId
+  );
+}
+
+function getDraggedResourceForHandle(
+  project: FactoryProject,
+  nodeId: string,
+  handleId: string,
+): DraggedResourceConnection | undefined {
+  const handle = parseResourceHandleId(handleId);
+  if (!handle) {
+    return undefined;
+  }
+
+  const storage = (project.storages ?? []).find((entry) => entry.id === nodeId);
+  if (storage) {
+    return {
+      nodeId,
+      side: handle.side,
+      handleId,
+      kind: storage.kind,
+      id: storage.resourceId,
+      displayName: storage.displayName,
+      iconPath: storage.iconPath,
+      iconAtlas: storage.iconAtlas,
+    };
+  }
+
+  const node = project.nodes.find((entry) => entry.id === nodeId);
+  const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
+  if (!recipe) {
+    return undefined;
+  }
+
+  const resources = handle.side === "input" ? recipe.inputs : recipe.outputs;
+  const resource = resources.find(
+    (entry) => entry.kind === handle.kind && entry.id === handle.resourceId,
+  );
+  if (!resource || (handle.side === "input" && !isRecipeInputConsumed(resource))) {
+    return undefined;
+  }
+
+  return {
+    nodeId,
+    side: handle.side,
+    handleId,
+    kind: resource.kind,
+    id: resource.id,
+    displayName: resource.displayName,
+    iconPath: resource.iconPath,
+    iconAtlas: resource.iconAtlas,
+  };
+}
+
+function getClientPosition(event: MouseEvent | TouchEvent) {
+  if ("changedTouches" in event && event.changedTouches.length > 0) {
+    return {
+      x: event.changedTouches[0].clientX,
+      y: event.changedTouches[0].clientY,
+    };
+  }
+
+  if ("clientX" in event) {
+    return {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  return undefined;
 }
 
 function getEdgeResource(

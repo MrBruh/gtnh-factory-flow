@@ -79,6 +79,13 @@ interface FactoryStore {
   addResourceStorage: (
     resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
   ) => void;
+  addStorageForConnection: (
+    resource: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">,
+    nodeId: string,
+    side: "input" | "output",
+    position: FactoryStorage["position"],
+    handleId: string,
+  ) => void;
   deleteStorage: (storageId: string) => void;
   autoRouteStorage: (storageId: string) => void;
   setStoragePosition: (storageId: string, position: FactoryStorage["position"]) => void;
@@ -89,6 +96,15 @@ interface FactoryStore {
     resource?: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
       sourceHandle?: string;
       targetHandle?: string;
+    },
+  ) => void;
+  reconnectEdge: (
+    edgeId: string,
+    connection: {
+      source?: string | null;
+      target?: string | null;
+      sourceHandle?: string | null;
+      targetHandle?: string | null;
     },
   ) => void;
   autoConnectNode: (nodeId: string) => void;
@@ -431,6 +447,70 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       };
     });
   },
+  addStorageForConnection: (resource, nodeId, side, position, handleId) => {
+    set((state) => {
+      const existing = (state.project.storages ?? []).find(
+        (storage) => storage.kind === resource.kind && storage.resourceId === resource.id,
+      );
+      const storage: FactoryStorage = existing ?? {
+        id: createId("storage"),
+        kind: resource.kind,
+        resourceId: resource.id,
+        displayName: resource.displayName,
+        iconPath: resource.iconPath,
+        iconAtlas: resource.iconAtlas,
+        position,
+      };
+      const projectWithStorage: FactoryProject = existing
+        ? state.project
+        : {
+            ...state.project,
+            storages: [...(state.project.storages ?? []), storage],
+          };
+      const selectedResource = {
+        kind: resource.kind,
+        id: resource.id,
+        displayName: resource.displayName,
+        sourceHandle:
+          side === "output"
+            ? handleId
+            : makeResourceHandleId("output", { kind: resource.kind, id: resource.id }),
+        targetHandle:
+          side === "input"
+            ? handleId
+            : makeResourceHandleId("input", { kind: resource.kind, id: resource.id }),
+      };
+      const edge =
+        side === "output"
+          ? buildEdgeBetweenNodes(projectWithStorage, nodeId, storage.id, selectedResource)
+          : buildEdgeBetweenNodes(projectWithStorage, storage.id, nodeId, selectedResource);
+
+      if (!edge) {
+        const project = touchProject(projectWithStorage);
+        return {
+          project,
+          selectedNodeId: undefined,
+          hoveredStorageResourceKey: getResourceKey(resource),
+          lastResult: calculateThroughput(project),
+        };
+      }
+
+      const duplicateEdge = findDuplicateEdge(projectWithStorage.edges, edge);
+      const project = touchProject({
+        ...projectWithStorage,
+        edges: duplicateEdge
+          ? projectWithStorage.edges.filter((entry) => entry.id !== duplicateEdge.id)
+          : [...projectWithStorage.edges, edge],
+      });
+
+      return {
+        project,
+        selectedNodeId: undefined,
+        hoveredStorageResourceKey: getResourceKey(resource),
+        lastResult: calculateThroughput(project),
+      };
+    });
+  },
   deleteStorage: (storageId) => {
     set((state) => {
       const project = touchProject({
@@ -524,6 +604,71 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         ...state.project,
         edges: [...state.project.edges, edge],
       });
+      return {
+        project,
+        lastResult: calculateThroughput(project),
+      };
+    });
+  },
+  reconnectEdge: (edgeId, connection) => {
+    set((state) => {
+      const oldEdge = state.project.edges.find((edge) => edge.id === edgeId);
+      if (!oldEdge || !connection.source || !connection.target) {
+        return state;
+      }
+
+      const sourceHandle = parseResourceHandleId(connection.sourceHandle);
+      const targetHandle = parseResourceHandleId(connection.targetHandle);
+      const isReverseHandleDirection =
+        sourceHandle?.side === "input" && targetHandle?.side === "output";
+      const resource =
+        sourceHandle &&
+        targetHandle &&
+        sourceHandle.side !== targetHandle.side &&
+        sourceHandle.kind === targetHandle.kind &&
+        sourceHandle.resourceId === targetHandle.resourceId
+          ? {
+              kind: sourceHandle.kind,
+              id: sourceHandle.resourceId,
+              displayName: oldEdge.label,
+              sourceHandle: isReverseHandleDirection
+                ? (connection.targetHandle ?? undefined)
+                : (connection.sourceHandle ?? undefined),
+              targetHandle: isReverseHandleDirection
+                ? (connection.sourceHandle ?? undefined)
+                : (connection.targetHandle ?? undefined),
+            }
+          : undefined;
+      const sourceNodeId = isReverseHandleDirection ? connection.target : connection.source;
+      const targetNodeId = isReverseHandleDirection ? connection.source : connection.target;
+
+      if (connection.sourceHandle || connection.targetHandle) {
+        if (!resource) {
+          return state;
+        }
+      }
+
+      const projectWithoutOld = {
+        ...state.project,
+        edges: state.project.edges.filter((edge) => edge.id !== edgeId),
+      };
+      const edge = buildEdgeBetweenNodes(projectWithoutOld, sourceNodeId, targetNodeId, resource);
+      if (!edge) {
+        const project = touchProject(projectWithoutOld);
+        return {
+          project,
+          lastResult: calculateThroughput(project),
+        };
+      }
+
+      const duplicateEdge = findDuplicateEdge(projectWithoutOld.edges, edge);
+      const project = touchProject({
+        ...projectWithoutOld,
+        edges: duplicateEdge
+          ? projectWithoutOld.edges.filter((entry) => entry.id !== duplicateEdge.id)
+          : [...projectWithoutOld.edges, edge],
+      });
+
       return {
         project,
         lastResult: calculateThroughput(project),
@@ -932,6 +1077,33 @@ function makeResourceHandleId(
   return `${side}:${resource.kind}:${encodeURIComponent(resource.id)}${slotIndex === undefined ? "" : `:${slotIndex}`}`;
 }
 
+function parseResourceHandleId(handleId?: string | null):
+  | {
+      side: "input" | "output";
+      kind: ResourceKind;
+      resourceId: string;
+    }
+  | undefined {
+  if (!handleId) {
+    return undefined;
+  }
+
+  const [side, kind, encodedResourceId] = handleId.split(":");
+  if (
+    (side !== "input" && side !== "output") ||
+    (kind !== "item" && kind !== "fluid") ||
+    !encodedResourceId
+  ) {
+    return undefined;
+  }
+
+  return {
+    side,
+    kind,
+    resourceId: decodeURIComponent(encodedResourceId),
+  };
+}
+
 function touchProject(project: FactoryProject): FactoryProject {
   return {
     ...project,
@@ -1041,12 +1213,12 @@ function isStoredRecipeBrowserResource(value: unknown): value is RecipeBrowserRe
   );
 }
 
-type IconResource = Pick<
-  ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
->;
+type IconResource = Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">;
 
-function refreshProjectResourceIcons(project: FactoryProject, dataset: RecipeDataset): FactoryProject {
+function refreshProjectResourceIcons(
+  project: FactoryProject,
+  dataset: RecipeDataset,
+): FactoryProject {
   const iconsByResource = getDatasetIconLookup(dataset);
 
   return {
@@ -1056,9 +1228,7 @@ function refreshProjectResourceIcons(project: FactoryProject, dataset: RecipeDat
       inputs: recipe.inputs.map((input) => refreshResourceIcon(input, iconsByResource)),
       outputs: recipe.outputs.map((output) => refreshResourceIcon(output, iconsByResource)),
     })),
-    storages: project.storages?.map((storage) =>
-      refreshStorageIcon(storage, iconsByResource),
-    ),
+    storages: project.storages?.map((storage) => refreshStorageIcon(storage, iconsByResource)),
   };
 }
 
@@ -1084,7 +1254,9 @@ function refreshPendingResourceConnectionIcon(
 ): PendingResourceConnection {
   const indexed = getDatasetIconLookup(dataset).get(`${resource.kind}:${resource.resourceId}`);
   if (!indexed) {
-    return isLegacyRenderedIconPath(resource.iconPath) ? { ...resource, iconPath: undefined } : resource;
+    return isLegacyRenderedIconPath(resource.iconPath)
+      ? { ...resource, iconPath: undefined }
+      : resource;
   }
 
   return {
@@ -1101,7 +1273,9 @@ function refreshStorageIcon(
 ): FactoryStorage {
   const indexed = iconsByResource.get(`${storage.kind}:${storage.resourceId}`);
   if (!indexed) {
-    return isLegacyRenderedIconPath(storage.iconPath) ? { ...storage, iconPath: undefined } : storage;
+    return isLegacyRenderedIconPath(storage.iconPath)
+      ? { ...storage, iconPath: undefined }
+      : storage;
   }
 
   return {
@@ -1118,7 +1292,9 @@ function refreshResourceIcon<T extends IconResource>(
 ): T {
   const indexed = iconsByResource.get(getResourceKey(resource));
   if (!indexed) {
-    return isLegacyRenderedIconPath(resource.iconPath) ? { ...resource, iconPath: undefined } : resource;
+    return isLegacyRenderedIconPath(resource.iconPath)
+      ? { ...resource, iconPath: undefined }
+      : resource;
   }
 
   return {

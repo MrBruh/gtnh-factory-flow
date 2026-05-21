@@ -102,7 +102,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               slot.resource.id,
               handleId,
             );
-            const shouldShowHandle = selected || slotState !== "idle";
 
             return (
               <>
@@ -123,9 +122,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                     slot.resource.displayName ?? slot.resource.id
                   }`}
                   className={[
-                    "!h-3 !w-3 !border-2 !border-white transition-opacity",
-                    shouldShowHandle ? "!opacity-100" : "!opacity-0 group-hover:!opacity-100",
-                    isInput ? "!-left-1.5 !bg-cyan-600" : "!-right-1.5 !bg-emerald-600",
+                    "nodrag !absolute !left-0 !right-auto !top-0 !z-30 !h-full !w-full !min-w-0 !translate-x-0 !translate-y-0",
+                    "!rounded-none !border-0 !bg-transparent !opacity-0",
+                    "cursor-crosshair",
                   ].join(" ")}
                 />
               </>
