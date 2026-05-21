@@ -542,7 +542,6 @@ function VirtualResourceResultList({
       <ResourcePager
         currentPage={currentPage}
         pageCount={pageCount}
-        total={resources.length}
         onPageChange={setPage}
       />
     </div>
@@ -552,12 +551,10 @@ function VirtualResourceResultList({
 function ResourcePager({
   currentPage,
   pageCount,
-  total,
   onPageChange,
 }: {
   currentPage: number;
   pageCount: number;
-  total: number;
   onPageChange: (page: number) => void;
 }) {
   return (
@@ -574,7 +571,6 @@ function ResourcePager({
       </button>
       <div className="truncate px-2 [text-shadow:1px_1px_0_#000]">
         {currentPage + 1}/{pageCount}
-        <span className="ml-2 text-[11px] text-neutral-400">{total}</span>
       </div>
       <button
         type="button"
