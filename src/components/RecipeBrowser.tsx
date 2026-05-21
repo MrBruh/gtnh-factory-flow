@@ -585,10 +585,7 @@ function ResourceHistoryPanel({
 
   return (
     <div className="pointer-events-auto z-20 h-[58px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
-      <div
-        ref={containerRef}
-        className="grid min-w-0 grid-flow-col auto-cols-[40px] gap-2 overflow-hidden"
-      >
+      <div ref={containerRef} className="flex w-full min-w-0 gap-2 overflow-hidden">
         {visibleResources.map((resource) => (
           <button
             key={`${resource.kind}:${resource.id}`}
@@ -599,7 +596,7 @@ function ResourceHistoryPanel({
               onBrowse(resource, "uses");
             }}
             aria-label={resourceLabel(resource)}
-            className="flex h-10 w-10 shrink-0 items-center justify-center bg-transparent p-0 hover:ring-2 hover:ring-cyan-400"
+            className="flex h-10 w-10 shrink-0 items-center justify-center border border-transparent bg-transparent p-0 hover:border-cyan-400"
           >
             <ResourceIcon resource={{ ...resource, amount: 1 }} size="sm" showAmount={false} />
           </button>
@@ -611,7 +608,7 @@ function ResourceHistoryPanel({
 
 function useVisibleResourceHistorySlots() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [visibleSlotCount, setVisibleSlotCount] = useState(1);
+  const [visibleSlotCount, setVisibleSlotCount] = useState(8);
 
   useEffect(() => {
     const container = containerRef.current;
