@@ -50,6 +50,10 @@ textarea {
   z-index: 20;
 }
 
+.factory-flow-board .react-flow__node.dragging {
+  z-index: 30 !important;
+}
+
 .factory-flow-board .react-flow__edgelabel-renderer {
   z-index: 90;
 }
