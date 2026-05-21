@@ -31,7 +31,7 @@ import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import {
   getCachedResourceIconBitmap,
-  preloadResourceIconCanvas,
+  queueResourceIconPreload,
   ResourceIconCanvas,
 } from "./nei/ResourceIconCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
@@ -610,21 +610,11 @@ function VirtualResourceResultList({
   const currentPage = Math.min(page, pageCount - 1);
   const visibleResources = resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
   useEffect(() => {
-    const preload = () => {
-      const start = Math.max(0, currentPage - 1) * pageSize;
-      const end = Math.min(resources.length, (currentPage + 3) * pageSize);
-      resources.slice(start, end).forEach((resource) => {
-        void preloadResourceIconCanvas(resource);
-      });
-    };
-
-    if ("requestIdleCallback" in window) {
-      const idleId = window.requestIdleCallback(preload, { timeout: 600 });
-      return () => window.cancelIdleCallback(idleId);
-    }
-
-    const timeout = globalThis.setTimeout(preload, 80);
-    return () => globalThis.clearTimeout(timeout);
+    const start = Math.max(0, currentPage - 1) * pageSize;
+    const end = Math.min(resources.length, (currentPage + 3) * pageSize);
+    resources.slice(start, end).forEach((resource) => {
+      queueResourceIconPreload(resource);
+    });
   }, [currentPage, pageSize, resources]);
   const handlePreviousPage = useCallback(() => {
     startPageTransition(() => {
@@ -741,14 +731,28 @@ function ResourceCanvasPage({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all(resources.map((resource) => preloadResourceIconCanvas(resource))).then(() => {
+    let frame = 0;
+    const redraw = () => {
       if (!cancelled) {
+        frame = 0;
         forceRedraw((value) => value + 1);
       }
+    };
+    const requestRedraw = () => {
+      if (!cancelled && frame === 0) {
+        frame = window.requestAnimationFrame(redraw);
+      }
+    };
+
+    resources.forEach((resource) => {
+      queueResourceIconPreload(resource, requestRedraw);
     });
 
     return () => {
       cancelled = true;
+      if (frame !== 0) {
+        window.cancelAnimationFrame(frame);
+      }
     };
   }, [resources]);
 
@@ -865,7 +869,7 @@ function drawCanvasIconSlot(
     return;
   }
 
-  void preloadResourceIconCanvas(resource);
+  queueResourceIconPreload(resource);
 }
 
 function drawCanvasBevel(
@@ -944,19 +948,9 @@ function RecipeMapTabBar({
   }, [tabs]);
 
   useEffect(() => {
-    const preload = () => {
-      tabs.forEach((tab) => {
-        void preloadResourceIconCanvas(tab.icon);
-      });
-    };
-
-    if ("requestIdleCallback" in window) {
-      const idleId = window.requestIdleCallback(preload, { timeout: 800 });
-      return () => window.cancelIdleCallback(idleId);
-    }
-
-    const timeout = globalThis.setTimeout(preload, 120);
-    return () => globalThis.clearTimeout(timeout);
+    tabs.forEach((tab) => {
+      queueResourceIconPreload(tab.icon);
+    });
   }, [tabs]);
 
   const scrollTabs = (direction: -1 | 1) => {

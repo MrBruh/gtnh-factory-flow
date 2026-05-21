@@ -12,6 +12,14 @@ interface ResourceIconCanvasProps {
 const imageCache = new Map<string, HTMLImageElement>();
 const bitmapCache = new Map<string, Promise<ImageBitmap>>();
 const resolvedBitmapCache = new Map<string, ImageBitmap>();
+const preloadQueue = new Map<
+  string,
+  {
+    resource: Pick<ResourceAmount, "iconPath" | "iconAtlas">;
+    callbacks: Set<() => void>;
+  }
+>();
+let idlePreloadScheduled = false;
 
 export const ResourceIconCanvas = memo(function ResourceIconCanvas({
   resource,
@@ -46,43 +54,21 @@ export const ResourceIconCanvas = memo(function ResourceIconCanvas({
       return;
     }
 
-    let cancelled = false;
-    loadIconImage(source).then(async (image) => {
-      if (cancelled) {
-        return;
-      }
-
+    const draw = () => {
       context.clearRect(0, 0, size, size);
       context.imageSmoothingEnabled = false;
-
-      if (resource.iconAtlas) {
-        const cacheKey = getIconBitmapCacheKey(resource);
-        const bitmap = await loadIconBitmap(image, {
-          cacheKey,
-          x: resource.iconAtlas.x,
-          y: resource.iconAtlas.y,
-          width: resource.iconAtlas.width,
-          height: resource.iconAtlas.height,
-        });
-        if (cancelled) {
-          return;
-        }
+      const bitmap = getCachedResourceIconBitmap(resource);
+      if (bitmap) {
         context.drawImage(bitmap, 0, 0, size, size);
-        return;
       }
+    };
 
-      const cacheKey = getIconBitmapCacheKey(resource);
-      const bitmap = await loadIconBitmap(image, {
-        cacheKey,
-        x: 0,
-        y: 0,
-        width: image.naturalWidth,
-        height: image.naturalHeight,
-      });
-      if (cancelled) {
-        return;
+    let cancelled = false;
+    draw();
+    queueResourceIconPreload(resource, () => {
+      if (!cancelled) {
+        draw();
       }
-      context.drawImage(bitmap, 0, 0, size, size);
     });
 
     return () => {
@@ -158,6 +144,76 @@ export function preloadResourceIconCanvas(
       height: image.naturalHeight,
     });
   });
+}
+
+export function queueResourceIconPreload(
+  resource?: Pick<ResourceAmount, "iconPath" | "iconAtlas">,
+  onReady?: () => void,
+) {
+  const source = resource?.iconAtlas?.imagePath ?? resource?.iconPath;
+  if (!resource || !source || source.includes("/textures/rendered/")) {
+    return;
+  }
+
+  const key = getIconBitmapCacheKey(resource);
+  if (resolvedBitmapCache.has(key)) {
+    onReady?.();
+    return;
+  }
+
+  const queued = preloadQueue.get(key);
+  if (queued) {
+    if (onReady) {
+      queued.callbacks.add(onReady);
+    }
+    scheduleIdlePreload();
+    return;
+  }
+
+  preloadQueue.set(key, {
+    resource,
+    callbacks: onReady ? new Set([onReady]) : new Set(),
+  });
+  scheduleIdlePreload();
+}
+
+function scheduleIdlePreload() {
+  if (idlePreloadScheduled || preloadQueue.size === 0 || typeof window === "undefined") {
+    return;
+  }
+
+  idlePreloadScheduled = true;
+  const run = (deadline?: IdleDeadline) => {
+    idlePreloadScheduled = false;
+    const timeRemaining = () => deadline?.timeRemaining() ?? 0;
+    let processed = 0;
+
+    while (preloadQueue.size > 0 && processed < 2 && (processed === 0 || timeRemaining() > 8)) {
+      const [key, item] = preloadQueue.entries().next().value as [
+        string,
+        {
+          resource: Pick<ResourceAmount, "iconPath" | "iconAtlas">;
+          callbacks: Set<() => void>;
+        },
+      ];
+      preloadQueue.delete(key);
+      processed += 1;
+      void preloadResourceIconCanvas(item.resource).then(() => {
+        item.callbacks.forEach((callback) => callback());
+      });
+    }
+
+    if (preloadQueue.size > 0) {
+      scheduleIdlePreload();
+    }
+  };
+
+  if ("requestIdleCallback" in window) {
+    window.requestIdleCallback(run);
+    return;
+  }
+
+  globalThis.setTimeout(() => run(), 60);
 }
 
 function getIconBitmapCacheKey(resource?: Pick<ResourceAmount, "iconPath" | "iconAtlas">) {
