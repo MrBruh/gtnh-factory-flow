@@ -246,6 +246,10 @@ export function RecipeBrowser() {
           return;
         }
         recipeQueryCacheRef.current.set(cacheKey, result);
+        const effectiveRecipeMap = activeRecipeMap || result.recipeMaps[0] || "";
+        if (effectiveRecipeMap !== activeRecipeMap) {
+          recipeQueryCacheRef.current.set(getRecipeQueryKey(effectiveRecipeMap), result);
+        }
         trimRecipeQueryCache(recipeQueryCacheRef.current);
         setFilteredRecipes(result.recipes);
         setQueryTotal(result.total);

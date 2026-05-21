@@ -219,6 +219,7 @@ function queryRecipes(
   const resultsWithoutIcons: number[] = [];
   const recipeMaps = new Set<string>();
   const candidates = getCandidateRecipeIndexes(indexes, request);
+  const eligibleRecipeIndexes: number[] = [];
   let total = 0;
 
   for (const recipeIndex of candidates) {
@@ -235,7 +236,14 @@ function queryRecipes(
       recipeMaps.add(recipeMap);
     }
 
-    if (activeMap && recipeMap !== activeMap) {
+    eligibleRecipeIndexes.push(recipeIndex);
+  }
+
+  const sortedRecipeMaps = [...recipeMaps].sort((a, b) => a.localeCompare(b));
+  const effectiveMap = activeMap ?? (request.resource ? sortedRecipeMaps[0] : undefined);
+
+  for (const recipeIndex of eligibleRecipeIndexes) {
+    if (effectiveMap && indexes.recipeMaps[recipeIndex] !== effectiveMap) {
       continue;
     }
 
@@ -260,7 +268,7 @@ function queryRecipes(
       ...resultsWithoutIcons,
     ].slice(0, request.limit),
     total,
-    recipeMaps: [...recipeMaps].sort((a, b) => a.localeCompare(b)),
+    recipeMaps: sortedRecipeMaps,
   };
   rememberQuery(indexes, cacheKey, result);
   return materializeQueryResult(dataset, result);
