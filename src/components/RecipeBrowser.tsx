@@ -85,6 +85,11 @@ export function RecipeBrowser() {
     [resourceHistory, resourceIndex],
   );
 
+  const sortedResources = useMemo(
+    () => [...resourceIndex.values()].sort(compareResourcesByRecipeCount),
+    [resourceIndex],
+  );
+
   const resourceResults = useMemo(() => {
     if (activeResource) {
       return [];
@@ -92,35 +97,30 @@ export function RecipeBrowser() {
 
     const query = deferredRecipeSearch.trim().toLowerCase();
     if (!query) {
-      return [...resourceIndex.values()]
-        .filter((resource) => resource.iconPath || resource.iconAtlas)
-        .sort((left, right) => right.recipeCount - left.recipeCount)
-        .slice(0, 72);
+      return sortedResources.filter((resource) => resource.iconPath || resource.iconAtlas);
     }
 
-    return [...resourceIndex.values()]
+    return sortedResources
       .filter((resource) => resourceMatchesQuery(resource, query))
       .sort((left, right) => {
         const leftLabel = resourceLabel(left).toLowerCase();
         const rightLabel = resourceLabel(right).toLowerCase();
         const leftExact = leftLabel === query || left.id.toLowerCase() === query ? 1 : 0;
         const rightExact = rightLabel === query || right.id.toLowerCase() === query ? 1 : 0;
-        return rightExact - leftExact || right.recipeCount - left.recipeCount;
-      })
-      .slice(0, 96);
-  }, [activeResource, deferredRecipeSearch, resourceIndex]);
+        return rightExact - leftExact || compareResourcesByRecipeCount(left, right);
+      });
+  }, [activeResource, deferredRecipeSearch, sortedResources]);
 
   const visibleResourceResults = useMemo(() => {
     if (!activeResource) {
       return resourceResults;
     }
 
-    return [...resourceIndex.values()]
-      .filter((resource) =>
-        resourceMatchesQuery(resource, deferredRecipeSearch.trim().toLowerCase()),
-      )
-      .slice(0, 96);
-  }, [activeResource, deferredRecipeSearch, resourceIndex, resourceResults]);
+    const query = deferredRecipeSearch.trim().toLowerCase();
+    return query
+      ? sortedResources.filter((resource) => resourceMatchesQuery(resource, query))
+      : sortedResources;
+  }, [activeResource, deferredRecipeSearch, resourceResults, sortedResources]);
 
   const recipeMaps = useMemo(
     () => availableRecipeMaps.filter(Boolean).sort((a, b) => a.localeCompare(b)),
@@ -1253,6 +1253,12 @@ function resourceMatchesQuery(resource: IndexedResource, query: string): boolean
   return [resource.displayName, resource.id, resource.kind]
     .filter(Boolean)
     .some((value) => value?.toLowerCase().includes(query));
+}
+
+function compareResourcesByRecipeCount(left: IndexedResource, right: IndexedResource) {
+  return (
+    right.recipeCount - left.recipeCount || resourceLabel(left).localeCompare(resourceLabel(right))
+  );
 }
 
 function buildRecipeMapTabs(
