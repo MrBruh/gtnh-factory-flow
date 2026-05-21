@@ -2,10 +2,12 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { AlertTriangle } from "lucide-react";
-import type { FactoryNode, NodeThroughputResult, Recipe } from "@/lib/model/types";
+import type { FactoryNode, MachineTier, NodeThroughputResult, Recipe } from "@/lib/model/types";
 import {
   formatRate,
+  GT_VOLTAGE_TIERS,
   getRecipePowerTier,
+  getVoltageTierIndex,
   isRecipeInputConsumed,
   isVoltageTierAbove,
   resourceLabel,
@@ -28,6 +30,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const browseResource = useFactoryStore((state) => state.browseResource);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
+  const updateNode = useFactoryStore((state) => state.updateNode);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const maxTierFilter = useFactoryStore((state) => state.maxTierFilter);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
@@ -38,8 +41,15 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
   const recipePowerTier = getRecipePowerTier(recipe);
+  const tierControl = getNodeTierControl(recipe, projectNode);
   const exceedsMaxTier =
     maxTierFilter !== "all" && isVoltageTierAbove(recipePowerTier, maxTierFilter);
+  const updateTier = (direction: -1 | 1) => {
+    const nextTier = getAdjacentTier(tierControl.current, tierControl.minimum, direction);
+    if (nextTier !== tierControl.current) {
+      updateNode(projectNode.id, { overclockTier: nextTier });
+    }
+  };
 
   return (
     <div
@@ -89,7 +99,24 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           >
             {recipe.source?.recipeMap ?? recipe.machineType}
           </div>
-          <div />
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              updateTier(-1);
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              updateTier(1);
+            }}
+            className="nodrag h-6 w-9 border-2 border-[#252525] bg-[#7d7d7d] text-[10px] font-bold leading-[9px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-[#8d8d8d]"
+            title={`Tier ${tierControl.current}. Left click down, right click up.`}
+            aria-label={`Tier ${tierControl.current}`}
+          >
+            <span className="block text-[7px] uppercase leading-[7px] text-[#d8d8d8]">Tier</span>
+            <span className="block leading-[11px]">{tierControl.current}</span>
+          </button>
         </div>
         <NeiRecipeWindow
           recipe={recipe}
@@ -175,6 +202,33 @@ function recipeContainsSearchResource(recipe: Recipe, query: string) {
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
+}
+
+type VoltageTier = Exclude<MachineTier, "DEMO">;
+
+function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
+  const minimum = resolveVoltageTier(recipe.minimumTier, getRecipePowerTier(recipe));
+  const current = clampTier(resolveVoltageTier(node.overclockTier, minimum), minimum);
+  return { minimum, current };
+}
+
+function getAdjacentTier(current: VoltageTier, minimum: VoltageTier, direction: -1 | 1) {
+  const currentIndex = getVoltageTierIndex(current);
+  const minimumIndex = getVoltageTierIndex(minimum);
+  const nextIndex = Math.min(
+    GT_VOLTAGE_TIERS.length - 1,
+    Math.max(minimumIndex, currentIndex + direction),
+  );
+  return GT_VOLTAGE_TIERS[nextIndex]?.tier ?? current;
+}
+
+function clampTier(tier: VoltageTier, minimum: VoltageTier) {
+  return getVoltageTierIndex(tier) < getVoltageTierIndex(minimum) ? minimum : tier;
+}
+
+function resolveVoltageTier(value: string, fallback: VoltageTier): VoltageTier {
+  const tier = GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier;
+  return tier ?? fallback;
 }
 
 type ConnectionSlotState = "idle" | "selected" | "compatible";
