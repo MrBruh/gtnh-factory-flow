@@ -183,7 +183,9 @@ export function FactoryFlow() {
         const isStorageEdgeActive =
           !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
         const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
-        const showStorageEdge = isStorageEdgeActive || isSearchEdgeActive;
+        const isStorageEdgeEmphasized = Boolean(
+          isStorageEdge && (isStorageEdgeActive || isSearchEdgeActive),
+        );
 
         return {
           id: edge.id,
@@ -201,13 +203,19 @@ export function FactoryFlow() {
             unit,
             isLimited: edgeResult?.isLimited === true,
             isStorageEdge,
-            showLabel: isStorageEdge ? showStorageEdge : true,
+            showLabel: true,
           },
           style: {
             stroke: edgeColor,
             strokeDasharray: edgeResult?.isLimited ? "7 4" : undefined,
-            strokeOpacity: isStorageEdge ? (showStorageEdge ? 0.9 : 0.14) : 1,
-            strokeWidth: isStorageEdge ? (showStorageEdge ? 2 : 1) : edgeResult?.isLimited ? 3 : 2,
+            strokeOpacity: isStorageEdge ? 0.9 : 1,
+            strokeWidth: isStorageEdge
+              ? isStorageEdgeEmphasized
+                ? 3
+                : 2
+              : edgeResult?.isLimited
+                ? 3
+                : 2,
           },
         };
       }),
