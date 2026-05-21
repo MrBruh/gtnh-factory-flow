@@ -2,6 +2,24 @@ import { z } from "zod";
 import { PROJECT_SCHEMA_VERSION } from "./types";
 
 export const resourceKindSchema = z.enum(["item", "fluid"]);
+export const factoryNodeColorTagSchema = z.enum([
+  "white",
+  "orange",
+  "magenta",
+  "light_blue",
+  "yellow",
+  "lime",
+  "pink",
+  "gray",
+  "light_gray",
+  "cyan",
+  "purple",
+  "blue",
+  "brown",
+  "green",
+  "red",
+  "black",
+]);
 
 export const resourceAmountSchema = z.object({
   kind: resourceKindSchema,
@@ -90,6 +108,7 @@ export const targetRateSchema = z.object({
 export const factoryNodeSchema = z.object({
   id: z.string().min(1),
   recipeId: z.string().min(1),
+  colorTag: factoryNodeColorTagSchema.optional(),
   machineCount: z.number().min(0),
   parallel: z.number().positive(),
   overclockTier: z.string().min(1),

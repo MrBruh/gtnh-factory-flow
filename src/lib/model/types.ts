@@ -25,6 +25,24 @@ export type MachineTier =
   | "MAX"
   | "DEMO";
 
+export type FactoryNodeColorTag =
+  | "white"
+  | "orange"
+  | "magenta"
+  | "light_blue"
+  | "yellow"
+  | "lime"
+  | "pink"
+  | "gray"
+  | "light_gray"
+  | "cyan"
+  | "purple"
+  | "blue"
+  | "brown"
+  | "green"
+  | "red"
+  | "black";
+
 export interface ResourceAmount {
   kind: ResourceKind;
   id: ResourceId;
@@ -104,6 +122,7 @@ export interface TargetRate {
 export interface FactoryNode {
   id: string;
   recipeId: string;
+  colorTag?: FactoryNodeColorTag;
   machineCount: number;
   parallel: number;
   overclockTier: MachineTier | string;
