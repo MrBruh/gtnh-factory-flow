@@ -184,7 +184,7 @@ function FluidStorageCard({
           borderColor: storageColor?.border,
         }}
       >
-        <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8e2f3] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d8798]">
+        <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_2px_2px_0_#4f5a6f,inset_-2px_-2px_0_#050505]">
           <StorageEdgeAnchors
             nodeId={storage.id}
             inputHandleId={inputHandleId}
@@ -322,7 +322,7 @@ function StorageStats({
   storageColor: StorageColor;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-1 pt-2 text-[9px]">
+    <div className="grid grid-cols-3 gap-1 pt-2">
       <StorageStat label="In" value={formatCompact(produced, unit)} storageColor={storageColor} />
       <StorageStat label="Out" value={formatCompact(consumed, unit)} storageColor={storageColor} />
       <StorageStat
@@ -356,18 +356,19 @@ function StorageStat({
 }) {
   return (
     <div
-      className="storage-node-stat h-9 min-w-0 border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]"
+      className="storage-node-stat grid h-10 min-w-0 grid-rows-[12px_minmax(0,1fr)] border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]"
       style={{
         backgroundColor: storageColor?.panel,
         borderColor: storageColor?.border,
       }}
     >
-      <div className="text-[8px] uppercase leading-[10px] text-[#424242]">{label}</div>
+      <div className="truncate text-[8px] uppercase leading-[11px] text-[#424242]">{label}</div>
       <div
         className={[
-          "whitespace-nowrap font-medium leading-[14px] text-[#111]",
-          value.length > 9 ? "text-[8px]" : value.length > 7 ? "text-[9px]" : "text-[11px]",
+          "flex min-w-0 items-center justify-center truncate whitespace-nowrap text-center font-medium leading-none text-[#111] tabular-nums",
+          value.length > 10 ? "text-[7px]" : value.length > 8 ? "text-[8px]" : "text-[10px]",
         ].join(" ")}
+        title={value}
       >
         {value}
       </div>
