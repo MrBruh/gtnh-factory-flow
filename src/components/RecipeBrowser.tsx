@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, GitBranchPlus, Plus, Search, X } from "lucide-react";
+import { Archive, Search, X } from "lucide-react";
 import { memo, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
@@ -14,12 +14,13 @@ import type {
   DatasetResourceIndexEntry,
   RecipeSummary,
 } from "@/lib/datasets/types";
-import { getResourceKey, GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
+import { getResourceKey, GT_VOLTAGE_TIERS, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
+import { getNeiRecipeLayout } from "@/lib/nei/layout";
+import type { NeiSlotFrame } from "@/lib/nei/layout";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
-import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 24;
@@ -1107,17 +1108,12 @@ function VirtualRecipeResultList({
   onSlotBrowse: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
-  const [viewport, setViewport] = useState({ scrollTop: 0, height: 360 });
-  const rowHeight = 246;
-  const overscan = 1;
-  const startIndex = Math.max(0, Math.floor(viewport.scrollTop / rowHeight) - overscan);
-  const visibleCount = Math.ceil(viewport.height / rowHeight) + overscan * 2;
-  const visibleRecipes = recipes.slice(startIndex, startIndex + visibleCount);
-  const topPadding = startIndex * rowHeight;
-  const bottomPadding = Math.max(
-    0,
-    (recipes.length - startIndex - visibleRecipes.length) * rowHeight,
-  );
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hitRegionsRef = useRef<RecipeCanvasHitRegion[]>([]);
+  const [viewport, setViewport] = useState({ scrollTop: 0, height: 360, width: 420 });
+  const [, forceImageRedraw] = useState(0);
+  const rowHeight = 222;
+  const totalHeight = Math.max(rowHeight, recipes.length * rowHeight);
 
   useEffect(() => {
     const scrollParent = anchorRef.current?.parentElement;
@@ -1129,6 +1125,7 @@ function VirtualRecipeResultList({
       setViewport({
         scrollTop: scrollParent.scrollTop,
         height: scrollParent.clientHeight,
+        width: scrollParent.clientWidth,
       });
     };
 
@@ -1143,9 +1140,103 @@ function VirtualRecipeResultList({
     };
   }, [recipes.length]);
 
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, viewport.width);
+    const height = Math.max(1, viewport.height);
+    canvas.width = Math.floor(width * dpr);
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.width = `${width}px`;
+    canvas.style.height = `${height}px`;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      return;
+    }
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    drawRecipeResultsCanvas(ctx, {
+      recipes,
+      viewport,
+      rowHeight,
+      selectedRecipeId,
+      onImageLoad: () => forceImageRedraw((tick) => tick + 1),
+      hitRegions: hitRegionsRef.current,
+      hasConnectedAdd: Boolean(onAddConnected),
+    });
+  }, [onAddConnected, recipes, rowHeight, selectedRecipeId, viewport]);
+
+  const getHitRegion = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top + viewport.scrollTop;
+    return [...hitRegionsRef.current]
+      .reverse()
+      .find((region) => pointInRegion(x, y, region));
+  }, [viewport.scrollTop]);
+
+  const handleCanvasClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const region = getHitRegion(event);
+      if (!region) {
+        return;
+      }
+
+      if (region.type === "slot") {
+        onSlotBrowse(region.resource, "recipes");
+        return;
+      }
+
+      if (region.type === "add") {
+        if (onAddConnected) {
+          void onAddConnected(region.recipeId);
+        } else {
+          void onAdd(region.recipeId);
+        }
+        return;
+      }
+
+      onSelectRecipe(region.recipeId);
+    },
+    [getHitRegion, onAdd, onAddConnected, onSelectRecipe, onSlotBrowse],
+  );
+
+  const handleCanvasDoubleClick = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const region = getHitRegion(event);
+      if (!region || region.type === "slot") {
+        return;
+      }
+
+      void onAdd(region.recipeId);
+    },
+    [getHitRegion, onAdd],
+  );
+
+  const handleCanvasContextMenu = useCallback(
+    (event: React.MouseEvent<HTMLCanvasElement>) => {
+      const region = getHitRegion(event);
+      if (region?.type !== "slot") {
+        return;
+      }
+
+      event.preventDefault();
+      onSlotBrowse(region.resource, "uses");
+    },
+    [getHitRegion, onSlotBrowse],
+  );
+
   return (
     <div
       ref={anchorRef}
+      className="relative"
+      style={{ height: totalHeight }}
       title={
         queryTotal > recipes.length
           ? `${queryTotal} recipes matched, showing ${currentPage * pageSize + 1}-${Math.min(
@@ -1155,23 +1246,454 @@ function VirtualRecipeResultList({
           : undefined
       }
     >
-      <div style={{ height: topPadding }} />
-      <div className="grid grid-cols-1 items-start gap-2">
-        {visibleRecipes.map((recipe) => (
-          <RecipeResultCard
-            key={recipe.id}
-            recipe={recipe}
-            selected={selectedRecipeId === recipe.id}
-            onSelect={() => onSelectRecipe(recipe.id)}
-            onAdd={() => void onAdd(recipe.id)}
-            onAddConnected={onAddConnected ? () => void onAddConnected(recipe.id) : undefined}
-            onSlotBrowse={onSlotBrowse}
-          />
-        ))}
-      </div>
-      <div style={{ height: bottomPadding }} />
+      <canvas
+        ref={canvasRef}
+        className="absolute left-0 top-0 cursor-pointer"
+        style={{
+          transform: `translateY(${viewport.scrollTop}px)`,
+          imageRendering: "pixelated",
+        }}
+        onClick={handleCanvasClick}
+        onDoubleClick={handleCanvasDoubleClick}
+        onContextMenu={handleCanvasContextMenu}
+      />
     </div>
   );
+}
+
+type RecipeCanvasHitRegion =
+  | { type: "card" | "add"; recipeId: string; x: number; y: number; width: number; height: number }
+  | {
+      type: "slot";
+      recipeId: string;
+      resource: ResourceAmount;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+
+interface RecipeCanvasDrawContext {
+  recipes: RecipeSummary[];
+  viewport: { scrollTop: number; height: number; width: number };
+  rowHeight: number;
+  selectedRecipeId?: string;
+  onImageLoad: () => void;
+  hitRegions: RecipeCanvasHitRegion[];
+  hasConnectedAdd: boolean;
+}
+
+const canvasImageCache = new Map<string, HTMLImageElement>();
+
+function drawRecipeResultsCanvas(ctx: CanvasRenderingContext2D, draw: RecipeCanvasDrawContext) {
+  ctx.clearRect(0, 0, draw.viewport.width, draw.viewport.height);
+  draw.hitRegions.length = 0;
+  const startIndex = Math.max(0, Math.floor(draw.viewport.scrollTop / draw.rowHeight) - 1);
+  const endIndex = Math.min(
+    draw.recipes.length,
+    Math.ceil((draw.viewport.scrollTop + draw.viewport.height) / draw.rowHeight) + 1,
+  );
+
+  for (let index = startIndex; index < endIndex; index += 1) {
+    const summary = draw.recipes[index];
+    if (!summary) {
+      continue;
+    }
+    drawRecipeCanvasCard(ctx, summary, {
+      x: 0,
+      y: index * draw.rowHeight - draw.viewport.scrollTop,
+      scrollY: index * draw.rowHeight,
+      width: draw.viewport.width,
+      rowHeight: draw.rowHeight,
+      selected: draw.selectedRecipeId === summary.id,
+      onImageLoad: draw.onImageLoad,
+      hitRegions: draw.hitRegions,
+      hasConnectedAdd: draw.hasConnectedAdd,
+    });
+  }
+}
+
+function drawRecipeCanvasCard(
+  ctx: CanvasRenderingContext2D,
+  summary: RecipeSummary,
+  options: {
+    x: number;
+    y: number;
+    scrollY: number;
+    width: number;
+    rowHeight: number;
+    selected: boolean;
+    onImageLoad: () => void;
+    hitRegions: RecipeCanvasHitRegion[];
+    hasConnectedAdd: boolean;
+  },
+) {
+  const recipe = summaryToPreviewRecipe(summary);
+  const layout = getNeiRecipeLayout(recipe);
+  const scale = 2;
+  const padding = 8;
+  const titleHeight = 22;
+  const footerHeight = 31;
+  const cardHeight = options.rowHeight - 8;
+  const cardWidth = Math.max(360, options.width - 4);
+  const cardX = options.x + 2;
+  const cardY = options.y + 2;
+  const contentWidth = layout.canvas.width * scale;
+  const contentHeight = Math.max(82, layout.canvas.height) * scale;
+  const contentX = cardX + Math.max(padding, Math.floor((cardWidth - contentWidth) / 2));
+  const contentY = cardY + titleHeight + 4;
+  const totalEu = Math.max(0, recipe.eut) * Math.max(1, Math.ceil(recipe.durationTicks / 20));
+  const seconds = recipe.durationTicks / 20;
+
+  options.hitRegions.push({
+    type: "card",
+    recipeId: summary.id,
+    x: cardX,
+    y: options.scrollY + 2,
+    width: cardWidth,
+    height: cardHeight,
+  });
+
+  ctx.save();
+  ctx.fillStyle = "#b6b6b6";
+  ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
+  drawBeveledRect(ctx, cardX, cardY, cardWidth, cardHeight, "#eeeeee", "#777777", 2);
+  if (options.selected) {
+    ctx.strokeStyle = "#22d3ee";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cardX + 1, cardY + 1, cardWidth - 2, cardHeight - 2);
+  }
+
+  ctx.fillStyle = "#8f8f8f";
+  ctx.fillRect(cardX + 5, cardY + 5, cardWidth - 10, titleHeight);
+  drawBeveledRect(ctx, cardX + 5, cardY + 5, cardWidth - 10, titleHeight, "#d8d8d8", "#404040", 2);
+  drawPixelText(ctx, recipe.source?.recipeMap ?? recipe.machineType, cardX + cardWidth / 2, cardY + 21, {
+    align: "center",
+    color: "#ffffff",
+    size: 14,
+    shadow: true,
+  });
+
+  const addSize = 24;
+  const addX = cardX + cardWidth - addSize - 7;
+  const addY = cardY + 6;
+  ctx.fillStyle = "#1b1d21";
+  ctx.fillRect(addX, addY, addSize, addSize);
+  drawBeveledRect(ctx, addX, addY, addSize, addSize, "#4b5563", "#050505", 1);
+  drawPixelText(ctx, options.hasConnectedAdd ? "+" : "+", addX + addSize / 2, addY + 17, {
+    align: "center",
+    color: "#e5e7eb",
+    size: 17,
+    shadow: false,
+  });
+  options.hitRegions.push({
+    type: "add",
+    recipeId: summary.id,
+    x: addX,
+    y: options.scrollY + 6,
+    width: addSize,
+    height: addSize,
+  });
+
+  drawImage(ctx, "/nei/gregtech/gui/background/nei_single_recipe.png", contentX, contentY, contentWidth, contentHeight, options.onImageLoad);
+  drawRecipeProgress(ctx, layout.progressBars[0], contentX, contentY, scale, options.onImageLoad);
+
+  for (const frame of layout.frames) {
+    drawRecipeSlot(ctx, frame, {
+      recipeId: summary.id,
+      x: contentX + frame.x * scale,
+      y: contentY + frame.y * scale,
+      scrollY: options.scrollY + contentY - cardY + frame.y * scale + 2,
+      scale,
+      hitRegions: options.hitRegions,
+      onImageLoad: options.onImageLoad,
+    });
+  }
+
+  const logoX = Math.min(layout.logo.x, layout.canvas.width - 28);
+  drawImage(
+    ctx,
+    "/nei/gregtech/gui/picture/gt_logo_17x17_transparent.png",
+    contentX + logoX * scale - 5,
+    contentY + layout.logo.y * scale,
+    17 * scale,
+    17 * scale,
+    options.onImageLoad,
+  );
+
+  const footerY = Math.min(cardY + cardHeight - footerHeight - 4, contentY + contentHeight + 3);
+  drawPixelText(ctx, `Total: ${formatCompactNumber(totalEu)} EU`, cardX + 9, footerY + 11, {
+    color: "#111111",
+    size: 12,
+  });
+  drawPixelText(ctx, `Usage: ${formatCompactNumber(recipe.eut)} EU/t`, cardX + 9, footerY + 23, {
+    color: "#111111",
+    size: 12,
+  });
+  drawPixelText(ctx, `Time: ${formatCompactNumber(seconds)} seconds`, cardX + 9, footerY + 35, {
+    color: "#111111",
+    size: 12,
+  });
+  ctx.restore();
+}
+
+function drawRecipeSlot(
+  ctx: CanvasRenderingContext2D,
+  frame: NeiSlotFrame,
+  options: {
+    recipeId: string;
+    x: number;
+    y: number;
+    scrollY: number;
+    scale: number;
+    hitRegions: RecipeCanvasHitRegion[];
+    onImageLoad: () => void;
+  },
+) {
+  const slotSize = 18 * options.scale;
+  drawImage(
+    ctx,
+    `/nei/modularui/gui/slot/${frame.kind}.png`,
+    options.x,
+    options.y,
+    slotSize,
+    slotSize,
+    options.onImageLoad,
+  );
+
+  if (!frame.resource) {
+    return;
+  }
+
+  options.hitRegions.push({
+    type: "slot",
+    recipeId: options.recipeId,
+    resource: frame.resource,
+    x: options.x,
+    y: options.scrollY,
+    width: slotSize,
+    height: slotSize,
+  });
+
+  drawResourceIcon(ctx, frame.resource, options.x, options.y, slotSize, options.onImageLoad);
+  const amount = formatCanvasAmount(frame.resource);
+  if (amount) {
+    drawPixelText(ctx, amount, options.x + slotSize - 2, options.y + slotSize - 2, {
+      align: "right",
+      color: "#ffffff",
+      size: 10,
+      shadow: true,
+    });
+  }
+  const renderResource = frame.resource as ResourceAmount & { chance?: number; consumed?: boolean };
+  if (renderResource.chance !== undefined && renderResource.chance < 1) {
+    drawPixelText(ctx, `${formatCompactNumber(renderResource.chance * 100)}%`, options.x + slotSize - 2, options.y + 8, {
+      align: "right",
+      color: "#ffff55",
+      size: 9,
+      shadow: true,
+    });
+  }
+  if (renderResource.consumed === false) {
+    drawPixelText(ctx, "NC", options.x + 1, options.y + 8, {
+      color: "#ffff55",
+      size: 8,
+      shadow: true,
+    });
+  }
+}
+
+function drawRecipeProgress(
+  ctx: CanvasRenderingContext2D,
+  bar: { x: number; y: number; width: number; height: number; texture: string } | undefined,
+  x: number,
+  y: number,
+  scale: number,
+  onImageLoad: () => void,
+) {
+  if (!bar) {
+    return;
+  }
+
+  drawImage(
+    ctx,
+    `/nei/gregtech/gui/progressbar/${bar.texture}.png`,
+    x + bar.x * scale,
+    y + bar.y * scale,
+    bar.width * scale,
+    bar.height * scale,
+    onImageLoad,
+    { sx: 0, sy: 0.5, sw: 1, sh: 0.5 },
+  );
+}
+
+function drawResourceIcon(
+  ctx: CanvasRenderingContext2D,
+  resource: ResourceAmount,
+  x: number,
+  y: number,
+  size: number,
+  onImageLoad: () => void,
+) {
+  const iconSize = size * 1.75;
+  const iconX = x + (size - iconSize) / 2;
+  const iconY = y + (size - iconSize) / 2;
+
+  if (resource.iconAtlas) {
+    const image = loadCanvasImage(resource.iconAtlas.imagePath, onImageLoad);
+    if (!image?.complete) {
+      return;
+    }
+    ctx.drawImage(
+      image,
+      resource.iconAtlas.x,
+      resource.iconAtlas.y,
+      resource.iconAtlas.width,
+      resource.iconAtlas.height,
+      iconX,
+      iconY,
+      iconSize,
+      iconSize,
+    );
+    return;
+  }
+
+  if (!resource.iconPath || resource.iconPath.includes("/textures/rendered/")) {
+    return;
+  }
+
+  drawImage(ctx, resource.iconPath, iconX, iconY, iconSize, iconSize, onImageLoad);
+}
+
+function drawImage(
+  ctx: CanvasRenderingContext2D,
+  src: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  onImageLoad: () => void,
+  source?: { sx: number; sy: number; sw: number; sh: number },
+) {
+  const image = loadCanvasImage(src, onImageLoad);
+  if (!image?.complete) {
+    return;
+  }
+
+  if (source) {
+    ctx.drawImage(
+      image,
+      image.width * source.sx,
+      image.height * source.sy,
+      image.width * source.sw,
+      image.height * source.sh,
+      x,
+      y,
+      width,
+      height,
+    );
+    return;
+  }
+
+  ctx.drawImage(image, x, y, width, height);
+}
+
+function loadCanvasImage(src: string, onLoad: () => void): HTMLImageElement | undefined {
+  const absoluteSrc = toAbsoluteAssetUrl(src);
+  const cached = canvasImageCache.get(absoluteSrc);
+  if (cached) {
+    return cached;
+  }
+
+  const image = new Image();
+  image.decoding = "async";
+  image.onload = onLoad;
+  image.src = absoluteSrc;
+  canvasImageCache.set(absoluteSrc, image);
+  return image;
+}
+
+function toAbsoluteAssetUrl(src: string) {
+  try {
+    return new URL(src, window.location.origin).toString();
+  } catch {
+    return src;
+  }
+}
+
+function drawBeveledRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  light: string,
+  dark: string,
+  lineWidth: number,
+) {
+  ctx.lineWidth = lineWidth;
+  ctx.strokeStyle = light;
+  ctx.beginPath();
+  ctx.moveTo(x + lineWidth / 2, y + height);
+  ctx.lineTo(x + lineWidth / 2, y + lineWidth / 2);
+  ctx.lineTo(x + width, y + lineWidth / 2);
+  ctx.stroke();
+  ctx.strokeStyle = dark;
+  ctx.beginPath();
+  ctx.moveTo(x + width - lineWidth / 2, y);
+  ctx.lineTo(x + width - lineWidth / 2, y + height - lineWidth / 2);
+  ctx.lineTo(x, y + height - lineWidth / 2);
+  ctx.stroke();
+}
+
+function drawPixelText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  options: {
+    color?: string;
+    size?: number;
+    align?: CanvasTextAlign;
+    shadow?: boolean;
+  } = {},
+) {
+  ctx.font = `${options.size ?? 12}px Monocraft, "Courier New", monospace`;
+  ctx.textAlign = options.align ?? "left";
+  ctx.textBaseline = "alphabetic";
+  if (options.shadow) {
+    ctx.fillStyle = "#000000";
+    ctx.fillText(text, x + 1, y + 1);
+  }
+  ctx.fillStyle = options.color ?? "#111111";
+  ctx.fillText(text, x, y);
+}
+
+function pointInRegion(x: number, y: number, region: RecipeCanvasHitRegion) {
+  return (
+    x >= region.x &&
+    x <= region.x + region.width &&
+    y >= region.y &&
+    y <= region.y + region.height
+  );
+}
+
+function formatCanvasAmount(resource: ResourceAmount) {
+  if (resource.kind === "item") {
+    return resource.amount === 1 ? "" : formatCompactNumber(resource.amount);
+  }
+
+  return `${formatCompactNumber(resource.amount)}L`;
+}
+
+function formatCompactNumber(value: number) {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+  return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function RecipePagePager({
@@ -1214,102 +1736,6 @@ function RecipePagePager({
       >
         {">"}
       </button>
-    </div>
-  );
-}
-
-function RecipeResultCard({
-  recipe,
-  selected,
-  onSelect,
-  onAdd,
-  onAddConnected,
-  onSlotBrowse,
-}: {
-  recipe: RecipeSummary;
-  selected: boolean;
-  onSelect: () => void;
-  onAdd: () => void;
-  onAddConnected?: () => void;
-  onSlotBrowse?: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
-}) {
-  const [renderPreview, setRenderPreview] = useState(false);
-  const previewRecipe = summaryToPreviewRecipe(recipe);
-  const primary = primaryOutput(previewRecipe);
-
-  useEffect(() => {
-    const timeout = window.setTimeout(() => setRenderPreview(true), 0);
-    return () => window.clearTimeout(timeout);
-  }, [recipe.id]);
-
-  return (
-    <article
-      onClick={onSelect}
-      onDoubleClick={() => void onAdd()}
-      className={[
-        "relative cursor-pointer transition",
-        selected ? "ring-1 ring-cyan-400" : "",
-      ].join(" ")}
-    >
-      <div className="flex items-start justify-end gap-2">
-        <button
-          type="button"
-          title={onAddConnected ? "Add and connect recipe node" : "Add recipe node"}
-          aria-label={onAddConnected ? "Add and connect recipe node" : "Add recipe node"}
-          onClick={(event) => {
-            event.stopPropagation();
-            if (onAddConnected) {
-              onAddConnected();
-            } else {
-              onAdd();
-            }
-          }}
-          className="absolute right-1 top-1 z-10 inline-flex h-7 w-7 shrink-0 items-center justify-center border border-neutral-600 bg-[#1b1d21] text-neutral-200 hover:border-cyan-400 hover:text-cyan-100"
-        >
-          {onAddConnected ? <GitBranchPlus className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
-        </button>
-      </div>
-      {renderPreview ? (
-        <div className="overflow-x-auto pb-1 pr-9">
-          <NeiRecipeWindow
-            recipe={previewRecipe}
-            scale={2}
-            compact
-            className="mx-auto"
-            onSlotClick={
-              onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined
-            }
-          />
-        </div>
-      ) : (
-        <RecipeResultPlaceholder recipe={previewRecipe} primary={primary} />
-      )}
-      {primary ? (
-        <p className="mt-2 truncate text-[11px] text-neutral-400">
-          Primary: {primary.displayName ?? primary.id}
-        </p>
-      ) : null}
-    </article>
-  );
-}
-
-function RecipeResultPlaceholder({
-  recipe,
-  primary,
-}: {
-  recipe: Recipe;
-  primary?: ResourceAmount;
-}) {
-  return (
-    <div className="mr-9 flex h-[214px] items-center justify-center border-2 border-[#777] bg-[#b6b6b6] shadow-[inset_2px_2px_0_#eeeeee,inset_-2px_-2px_0_#777]">
-      <div className="flex items-center gap-3">
-        {primary ? (
-          <ResourceIcon resource={primary} size="sm" showAmount={false} tooltip={false} />
-        ) : null}
-        <div className="max-w-[280px] truncate text-center text-[13px] text-[#222]">
-          {recipe.source?.recipeMap ?? recipe.machineType}
-        </div>
-      </div>
     </div>
   );
 }
