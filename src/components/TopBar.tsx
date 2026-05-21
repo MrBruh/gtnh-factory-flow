@@ -1,6 +1,6 @@
 "use client";
 
-import { Calculator, Database, Download, FileJson, Trash2, Upload } from "lucide-react";
+import { Download, FileJson, Trash2, Upload } from "lucide-react";
 import { useRef } from "react";
 import {
   cloneImportedProject,
@@ -20,10 +20,8 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
   const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
-  const dataset = useFactoryStore((state) => state.dataset);
   const setProject = useFactoryStore((state) => state.setProject);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
-  const recalculate = useFactoryStore((state) => state.recalculate);
 
   const exportJson = () => {
     const json = serializeFactoryProject(project);
@@ -53,52 +51,33 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
 
   return (
     <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
-      <div className="flex min-w-[260px] flex-1 items-center gap-2">
+      <div className="flex min-w-[260px] flex-1 items-start gap-2">
         <FileJson className="h-5 w-5 text-cyan-700" />
-        <div className="min-w-0">
+        <div className="grid min-w-0 gap-1">
           <h1 className="truncate text-lg font-semibold text-neutral-950">GTNH Factory Flow</h1>
+          <label className="grid max-w-52 gap-0.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
+            GTNH version
+            <select
+              value={selectedDatasetVersionId ?? ""}
+              disabled={isDatasetLoading || !manifest?.versions.length}
+              onChange={(event) => onLoadDatasetVersion(event.target.value)}
+              className="h-8 rounded border border-neutral-300 bg-white px-2 text-sm normal-case tracking-normal text-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+            >
+              {manifest?.versions.length ? (
+                manifest.versions.map((version) => (
+                  <option key={version.id} value={version.id}>
+                    {version.gtnhVersion} ({version.channel})
+                  </option>
+                ))
+              ) : (
+                <option value="">No versions</option>
+              )}
+            </select>
+          </label>
         </div>
       </div>
 
-      <label className="grid gap-0.5 text-[11px] font-medium uppercase tracking-wide text-neutral-500">
-        GTNH version
-        <select
-          value={selectedDatasetVersionId ?? ""}
-          disabled={isDatasetLoading || !manifest?.versions.length}
-          onChange={(event) => onLoadDatasetVersion(event.target.value)}
-          className="h-8 min-w-48 rounded border border-neutral-300 bg-white px-2 text-sm normal-case tracking-normal text-neutral-900 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
-        >
-          {manifest?.versions.length ? (
-            manifest.versions.map((version) => (
-              <option key={version.id} value={version.id}>
-                {version.gtnhVersion} ({version.channel})
-              </option>
-            ))
-          ) : (
-            <option value="">No versions</option>
-          )}
-        </select>
-      </label>
-
       <div className="flex flex-wrap gap-2">
-        <ToolbarButton
-          icon={Database}
-          label={dataset ? "Reload recipes" : "Load recipes"}
-          disabled={isDatasetLoading || !selectedDatasetVersionId}
-          onClick={() => {
-            if (selectedDatasetVersionId) {
-              onLoadDatasetVersion(selectedDatasetVersionId);
-            }
-          }}
-        />
-        <ToolbarButton
-          icon={Calculator}
-          label="Calculate"
-          onClick={() => {
-            recalculate();
-            onNotice("Throughput recalculated.");
-          }}
-        />
         <ToolbarButton
           icon={Trash2}
           label="Clean board"
@@ -116,11 +95,7 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
             onNotice("Board cleaned.");
           }}
         />
-        <ToolbarButton
-          icon={Upload}
-          label="Import plan JSON"
-          onClick={() => projectInputRef.current?.click()}
-        />
+        <ToolbarButton icon={Upload} label="Import plan JSON" onClick={() => projectInputRef.current?.click()} />
         <ToolbarButton icon={Download} label="Export plan JSON" onClick={exportJson} />
       </div>
 
@@ -156,10 +131,11 @@ function ToolbarButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      className="inline-flex h-9 items-center gap-2 rounded border border-neutral-300 bg-white px-3 text-sm font-medium text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+      title={label}
+      aria-label={label}
+      className="inline-flex h-9 w-9 items-center justify-center rounded border border-neutral-300 bg-white text-neutral-800 hover:bg-neutral-50 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
     >
       <Icon className="h-4 w-4" />
-      {label}
     </button>
   );
 }
