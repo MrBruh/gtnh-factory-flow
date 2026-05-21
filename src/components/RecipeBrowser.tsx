@@ -635,16 +635,11 @@ function VirtualResourceResultList({
 
   return (
     <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
-      <div className="grid min-w-0 min-h-0 flex-1 content-start grid-cols-1 gap-2 overflow-hidden">
-        {visibleResources.map((resource) => (
-          <ResourceResult
-            key={`${resource.kind}:${resource.id}`}
-            resource={resource}
-            active={activeResource?.kind === resource.kind && activeResource.id === resource.id}
-            onBrowseResource={onBrowse}
-          />
-        ))}
-      </div>
+      <ResourceCanvasPage
+        resources={visibleResources}
+        activeResource={activeResource}
+        onBrowseResource={onBrowse}
+      />
       <ResourcePager
         currentPage={currentPage}
         pageCount={pageCount}
@@ -695,48 +690,222 @@ function ResourcePager({
   );
 }
 
-const ResourceResult = memo(function ResourceResult({
-  resource,
-  active,
+function ResourceCanvasPage({
+  resources,
+  activeResource,
   onBrowseResource,
 }: {
-  resource: IndexedResource;
-  active?: boolean;
+  resources: IndexedResource[];
+  activeResource?: IndexedResource;
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hitRegionsRef = useRef<ResourceCanvasHitRegion[]>([]);
   const [, startBrowseTransition] = useTransition();
+  const [, forceRedraw] = useState(0);
+  const rowHeight = 62;
+  const height = 8 * rowHeight;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const width = canvas.clientWidth;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(width * dpr));
+    canvas.height = Math.floor(height * dpr);
+    canvas.style.height = `${height}px`;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    context.clearRect(0, 0, width, height);
+    context.imageSmoothingEnabled = false;
+    drawResourceCanvasPage(context, {
+      width,
+      rowHeight,
+      resources,
+      activeResource,
+      hitRegions: hitRegionsRef.current,
+    });
+  }, [activeResource, height, resources]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(resources.map((resource) => preloadResourceIconCanvas(resource))).then(() => {
+      if (!cancelled) {
+        forceRedraw((value) => value + 1);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [resources]);
+
+  const getHitResource = useCallback((event: React.MouseEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    return hitRegionsRef.current.find((region) => pointInResourceRegion(x, y, region))?.resource;
+  }, []);
+
   const browse = useCallback(
-    (mode: "recipes" | "uses") => {
+    (resource: IndexedResource, mode: "recipes" | "uses") => {
       startBrowseTransition(() => onBrowseResource(resource, mode));
     },
-    [onBrowseResource, resource, startBrowseTransition],
+    [onBrowseResource, startBrowseTransition],
   );
 
   return (
-    <button
-      type="button"
-      onClick={() => browse("recipes")}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        browse("uses");
+    <canvas
+      ref={canvasRef}
+      className="block h-full min-h-0 w-full flex-1 cursor-pointer"
+      style={{ imageRendering: "pixelated" }}
+      aria-label="Resource results"
+      role="listbox"
+      onClick={(event) => {
+        const resource = getHitResource(event);
+        if (resource) {
+          browse(resource, "recipes");
+        }
       }}
-      className={[
-        "flex items-center gap-2 rounded-[4px] border bg-[#303238] p-2 text-left",
-        active ? "border-cyan-400 ring-1 ring-cyan-400" : "border-neutral-700",
-      ].join(" ")}
-      title="Left click: recipes. Right click: uses."
-    >
-      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border border-[#373737] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#cfcfcf,inset_-2px_-2px_0_#4d4d4d]">
-        <ResourceIconCanvas resource={resource} size={32} />
-      </span>
-      <span className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-neutral-50">
-          {resourceLabel(resource)}
-        </div>
-      </span>
-    </button>
+      onContextMenu={(event) => {
+        const resource = getHitResource(event);
+        if (!resource) {
+          return;
+        }
+        event.preventDefault();
+        browse(resource, "uses");
+      }}
+    />
   );
-});
+}
+
+interface ResourceCanvasHitRegion {
+  resource: IndexedResource;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+function drawResourceCanvasPage(
+  context: CanvasRenderingContext2D,
+  options: {
+    width: number;
+    rowHeight: number;
+    resources: IndexedResource[];
+    activeResource?: IndexedResource;
+    hitRegions: ResourceCanvasHitRegion[];
+  },
+) {
+  options.hitRegions.length = 0;
+  context.font = '14px Monocraft, "Courier New", monospace';
+  context.textBaseline = "middle";
+
+  options.resources.forEach((resource, index) => {
+    const y = index * options.rowHeight;
+    const active =
+      options.activeResource?.kind === resource.kind && options.activeResource.id === resource.id;
+
+    options.hitRegions.push({
+      resource,
+      x: 0,
+      y,
+      width: options.width,
+      height: 54,
+    });
+
+    context.fillStyle = "#303238";
+    context.fillRect(0, y, options.width, 54);
+    context.strokeStyle = active ? "#22d3ee" : "#40444d";
+    context.lineWidth = active ? 2 : 1;
+    context.strokeRect(active ? 1 : 0.5, y + (active ? 1 : 0.5), options.width - (active ? 2 : 1), 54 - (active ? 2 : 1));
+
+    drawCanvasIconSlot(context, resource, 10, y + 9, 36);
+
+    context.fillStyle = "#f8fafc";
+    context.shadowColor = "#000";
+    context.shadowBlur = 0;
+    context.shadowOffsetX = 1;
+    context.shadowOffsetY = 1;
+    drawTruncatedCanvasText(context, resourceLabel(resource), 58, y + 28, options.width - 70);
+    context.shadowOffsetX = 0;
+    context.shadowOffsetY = 0;
+  });
+}
+
+function drawCanvasIconSlot(
+  context: CanvasRenderingContext2D,
+  resource: IndexedResource,
+  x: number,
+  y: number,
+  size: number,
+) {
+  context.fillStyle = "#8d8d8d";
+  context.fillRect(x, y, size, size);
+  context.strokeStyle = "#373737";
+  context.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+  drawCanvasBevel(context, x, y, size, size);
+
+  void preloadResourceIconCanvas(resource).then((bitmap) => {
+    if (!bitmap) {
+      return;
+    }
+    context.imageSmoothingEnabled = false;
+    context.drawImage(bitmap, x + 2, y + 2, size - 4, size - 4);
+  });
+}
+
+function drawCanvasBevel(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) {
+  context.strokeStyle = "#cfcfcf";
+  context.beginPath();
+  context.moveTo(x + 1, y + height - 1);
+  context.lineTo(x + 1, y + 1);
+  context.lineTo(x + width - 1, y + 1);
+  context.stroke();
+  context.strokeStyle = "#4d4d4d";
+  context.beginPath();
+  context.moveTo(x + width - 1, y + 1);
+  context.lineTo(x + width - 1, y + height - 1);
+  context.lineTo(x + 1, y + height - 1);
+  context.stroke();
+}
+
+function drawTruncatedCanvasText(
+  context: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+) {
+  if (context.measureText(text).width <= maxWidth) {
+    context.fillText(text, x, y);
+    return;
+  }
+
+  let nextText = text;
+  while (nextText.length > 1 && context.measureText(`${nextText}...`).width > maxWidth) {
+    nextText = nextText.slice(0, -1);
+  }
+  context.fillText(`${nextText}...`, x, y);
+}
+
+function pointInResourceRegion(x: number, y: number, region: ResourceCanvasHitRegion) {
+  return x >= region.x && x <= region.x + region.width && y >= region.y && y <= region.y + region.height;
+}
 
 function RecipeMapTabBar({
   activeRecipeMap,
