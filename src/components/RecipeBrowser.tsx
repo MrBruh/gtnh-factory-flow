@@ -29,6 +29,7 @@ import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount, ResourceKey } from "@/lib/model/types";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
+import { ResourceIconCanvas } from "./nei/ResourceIconCanvas";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 12;
@@ -531,13 +532,9 @@ function ResourceHistoryPanel({
             aria-label={resourceLabel(resource)}
             className="h-10 w-10 shrink-0 border border-neutral-600 bg-[#2b2d32] p-0 hover:border-cyan-400"
           >
-            <ResourceIcon
-              resource={{ ...resource, amount: 1 }}
-              size="sm"
-              showAmount={false}
-              bare
-              className="!h-full !w-full"
-            />
+            <span className="flex h-full w-full items-center justify-center">
+              <ResourceIconCanvas resource={resource} size={34} />
+            </span>
           </button>
         ))}
       </div>
@@ -687,7 +684,6 @@ const ResourceResult = memo(function ResourceResult({
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const [, startBrowseTransition] = useTransition();
-  const iconResource = useMemo(() => ({ ...resource, amount: 1 }), [resource]);
   const browse = useCallback(
     (mode: "recipes" | "uses") => {
       startBrowseTransition(() => onBrowseResource(resource, mode));
@@ -709,7 +705,9 @@ const ResourceResult = memo(function ResourceResult({
       ].join(" ")}
       title="Left click: recipes. Right click: uses."
     >
-      <ResourceIcon resource={iconResource} size="sm" showAmount={false} tooltip={false} />
+      <span className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden border border-[#373737] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#cfcfcf,inset_-2px_-2px_0_#4d4d4d]">
+        <ResourceIconCanvas resource={resource} size={32} />
+      </span>
       <span className="min-w-0 flex-1">
         <div className="truncate text-sm font-semibold text-neutral-50">
           {resourceLabel(resource)}
