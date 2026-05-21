@@ -8,7 +8,7 @@ interface ResourceIconProps {
     ResourceAmount,
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "tooltip"
   > & { consumed?: boolean; chance?: number };
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
   showAmount?: boolean;
   showName?: boolean;
   bare?: boolean;
@@ -21,6 +21,7 @@ const sizeClasses = {
   sm: "h-9 w-9",
   md: "h-12 w-12",
   lg: "h-14 w-14",
+  xl: "h-20 w-20",
 };
 
 export function ResourceIcon({

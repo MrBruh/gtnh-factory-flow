@@ -434,8 +434,8 @@ function exportedGridLayout(recipe: Recipe): RecipeMapLayoutDefinition | undefin
 
   return {
     id: "exported-nei-grid",
-    maxItemInputs: itemInputWidth * itemInputHeight,
-    maxItemOutputs: itemOutputWidth * itemOutputHeight,
+    maxItemInputs: Math.max(1, itemInputWidth * itemInputHeight),
+    maxItemOutputs: Math.max(1, itemOutputWidth * itemOutputHeight),
     maxFluidInputs: fluidInputWidth * fluidInputHeight,
     maxFluidOutputs: fluidOutputWidth * fluidOutputHeight,
     logo: { x: 80, y: 62 },

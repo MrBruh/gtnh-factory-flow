@@ -47,8 +47,6 @@ export function NeiRecipeCanvas({
   const height = getCanvasHeight(renderLayout.frames, renderLayout.logoY) * renderScale;
   const slotSize = layout.slotSize * renderScale;
   const renderedIconPixelSize = iconPixelSize ?? slotSize;
-  const logoX = Math.min(layout.logo.x, layout.canvas.width - 28);
-
   return (
     <div
       className={["relative overflow-hidden border border-transparent", className].join(" ")}
@@ -105,19 +103,6 @@ export function NeiRecipeCanvas({
           />
         </div>
       ))}
-
-      <div
-        className="absolute"
-        style={{
-          left: logoX * renderScale,
-          top: renderLayout.logoY * renderScale,
-          width: 17 * renderScale,
-          height: 17 * renderScale,
-          backgroundImage: "url('/nei/gregtech/gui/picture/gt_logo_17x17_transparent.png')",
-          backgroundSize: "100% 100%",
-          imageRendering: "pixelated",
-        }}
-      />
     </div>
   );
 }

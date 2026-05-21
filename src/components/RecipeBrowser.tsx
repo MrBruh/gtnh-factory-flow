@@ -21,7 +21,7 @@ import {
   type RecipeDatasetQueryResult,
 } from "@/lib/datasets/browser-loader";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
-import { GT_VOLTAGE_TIERS, primaryOutput, resourceLabel } from "@/lib/model";
+import { GT_VOLTAGE_TIERS, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
@@ -29,7 +29,7 @@ import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
-const RECIPE_QUERY_LIMIT = 6;
+const RECIPE_QUERY_LIMIT = 5000;
 const RESOURCE_DEFAULT_PAGE_SIZE = 6;
 const RESOURCE_ROW_HEIGHT = 62;
 const RESOURCE_ROW_GAP = 8;
@@ -60,7 +60,6 @@ export function RecipeBrowser() {
   const [selectedRecipeMap, setSelectedRecipeMap] = useState("all");
   const [recipePage, setRecipePage] = useState(0);
   const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
-  const [queryTotal, setQueryTotal] = useState(0);
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [resourcePage, setResourcePage] = useState(0);
   const [resourcePageSize, setResourcePageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
@@ -313,18 +312,16 @@ export function RecipeBrowser() {
   ]);
 
   useEffect(() => {
-    const maxPage = Math.max(0, Math.ceil(queryTotal / RECIPE_QUERY_LIMIT) - 1);
-    if (recipePage > maxPage) {
-      return deferStateUpdate(() => setRecipePage(maxPage));
+    if (recipePage !== 0) {
+      return deferStateUpdate(() => setRecipePage(0));
     }
     return undefined;
-  }, [queryTotal, recipePage]);
+  }, [recipePage]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
       return deferStateUpdate(() => {
         setFilteredRecipes([]);
-        setQueryTotal(0);
         setAvailableRecipeMaps([]);
         setRecipeMapIcons({});
       });
@@ -334,7 +331,6 @@ export function RecipeBrowser() {
     if (!activeResource && query.length < 2) {
       return deferStateUpdate(() => {
         setFilteredRecipes([]);
-        setQueryTotal(0);
         setAvailableRecipeMaps([]);
         setRecipeMapIcons({});
         setRecipeQueryLoading(false);
@@ -347,7 +343,6 @@ export function RecipeBrowser() {
     if (cached) {
       return scheduleAfterPaint(() => {
         setFilteredRecipes(cached.recipes);
-        setQueryTotal(cached.total);
         setAvailableRecipeMaps(cached.recipeMaps);
         setRecipeMapIcons(cached.recipeMapIcons ?? {});
         setRecipeQueryLoading(false);
@@ -397,7 +392,6 @@ export function RecipeBrowser() {
           }
           trimRecipeQueryCache(recipeQueryCacheRef.current);
           setFilteredRecipes(result.recipes);
-          setQueryTotal(result.total);
           setAvailableRecipeMaps(result.recipeMaps);
           setRecipeMapIcons(result.recipeMapIcons ?? {});
           setRecipeQueryLoading(false);
@@ -407,7 +401,6 @@ export function RecipeBrowser() {
             return;
           }
           setFilteredRecipes([]);
-          setQueryTotal(0);
           setAvailableRecipeMaps([]);
           setRecipeMapIcons({});
           setRecipeQueryError(error instanceof Error ? error.message : "Recipe query failed.");
@@ -459,7 +452,7 @@ export function RecipeBrowser() {
           </label>
 
           <label className="mt-2 grid gap-1 text-[11px] font-medium uppercase tracking-wide text-neutral-400">
-            Max tier
+            Tier
             <select
               value={maxTier}
               onChange={(event) => setMaxTier(event.target.value as TierFilter)}
@@ -468,7 +461,7 @@ export function RecipeBrowser() {
               <option value="all">All tiers</option>
               {GT_VOLTAGE_TIERS.map((entry) => (
                 <option key={entry.tier} value={entry.tier}>
-                  {entry.tier} and lower
+                  {entry.tier}
                 </option>
               ))}
             </select>
@@ -523,9 +516,6 @@ export function RecipeBrowser() {
           filteredRecipes={filteredRecipes}
           isLoading={recipeQueryLoading}
           queryError={recipeQueryError}
-          queryTotal={queryTotal}
-          recipePage={recipePage}
-          recipeLimit={RECIPE_QUERY_LIMIT}
           recipeMapTabs={recipeMapTabs}
           selectedRecipeId={selectedRecipeId}
           onAdd={handleAddRecipe}
@@ -553,7 +543,6 @@ export function RecipeBrowser() {
             setRecipePage(0);
           }}
           onRecipeMapHover={prefetchRecipeMap}
-          onRecipePageChange={setRecipePage}
           onSelectRecipe={selectRecipe}
         />
       ) : null}
@@ -889,20 +878,20 @@ function RecipeMapTabBar({
   }, [tabs]);
 
   const scrollTabs = (direction: -1 | 1) => {
-    scrollRef.current?.scrollBy({ left: direction * 184, behavior: "smooth" });
+    scrollRef.current?.scrollBy({ left: direction * 320, behavior: "smooth" });
   };
 
   return (
     <div
       className={[
-        "absolute left-1 right-1 top-0 grid h-[42px] items-start",
-        hasOverflow ? "grid-cols-[24px_minmax(0,1fr)_24px]" : "grid-cols-[minmax(0,1fr)]",
+        "absolute left-1 right-1 top-0 grid h-[102px] items-start",
+        hasOverflow ? "grid-cols-[42px_minmax(0,1fr)_42px]" : "grid-cols-[minmax(0,1fr)]",
       ].join(" ")}
     >
       {hasOverflow ? <NeiTabArrow direction="left" onClick={() => scrollTabs(-1)} /> : null}
       <div
         ref={scrollRef}
-        className="nei-tab-strip flex h-[42px] gap-1 overflow-x-auto overflow-y-hidden px-1"
+        className="nei-tab-strip flex h-[102px] gap-2 overflow-x-auto overflow-y-hidden px-1"
       >
         {tabs.map((tab) => (
           <MinecraftTooltip key={tab.id} label={tab.label}>
@@ -915,7 +904,7 @@ function RecipeMapTabBar({
               className={neiTabClass(activeRecipeMap === tab.id)}
             >
               {tab.icon ? (
-                <ResourceIcon resource={tab.icon} size="sm" showAmount={false} tooltip={false} />
+                <ResourceIcon resource={tab.icon} size="xl" showAmount={false} tooltip={false} />
               ) : (
                 <span className="text-[12px] font-bold leading-none text-white [text-shadow:1px_1px_0_#000]">
                   ?
@@ -937,7 +926,7 @@ function NeiTabArrow({ direction, onClick }: { direction: "left" | "right"; onCl
       onClick={onClick}
       title={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
       aria-label={direction === "left" ? "Previous recipe maps" : "Next recipe maps"}
-      className="mt-1 h-9 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-[18px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000] hover:bg-[#9b9b9b]"
+      className="mt-1 h-20 w-10 border-2 border-[#252525] bg-[#7d7d7d] text-[24px] leading-5 text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] [text-shadow:1px_1px_0_#000] hover:bg-[#9b9b9b]"
     >
       {direction === "left" ? "<" : ">"}
     </button>
@@ -950,9 +939,6 @@ function RecipeBookOverlay({
   filteredRecipes,
   isLoading,
   queryError,
-  queryTotal,
-  recipePage,
-  recipeLimit,
   recipeMapTabs,
   selectedRecipeId,
   onAdd,
@@ -962,7 +948,6 @@ function RecipeBookOverlay({
   onBrowseResource,
   onRecipeMapChange,
   onRecipeMapHover,
-  onRecipePageChange,
   onSelectRecipe,
 }: {
   activeRecipeMap: string;
@@ -970,9 +955,6 @@ function RecipeBookOverlay({
   filteredRecipes: RecipeSummary[];
   isLoading: boolean;
   queryError?: string;
-  queryTotal: number;
-  recipePage: number;
-  recipeLimit: number;
   recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
   onAdd: (recipeId: string) => void | Promise<void>;
@@ -982,14 +964,12 @@ function RecipeBookOverlay({
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   onRecipeMapChange: (recipeMap: string) => void;
   onRecipeMapHover: (recipeMap: string) => void;
-  onRecipePageChange: (page: number) => void;
   onSelectRecipe: (recipeId: string) => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
   const initialPanelSize = getInitialRecipeBookSize();
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [panelSize, setPanelSize] = useState(initialPanelSize);
-  const [, startRecipePageTransition] = useTransition();
   const dragRef = useRef<{
     pointerId: number;
     startX: number;
@@ -1005,6 +985,11 @@ function RecipeBookOverlay({
     height: number;
   } | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [bookSearch, setBookSearch] = useState("");
+  const displayedRecipes = useMemo(
+    () => filterRecipesByIngredientName(filteredRecipes, bookSearch),
+    [bookSearch, filteredRecipes],
+  );
 
   const closeImmediately = () => {
     setIsClosing(true);
@@ -1085,14 +1070,11 @@ function RecipeBookOverlay({
   if (isClosing) {
     return null;
   }
-  const recipePageCount = Math.max(1, Math.ceil(queryTotal / recipeLimit));
-  const currentRecipePage = Math.min(recipePage, recipePageCount - 1);
-
   return (
     <div className="pointer-events-none fixed inset-0 z-30 flex items-center justify-center px-3 py-4 lg:left-[360px] lg:right-[440px]">
       <section
         ref={panelRef}
-        className="pointer-events-auto relative flex flex-col pt-[42px] font-mono"
+        className="pointer-events-auto relative flex flex-col pt-[104px] font-mono"
         aria-label="Recipe book"
         style={{
           transform: `translate(${dragOffset.x}px, ${dragOffset.y}px)`,
@@ -1143,6 +1125,29 @@ function RecipeBookOverlay({
             </button>
           </div>
 
+          <div className="px-3 pt-2">
+            <label className="flex h-9 items-center gap-2 border-2 border-[#555] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
+              <Search className="h-4 w-4 text-neutral-500" />
+              <input
+                value={bookSearch}
+                onChange={(event) => setBookSearch(event.target.value)}
+                placeholder="Search ingredient..."
+                className="min-w-0 flex-1 bg-transparent text-neutral-100 outline-none placeholder:text-neutral-500"
+              />
+              {bookSearch ? (
+                <button
+                  type="button"
+                  onClick={() => setBookSearch("")}
+                  className="text-neutral-400 hover:text-white"
+                  aria-label="Clear recipe book search"
+                  title="Clear recipe book search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </label>
+          </div>
+
           <div className="min-h-0 flex-1 overflow-y-auto p-3" id="recipe-book-scroll">
             {queryError ? (
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
@@ -1152,16 +1157,16 @@ function RecipeBookOverlay({
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 Loading recipes...
               </div>
-            ) : filteredRecipes.length === 0 ? (
+            ) : displayedRecipes.length === 0 ? (
               <div className="border-2 border-[#777] bg-[#b6b6b6] p-3 text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
                 No matching recipes.
               </div>
             ) : (
               <VirtualRecipeResultList
-                recipes={filteredRecipes}
-                queryTotal={queryTotal}
-                currentPage={currentRecipePage}
-                pageSize={recipeLimit}
+                recipes={displayedRecipes}
+                queryTotal={displayedRecipes.length}
+                currentPage={0}
+                pageSize={displayedRecipes.length}
                 selectedRecipeId={selectedRecipeId}
                 onSelectRecipe={onSelectRecipe}
                 onAdd={onAdd}
@@ -1170,24 +1175,6 @@ function RecipeBookOverlay({
               />
             )}
           </div>
-          {filteredRecipes.length > 0 || queryTotal > 0 ? (
-            <RecipePagePager
-              currentPage={currentRecipePage}
-              pageCount={recipePageCount}
-              total={queryTotal}
-              isLoading={isLoading}
-              onPreviousPage={() =>
-                startRecipePageTransition(() =>
-                  onRecipePageChange(Math.max(0, currentRecipePage - 1)),
-                )
-              }
-              onNextPage={() =>
-                startRecipePageTransition(() =>
-                  onRecipePageChange(Math.min(recipePageCount - 1, currentRecipePage + 1)),
-                )
-              }
-            />
-          ) : null}
           <button
             type="button"
             onPointerDown={handleResizePointerDown}
@@ -1295,50 +1282,6 @@ function VirtualRecipeResultList({
   );
 }
 
-function RecipePagePager({
-  currentPage,
-  pageCount,
-  total,
-  isLoading,
-  onPreviousPage,
-  onNextPage,
-}: {
-  currentPage: number;
-  pageCount: number;
-  total: number;
-  isLoading: boolean;
-  onPreviousPage: () => void;
-  onNextPage: () => void;
-}) {
-  return (
-    <div className="grid h-9 shrink-0 grid-cols-[36px_minmax(0,1fr)_36px] items-center border-t-2 border-[#777] bg-[#b6b6b6] text-center text-[13px] text-[#111] shadow-[inset_0_1px_0_#eeeeee]">
-      <button
-        type="button"
-        onClick={onPreviousPage}
-        disabled={currentPage === 0 || isLoading}
-        className="h-full border-r-2 border-[#777] bg-[#8f8f8f] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] disabled:opacity-35"
-        aria-label="Previous recipe page"
-        title="Previous recipe page"
-      >
-        {"<"}
-      </button>
-      <div className="truncate px-2 [text-shadow:1px_1px_0_rgba(255,255,255,0.55)]">
-        {currentPage + 1}/{pageCount} · {total} recipes
-      </div>
-      <button
-        type="button"
-        onClick={onNextPage}
-        disabled={currentPage >= pageCount - 1 || isLoading}
-        className="h-full border-l-2 border-[#777] bg-[#8f8f8f] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] disabled:opacity-35"
-        aria-label="Next recipe page"
-        title="Next recipe page"
-      >
-        {">"}
-      </button>
-    </div>
-  );
-}
-
 const RecipeResultCard = memo(function RecipeResultCard({
   recipe,
   selected,
@@ -1355,8 +1298,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
   onSlotBrowse?: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
 }) {
   const previewRecipe = useMemo(() => summaryToPreviewRecipe(recipe), [recipe]);
-  const primary = useMemo(() => primaryOutput(previewRecipe), [previewRecipe]);
-
   return (
     <article
       onClick={() => onSelectRecipe(recipe.id)}
@@ -1393,11 +1334,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
           onSlotClick={onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined}
         />
       </div>
-      {primary ? (
-        <p className="mt-2 truncate text-[11px] text-neutral-400">
-          Primary: {primary.displayName ?? primary.id}
-        </p>
-      ) : null}
     </article>
   );
 });
@@ -1416,6 +1352,26 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     source: summary.source,
     nei: summary.nei,
   };
+}
+
+function filterRecipesByIngredientName(recipes: RecipeSummary[], query: string) {
+  const tokens = normalizeSearchTokens(query);
+  if (tokens.length === 0) {
+    return recipes;
+  }
+
+  return recipes.filter((recipe) => {
+    const resourceText = [...recipe.inputs, ...recipe.outputs]
+      .map((resource) => `${resource.displayName ?? ""} ${resource.id}`)
+      .join(" ")
+      .toLowerCase();
+
+    return tokens.every((token) => resourceText.includes(token));
+  });
+}
+
+function normalizeSearchTokens(query: string) {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
 function clampDragOffset(offset: { x: number; y: number }, panel: HTMLElement | null) {
@@ -1646,7 +1602,7 @@ function buildRecipeMapTabs(
 
 function neiTabClass(active: boolean): string {
   return [
-    "flex h-10 w-10 shrink-0 items-center justify-center bg-transparent p-0",
+    "flex h-20 w-20 shrink-0 items-center justify-center bg-transparent p-0",
     active ? "ring-2 ring-white" : "hover:ring-2 hover:ring-cyan-300",
   ].join(" ");
 }
