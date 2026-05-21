@@ -64,11 +64,9 @@ textarea {
 }
 
 .factory-flow-board .resource-slot-handle.react-flow__handle {
-  left: 0 !important;
   top: 0 !important;
-  right: auto !important;
   bottom: auto !important;
-  width: 100% !important;
+  width: 2px !important;
   height: 100% !important;
   min-width: 0 !important;
   min-height: 0 !important;
@@ -77,6 +75,33 @@ textarea {
   border-radius: 0 !important;
   background: transparent !important;
   opacity: 0 !important;
+}
+
+.factory-flow-board .resource-slot-handle--input.react-flow__handle {
+  left: 0 !important;
+  right: auto !important;
+}
+
+.factory-flow-board .resource-slot-handle--output.react-flow__handle {
+  left: auto !important;
+  right: 0 !important;
+}
+
+.factory-flow-board .resource-slot-handle.react-flow__handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  height: 100%;
+  width: 40px;
+  pointer-events: auto;
+}
+
+.factory-flow-board .resource-slot-handle--input.react-flow__handle::before {
+  left: 0;
+}
+
+.factory-flow-board .resource-slot-handle--output.react-flow__handle::before {
+  right: 0;
 }
 
 .nei-tab-scroll {
