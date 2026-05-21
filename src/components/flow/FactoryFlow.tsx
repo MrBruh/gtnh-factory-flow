@@ -309,7 +309,7 @@ function PaintToolbar({
   onPaintModeChange: (tag: FactoryNodeColorTag | null | undefined) => void;
 }) {
   return (
-    <div className="nodrag absolute bottom-3 right-3 z-20 grid w-[156px] grid-cols-5 gap-1 border-2 border-[#252525] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+    <div className="nodrag absolute bottom-12 right-3 z-20 grid w-[156px] grid-cols-5 gap-1 border-2 border-[#252525] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
       <button
         type="button"
         onClick={() => onPaintModeChange(paintMode === null ? undefined : null)}

@@ -484,7 +484,7 @@ function ResourceHistoryPanel({
   }
 
   return (
-    <div className="pointer-events-auto absolute bottom-3 left-3 right-3 z-20 max-h-[116px] overflow-hidden border border-neutral-700 bg-[#111317] p-2 shadow-xl">
+    <div className="pointer-events-auto z-20 max-h-[116px] shrink-0 overflow-hidden border-t border-neutral-700 bg-[#111317] p-2 shadow-[0_-8px_18px_rgba(0,0,0,0.22)]">
       <div className="flex flex-wrap gap-2">
         {resources.map((resource) => (
           <button
