@@ -1,7 +1,7 @@
 "use client";
 
 import { Archive, GitBranchPlus, Plus, Search, X } from "lucide-react";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import { queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
@@ -42,6 +42,7 @@ export function RecipeBrowser() {
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [recipeQueryLoading, setRecipeQueryLoading] = useState(false);
   const [recipeQueryError, setRecipeQueryError] = useState<string | undefined>();
+  const recipeQueryCacheRef = useRef<Map<string, RecipeQueryCacheEntry>>(new Map());
   const deferredRecipeSearch = useDeferredValue(recipeSearch);
 
   const resourceIndex = useMemo(
@@ -116,6 +117,69 @@ export function RecipeBrowser() {
     [datasetManifest?.versions, selectedDatasetVersionId],
   );
 
+  const getRecipeQueryKey = useCallback(
+    (recipeMap: string) =>
+      selectedDatasetVersion
+        ? getRecipeQueryCacheKey({
+            versionId: selectedDatasetVersion.id,
+            query: deferredRecipeSearch.trim(),
+            resource: activeResource,
+            mode: browserMode,
+            recipeMap,
+            maxTier,
+          })
+        : "",
+    [activeResource, browserMode, deferredRecipeSearch, maxTier, selectedDatasetVersion],
+  );
+
+  const prefetchRecipeMap = useCallback(
+    (recipeMap: string) => {
+      if (!selectedDatasetVersion) {
+        return;
+      }
+
+      const query = deferredRecipeSearch.trim();
+      if (!activeResource && query.length < 2) {
+        return;
+      }
+
+      const cacheKey = getRecipeQueryKey(recipeMap);
+      if (!cacheKey || recipeQueryCacheRef.current.has(cacheKey)) {
+        return;
+      }
+
+      void queryRecipeDatasetRecipes(
+        datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
+        selectedDatasetVersion,
+        {
+          query,
+          resource: activeResource
+            ? {
+                kind: activeResource.kind,
+                id: activeResource.id,
+              }
+            : undefined,
+          mode: browserMode,
+          recipeMap: recipeMap || undefined,
+          maxTier,
+          limit: 240,
+        },
+      ).then((result) => {
+        recipeQueryCacheRef.current.set(cacheKey, result);
+        trimRecipeQueryCache(recipeQueryCacheRef.current);
+      });
+    },
+    [
+      activeResource,
+      browserMode,
+      datasetManifestUrl,
+      deferredRecipeSearch,
+      getRecipeQueryKey,
+      maxTier,
+      selectedDatasetVersion,
+    ],
+  );
+
   useEffect(() => {
     if (!selectedDatasetVersion) {
       const timeout = window.setTimeout(() => {
@@ -132,6 +196,19 @@ export function RecipeBrowser() {
         setFilteredRecipes([]);
         setQueryTotal(0);
         setAvailableRecipeMaps([]);
+        setRecipeQueryLoading(false);
+        setRecipeQueryError(undefined);
+      }, 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    const cacheKey = getRecipeQueryKey(activeRecipeMap);
+    const cached = recipeQueryCacheRef.current.get(cacheKey);
+    if (cached) {
+      const timeout = window.setTimeout(() => {
+        setFilteredRecipes(cached.recipes);
+        setQueryTotal(cached.total);
+        setAvailableRecipeMaps(cached.recipeMaps);
         setRecipeQueryLoading(false);
         setRecipeQueryError(undefined);
       }, 0);
@@ -168,10 +245,19 @@ export function RecipeBrowser() {
         if (cancelled) {
           return;
         }
+        recipeQueryCacheRef.current.set(cacheKey, result);
+        trimRecipeQueryCache(recipeQueryCacheRef.current);
         setFilteredRecipes(result.recipes);
         setQueryTotal(result.total);
         setAvailableRecipeMaps(result.recipeMaps);
         setRecipeQueryLoading(false);
+        window.setTimeout(() => {
+          for (const recipeMap of result.recipeMaps.slice(0, 48)) {
+            if (recipeMap !== activeRecipeMap) {
+              prefetchRecipeMap(recipeMap);
+            }
+          }
+        }, 0);
       })
       .catch((error) => {
         if (cancelled) {
@@ -193,7 +279,9 @@ export function RecipeBrowser() {
     browserMode,
     datasetManifestUrl,
     deferredRecipeSearch,
+    getRecipeQueryKey,
     maxTier,
+    prefetchRecipeMap,
     selectedDatasetVersion,
   ]);
 
@@ -327,6 +415,7 @@ export function RecipeBrowser() {
             )
           }
           onRecipeMapChange={setSelectedRecipeMap}
+          onRecipeMapHover={prefetchRecipeMap}
           onSelectRecipe={selectRecipe}
         />
       ) : null}
@@ -389,6 +478,12 @@ interface RecipeMapTab {
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
+interface RecipeQueryCacheEntry {
+  recipes: Recipe[];
+  total: number;
+  recipeMaps: string[];
+}
+
 function ResourceResult({
   resource,
   active,
@@ -426,10 +521,12 @@ function RecipeMapTabBar({
   activeRecipeMap,
   tabs,
   onRecipeMapChange,
+  onRecipeMapHover,
 }: {
   activeRecipeMap: string;
   tabs: RecipeMapTab[];
   onRecipeMapChange: (recipeMap: string) => void;
+  onRecipeMapHover: (recipeMap: string) => void;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [hasOverflow, setHasOverflow] = useState(false);
@@ -470,6 +567,8 @@ function RecipeMapTabBar({
           <MinecraftTooltip key={tab.id} label={tab.label}>
             <button
               type="button"
+              onMouseEnter={() => onRecipeMapHover(tab.id)}
+              onFocus={() => onRecipeMapHover(tab.id)}
               onClick={() => onRecipeMapChange(tab.id)}
               aria-label={tab.label}
               className={neiTabClass(activeRecipeMap === tab.id)}
@@ -519,6 +618,7 @@ function RecipeBookOverlay({
   onAddStorage,
   onBrowseResource,
   onRecipeMapChange,
+  onRecipeMapHover,
   onSelectRecipe,
 }: {
   activeRecipeMap: string;
@@ -535,6 +635,7 @@ function RecipeBookOverlay({
   onAddStorage: () => void;
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   onRecipeMapChange: (recipeMap: string) => void;
+  onRecipeMapHover: (recipeMap: string) => void;
   onSelectRecipe: (recipeId: string) => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
@@ -653,6 +754,7 @@ function RecipeBookOverlay({
           activeRecipeMap={activeRecipeMap}
           tabs={recipeMapTabs}
           onRecipeMapChange={onRecipeMapChange}
+          onRecipeMapHover={onRecipeMapHover}
         />
 
         <div className="relative flex min-h-0 flex-1 flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
@@ -880,6 +982,41 @@ function buildResourceIndex(
   }
 
   return index;
+}
+
+function getRecipeQueryCacheKey({
+  versionId,
+  query,
+  resource,
+  mode,
+  recipeMap,
+  maxTier,
+}: {
+  versionId: string;
+  query: string;
+  resource?: Pick<ResourceAmount, "kind" | "id">;
+  mode: "recipes" | "uses";
+  recipeMap: string;
+  maxTier: TierFilter;
+}) {
+  return [
+    versionId,
+    query.trim().toLowerCase(),
+    resource ? `${resource.kind}:${resource.id}` : "",
+    mode,
+    recipeMap,
+    maxTier,
+  ].join("|");
+}
+
+function trimRecipeQueryCache(cache: Map<string, RecipeQueryCacheEntry>) {
+  while (cache.size > 120) {
+    const oldestKey = cache.keys().next().value;
+    if (!oldestKey) {
+      return;
+    }
+    cache.delete(oldestKey);
+  }
 }
 
 function addRecipesToResourceIndex(index: Map<ResourceKey, IndexedResource>, recipes: Recipe[]) {
