@@ -471,7 +471,7 @@ function buildRecipeSearchText(recipe: Recipe): string {
 }
 
 async function readDatasetResponseText(response: Response, datasetUrl: string): Promise<string> {
-  if (!datasetUrl.endsWith(".gz")) {
+  if (!isGzipDatasetUrl(datasetUrl)) {
     return response.text();
   }
 
@@ -481,6 +481,10 @@ async function readDatasetResponseText(response: Response, datasetUrl: string): 
 
   const stream = response.body.pipeThrough(new DecompressionStream("gzip"));
   return new Response(stream).text();
+}
+
+function isGzipDatasetUrl(datasetUrl: string): boolean {
+  return new URL(datasetUrl, self.location.origin).pathname.endsWith(".gz");
 }
 
 function buildDatasetResourceIndex(dataset: RecipeDataset): DatasetResourceIndexEntry[] {
