@@ -11,7 +11,7 @@ import {
   useState,
   useTransition,
 } from "react";
-import type { PointerEvent } from "react";
+import type { PointerEvent, RefObject } from "react";
 import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
 import {
   getRecipeDatasetRecipe,
@@ -30,7 +30,11 @@ import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 const RECIPE_QUERY_LIMIT = 6;
-const RESOURCE_QUERY_LIMIT = 6;
+const RESOURCE_DEFAULT_PAGE_SIZE = 6;
+const RESOURCE_ROW_HEIGHT = 62;
+const RESOURCE_ROW_GAP = 8;
+const RESOURCE_PAGER_HEIGHT = 40;
+const QUICK_SLOT_ICON_PIXEL_SIZE = 34;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 
@@ -60,6 +64,7 @@ export function RecipeBrowser() {
   const [queryTotal, setQueryTotal] = useState(0);
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [resourcePage, setResourcePage] = useState(0);
+  const [resourcePageSize, setResourcePageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
   const [resourceResults, setResourceResults] = useState<IndexedResource[]>([]);
   const [resourceTotal, setResourceTotal] = useState(0);
   const [resourceQueryLoading, setResourceQueryLoading] = useState(false);
@@ -130,11 +135,11 @@ export function RecipeBrowser() {
         ? getResourceQueryCacheKey({
             versionId: getDatasetVersionCacheKey(selectedDatasetVersion),
             query: deferredRecipeSearch.trim(),
-            offset: page * RESOURCE_QUERY_LIMIT,
-            limit: RESOURCE_QUERY_LIMIT,
+            offset: page * resourcePageSize,
+            limit: resourcePageSize,
           })
         : "",
-    [deferredRecipeSearch, selectedDatasetVersion],
+    [deferredRecipeSearch, resourcePageSize, selectedDatasetVersion],
   );
 
   const prefetchRecipeMap = useCallback(
@@ -218,12 +223,12 @@ export function RecipeBrowser() {
   }, [deferredRecipeSearch, selectedDatasetVersion?.id]);
 
   useEffect(() => {
-    const maxPage = Math.max(0, Math.ceil(resourceTotal / RESOURCE_QUERY_LIMIT) - 1);
+    const maxPage = Math.max(0, Math.ceil(resourceTotal / resourcePageSize) - 1);
     if (resourcePage > maxPage) {
       return deferStateUpdate(() => setResourcePage(maxPage));
     }
     return undefined;
-  }, [resourcePage, resourceTotal]);
+  }, [resourcePage, resourcePageSize, resourceTotal]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
@@ -260,8 +265,8 @@ export function RecipeBrowser() {
       selectedDatasetVersion,
       {
         query,
-        offset: resourcePage * RESOURCE_QUERY_LIMIT,
-        limit: RESOURCE_QUERY_LIMIT,
+        offset: resourcePage * resourcePageSize,
+        limit: resourcePageSize,
       },
     )
       .then((result) => {
@@ -292,6 +297,7 @@ export function RecipeBrowser() {
     deferredRecipeSearch,
     getResourceQueryKey,
     resourcePage,
+    resourcePageSize,
     selectedDatasetVersion,
   ]);
 
@@ -503,6 +509,7 @@ export function RecipeBrowser() {
               error={resourceQueryError}
               activeResource={activeResource}
               onPageChange={setResourcePage}
+              onPageSizeChange={setResourcePageSize}
               onBrowse={browseResource}
             />
           )}
@@ -602,7 +609,7 @@ function ResourceHistoryPanel({
                 showAmount={false}
                 tooltip={false}
                 bare
-                iconPixelSize={34}
+                iconPixelSize={QUICK_SLOT_ICON_PIXEL_SIZE}
               />
             </span>
           </button>
@@ -636,6 +643,39 @@ function useVisibleResourceHistorySlots() {
   }, []);
 
   return { containerRef, visibleSlotCount };
+}
+
+function useResourcePageSize(
+  containerRef: RefObject<HTMLDivElement | null>,
+  onPageSizeChange: (pageSize: number) => void,
+) {
+  const [pageSize, setPageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const updatePageSize = () => {
+      const availableHeight = Math.max(RESOURCE_ROW_HEIGHT, container.clientHeight);
+      const listHeight = Math.max(RESOURCE_ROW_HEIGHT, availableHeight - RESOURCE_PAGER_HEIGHT);
+      const nextPageSize = Math.max(
+        1,
+        Math.floor((listHeight + RESOURCE_ROW_GAP) / RESOURCE_ROW_HEIGHT),
+      );
+
+      setPageSize((current) => (current === nextPageSize ? current : nextPageSize));
+      onPageSizeChange(nextPageSize);
+    };
+
+    updatePageSize();
+    const observer = new ResizeObserver(updatePageSize);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [containerRef, onPageSizeChange]);
+
+  return pageSize;
 }
 
 interface IndexedResource extends Pick<
@@ -672,6 +712,7 @@ function VirtualResourceResultList({
   error,
   activeResource,
   onPageChange,
+  onPageSizeChange,
   onBrowse,
 }: {
   resources: IndexedResource[];
@@ -681,10 +722,13 @@ function VirtualResourceResultList({
   error?: string;
   activeResource?: IndexedResource;
   onPageChange: (page: number) => void;
+  onPageSizeChange: (pageSize: number) => void;
   onBrowse: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [, startPageTransition] = useTransition();
-  const pageCount = Math.max(1, Math.ceil(total / RESOURCE_QUERY_LIMIT));
+  const pageSize = useResourcePageSize(containerRef, onPageSizeChange);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const handlePreviousPage = useCallback(() => {
     startPageTransition(() => {
       onPageChange(Math.max(0, currentPage - 1));
@@ -697,7 +741,7 @@ function VirtualResourceResultList({
   }, [currentPage, onPageChange, pageCount, startPageTransition]);
 
   return (
-    <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
+    <div ref={containerRef} className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
       {error ? (
         <div className="rounded border border-dashed border-red-700 p-4 text-sm text-red-200">
           {error}
@@ -777,8 +821,6 @@ function ResourceResultPage({
   onBrowseResource: (resource: IndexedResource, mode: "recipes" | "uses") => void;
 }) {
   const [, startBrowseTransition] = useTransition();
-  const rowHeight = 62;
-  const height = 6 * rowHeight;
 
   const browse = useCallback(
     (resource: IndexedResource, mode: "recipes" | "uses") => {
@@ -789,8 +831,7 @@ function ResourceResultPage({
 
   return (
     <div
-      className="grid min-h-0 w-full content-start gap-2 overflow-hidden"
-      style={{ height }}
+      className="flex min-h-0 flex-1 flex-col gap-2 overflow-hidden"
       aria-label="Resource results"
       role="listbox"
     >
@@ -894,7 +935,8 @@ function RecipeMapTabBar({
                     showAmount={false}
                     tooltip={false}
                     bare
-                    iconPixelSize={30}
+                    className="!h-full !w-full"
+                    iconPixelSize={QUICK_SLOT_ICON_PIXEL_SIZE}
                   />
                 </span>
               ) : (
