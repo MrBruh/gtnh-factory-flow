@@ -1548,16 +1548,14 @@ function getTopLaneEdgePoints({
     return undefined;
   }
 
-  const laneY = Math.min(sourceBounds.top, targetBounds.top, sourceY, targetY) - 28;
-  const sourceExitX = goesRight ? sourceBounds.right + 14 : sourceBounds.left - 14;
-  const targetApproachX = goesRight ? targetBounds.left - 14 : targetBounds.right + 14;
+  const laneY = Math.min(sourceBounds.top, targetBounds.top) - 10;
+  const sourceExitX = sourceX + (goesRight ? 20 : -20);
+  const targetApproachX = targetX + (goesRight ? -20 : 20);
 
   return compactPolylinePoints([
     { x: sourceX, y: sourceY },
-    { x: sourceExitX, y: sourceY },
     { x: sourceExitX, y: laneY },
     { x: targetApproachX, y: laneY },
-    { x: targetApproachX, y: targetY },
     { x: targetX, y: targetY },
   ]);
 }
