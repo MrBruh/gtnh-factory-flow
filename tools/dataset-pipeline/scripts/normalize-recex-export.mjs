@@ -15,87 +15,33 @@ const generatedAt = new Date().toISOString();
 const outDir = path.dirname(outputPath);
 const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
 const renderedIconFiles = await stageRenderedIcons(renderedIconDir, outDir);
-const raw = JSON.parse(await fs.readFile(inputPath, "utf8"));
-const gregtechSource = raw.sources?.find((source) => source.type === "gregtech");
-
-if (!gregtechSource?.machines?.length) {
-  throw new Error("RecEx export does not contain gregtech machines.");
-}
+const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
 
 const resources = new Map();
 const recipeMaps = [];
 const recipes = [];
+const oreDictionary = {};
 
-for (const machine of gregtechSource.machines) {
-  const machineType = text(machine.n, "unknown-machine");
-  recipeMaps.push(machineType);
+const sources = Array.isArray(raw.sources) ? raw.sources : [];
+const gregtechSource = sources.find((source) => source.type === "gregtech");
 
-  for (const [index, rawRecipe] of (machine.recs ?? []).entries()) {
-    if (!rawRecipe?.en || rawRecipe.dur <= 0) {
-      continue;
-    }
-
-    const inputs = [
-      ...(rawRecipe.iI ?? []).map((item) =>
-        itemAmount(item, { consumed: !isNonConsumedInput(item) }),
-      ),
-      ...(rawRecipe.iNC ?? []).map((item) => itemAmount(item, { consumed: false })),
-      ...(rawRecipe.nCI ?? []).map((item) => itemAmount(item, { consumed: false })),
-      ...(rawRecipe.ncI ?? []).map((item) => itemAmount(item, { consumed: false })),
-      ...(rawRecipe.fI ?? []).map(fluidAmount),
-    ].filter(Boolean);
-    const outputs = [
-      ...(rawRecipe.iO ?? []).map((item) => itemAmount(item, { chance: outputChance(item) })),
-      ...(rawRecipe.fO ?? []).map(fluidAmount),
-    ].filter(Boolean);
-
-    if (outputs.length === 0) {
-      continue;
-    }
-
-    for (const resource of [...inputs, ...outputs]) {
-      const key = `${resource.kind}:${resource.id}`;
-      const existingResource = resources.get(key);
-      if (existingResource) {
-        if (!existingResource.iconPath && resource.iconPath) {
-          existingResource.iconPath = resource.iconPath;
-        }
-      } else {
-        resources.set(key, {
-          id: resource.id,
-          kind: resource.kind,
-          displayName: resource.displayName ?? resource.id,
-          iconPath: resource.iconPath,
-        });
-      }
-    }
-
-    const primaryOutput = outputs[0];
-    const programmedCircuit = detectProgrammedCircuit(inputs);
-    recipes.push({
-      id: `recex:${datasetVersionId}:${slug(machineType)}:${hashRecipe(machineType, index, rawRecipe)}`,
-      name: `${machineType}: ${primaryOutput.displayName ?? primaryOutput.id}`,
-      machineType,
-      minimumTier: "UNKNOWN",
-      durationTicks: rawRecipe.dur,
-      eut: rawRecipe.eut ?? 0,
-      inputs,
-      outputs,
-      programmedCircuit,
-      notes:
-        "Generated from a real GTNH RecEx runtime export. Tier metadata is best-effort until a richer exporter normalizer is added.",
-      source: {
-        datasetVersionId,
-        recipeMap: machineType,
-        exporter: "recex",
-        rawRecipeId: `${machineType}:${index}`,
-      },
-      nei: {
-        additionalInfo: [`Special value: ${rawRecipe.sp ?? 0}`],
-      },
-    });
-  }
+if (gregtechSource?.machines?.length) {
+  normalizeGregtechRecipes(gregtechSource);
 }
+
+normalizeCraftingSource(findSource("shaped"), {
+  machineType: "Crafting Table (Shaped)",
+  sourceType: "shaped",
+});
+normalizeCraftingSource(findSource("shapeless"), {
+  machineType: "Crafting Table (Shapeless)",
+  sourceType: "shapeless",
+});
+normalizeCraftingSource(findSource("shapedOreDict"), {
+  machineType: "Crafting Table (Ore Dictionary)",
+  sourceType: "shapedOreDict",
+});
+normalizeSmeltingSource(findSource("smelting"));
 
 const dataset = {
   schemaVersion: 1,
@@ -109,7 +55,7 @@ const dataset = {
   },
   resources: [...resources.values()].sort(compareById),
   recipes,
-  oreDictionary: {},
+  oreDictionary: sortOreDictionary(oreDictionary),
   recipeMaps: [...new Set(recipeMaps)].sort(),
   generatedAt,
 };
@@ -123,6 +69,178 @@ await pruneUnusedRenderedIcons(dataset, outDir);
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
 await fs.writeFile(outputPath, `${JSON.stringify(dataset, null, 2)}\n`);
 console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
+
+function normalizeGregtechRecipes(source) {
+  for (const machine of source.machines) {
+    const machineType = text(machine.n, "unknown-machine");
+    recipeMaps.push(machineType);
+
+    for (const [index, rawRecipe] of (machine.recs ?? []).entries()) {
+      if (!rawRecipe?.en || rawRecipe.dur <= 0) {
+        continue;
+      }
+
+      const inputs = [
+        ...(rawRecipe.iI ?? []).map((item) =>
+          itemAmount(item, { consumed: !isNonConsumedInput(item) }),
+        ),
+        ...(rawRecipe.iNC ?? []).map((item) => itemAmount(item, { consumed: false })),
+        ...(rawRecipe.nCI ?? []).map((item) => itemAmount(item, { consumed: false })),
+        ...(rawRecipe.ncI ?? []).map((item) => itemAmount(item, { consumed: false })),
+        ...(rawRecipe.fI ?? []).map(fluidAmount),
+      ].filter(Boolean);
+      const outputs = [
+        ...(rawRecipe.iO ?? []).map((item) => itemAmount(item, { chance: outputChance(item) })),
+        ...(rawRecipe.fO ?? []).map(fluidAmount),
+      ].filter(Boolean);
+
+      if (outputs.length === 0) {
+        continue;
+      }
+
+      addRecipe({
+        id: `recex:${datasetVersionId}:${slug(machineType)}:${hashRecipe(machineType, index, rawRecipe)}`,
+        name: `${machineType}: ${outputs[0].displayName ?? outputs[0].id}`,
+        machineType,
+        minimumTier: "UNKNOWN",
+        durationTicks: rawRecipe.dur,
+        eut: rawRecipe.eut ?? 0,
+        inputs,
+        outputs,
+        programmedCircuit: detectProgrammedCircuit(inputs),
+        notes:
+          "Generated from a real GTNH RecEx runtime export. Tier metadata is best-effort until a richer exporter normalizer is added.",
+        source: {
+          datasetVersionId,
+          recipeMap: machineType,
+          exporter: "recex",
+          rawRecipeId: `${machineType}:${index}`,
+        },
+        nei: {
+          additionalInfo: [`Special value: ${rawRecipe.sp ?? 0}`],
+        },
+      });
+    }
+  }
+}
+
+function normalizeCraftingSource(source, { machineType, sourceType }) {
+  if (!source?.recipes?.length) {
+    return;
+  }
+
+  recipeMaps.push(machineType);
+
+  for (const [index, rawRecipe] of source.recipes.entries()) {
+    const inputs = (rawRecipe.iI ?? [])
+      .map((item) => itemOrOreDictionaryAmount(item))
+      .filter(Boolean);
+    const output = itemAmount(rawRecipe.o);
+
+    if (!output) {
+      continue;
+    }
+
+    addRecipe({
+      id: `recex:${datasetVersionId}:${slug(machineType)}:${hashRecipe(sourceType, index, rawRecipe)}`,
+      name: `${machineType}: ${output.displayName ?? output.id}`,
+      machineType,
+      minimumTier: "NONE",
+      durationTicks: 20,
+      eut: 0,
+      inputs,
+      outputs: [output],
+      notes: "Generated from a real GTNH RecEx runtime export.",
+      source: {
+        datasetVersionId,
+        recipeMap: machineType,
+        exporter: "recex",
+        rawRecipeId: `${sourceType}:${index}`,
+      },
+      nei: {
+        itemInputGrid: { width: 3, height: 3 },
+        itemOutputGrid: { width: 1, height: 1 },
+      },
+    });
+  }
+}
+
+function normalizeSmeltingSource(source) {
+  if (!source?.recipes?.length) {
+    return;
+  }
+
+  const machineType = "Furnace";
+  recipeMaps.push(machineType);
+
+  for (const [index, rawRecipe] of source.recipes.entries()) {
+    const input = itemAmount(rawRecipe.input);
+    const output = itemAmount(rawRecipe.output);
+
+    if (!input || !output) {
+      continue;
+    }
+
+    addRecipe({
+      id: `recex:${datasetVersionId}:${slug(machineType)}:${hashRecipe("smelting", index, rawRecipe)}`,
+      name: `${machineType}: ${output.displayName ?? output.id}`,
+      machineType,
+      minimumTier: "NONE",
+      durationTicks: 200,
+      eut: 0,
+      inputs: [input],
+      outputs: [output],
+      notes: "Generated from a real GTNH RecEx runtime export.",
+      source: {
+        datasetVersionId,
+        recipeMap: machineType,
+        exporter: "recex",
+        rawRecipeId: `smelting:${index}`,
+      },
+      nei: {
+        itemInputGrid: { width: 1, height: 1 },
+        itemOutputGrid: { width: 1, height: 1 },
+      },
+    });
+  }
+}
+
+function addRecipe(recipe) {
+  for (const resource of [...recipe.inputs, ...recipe.outputs]) {
+    addResource(resource);
+  }
+  recipes.push(recipe);
+}
+
+function addResource(resource) {
+  const key = `${resource.kind}:${resource.id}`;
+  const existingResource = resources.get(key);
+  if (existingResource) {
+    if (!existingResource.iconPath && resource.iconPath) {
+      existingResource.iconPath = resource.iconPath;
+    }
+    if (!existingResource.tooltip && resource.tooltip) {
+      existingResource.tooltip = resource.tooltip;
+    }
+    if (!existingResource.oreDictionary && resource.oreDictionary) {
+      existingResource.oreDictionary = resource.oreDictionary;
+    }
+    return;
+  }
+
+  resources.set(key, {
+    id: resource.id,
+    kind: resource.kind,
+    displayName: resource.displayName ?? resource.id,
+    iconPath: resource.iconPath,
+    tooltip: resource.tooltip,
+    oreDictionary: resource.oreDictionary,
+  });
+}
+
+function findSource(type) {
+  return sources.find((source) => source.type === type);
+}
 
 function itemAmount(item, options = {}) {
   if (!item?.id || !Number.isFinite(item.a) || item.a <= 0) {
@@ -144,6 +262,48 @@ function itemAmount(item, options = {}) {
     resource.chance = options.chance;
   }
   return resource;
+}
+
+function itemOrOreDictionaryAmount(item) {
+  if (item?.dns || item?.ims) {
+    return oreDictionaryAmount(item);
+  }
+
+  return itemAmount(item);
+}
+
+function oreDictionaryAmount(item) {
+  const names = (item.dns ?? []).map((name) => text(name, "")).filter(Boolean);
+  const alternatives = (item.ims ?? []).map((entry) => itemAmount(entry)).filter(Boolean);
+
+  if (names.length === 0 && alternatives.length === 0) {
+    return undefined;
+  }
+
+  const primaryName = names[0] ?? alternatives[0].id;
+  const id = `oredict:${primaryName}`;
+  const alternativeIds = alternatives.map((entry) => entry.id);
+  for (const name of names) {
+    oreDictionary[name] = [...new Set([...(oreDictionary[name] ?? []), ...alternativeIds])].sort();
+  }
+
+  return {
+    kind: "item",
+    id,
+    amount: 1,
+    displayName: `Ore Dictionary: ${primaryName}`,
+    iconPath: alternatives.find((entry) => entry.iconPath)?.iconPath,
+    tooltip: [
+      names.length > 0 ? `Ore dictionary: ${names.join(", ")}` : undefined,
+      alternatives.length > 0
+        ? `Accepts: ${alternatives
+            .slice(0, 12)
+            .map((entry) => entry.displayName ?? entry.id)
+            .join(", ")}${alternatives.length > 12 ? `, +${alternatives.length - 12} more` : ""}`
+        : undefined,
+    ].filter(Boolean),
+    oreDictionary: names.length > 0 ? names : undefined,
+  };
 }
 
 function outputChance(item) {
@@ -219,12 +379,24 @@ function compareById(a, b) {
   return a.id.localeCompare(b.id);
 }
 
+function sortOreDictionary(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entries]) => [key, [...new Set(entries)].sort()]),
+  );
+}
+
 function requiredEnv(name) {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable ${name}.`);
   }
   return value;
+}
+
+function stripBom(value) {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }
 
 async function stageRenderedIcons(sourceDir, datasetOutDir) {
