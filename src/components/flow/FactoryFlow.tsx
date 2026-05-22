@@ -417,6 +417,10 @@ export function FactoryFlow() {
         return;
       }
 
+      if ((project.storages ?? []).some((storage) => storage.id === draggedResource.nodeId)) {
+        return;
+      }
+
       const position = flowInstance.screenToFlowPosition(clientPosition);
       addStorageForConnection(
         draggedResource,
@@ -426,7 +430,7 @@ export function FactoryFlow() {
         draggedResource.handleId,
       );
     },
-    [addStorageForConnection, connectNodes],
+    [addStorageForConnection, connectNodes, project.storages],
   );
 
   useEffect(() => {
