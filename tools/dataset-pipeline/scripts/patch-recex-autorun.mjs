@@ -485,6 +485,26 @@ itemSource = itemSource.replace(
     "",
   ].join("\n"),
 );
+if (!itemSource.includes("public Integer ch;")) {
+  itemSource = replaceRequired(
+    itemSource,
+    /public String lN;\s*/,
+    [
+      "public String lN;",
+      "",
+      "/** nbt tag */",
+      "public String nbt;",
+      "",
+      "/** output chance, 10000 = 100% */",
+      "public Integer ch;",
+      "",
+      "/** rendered item stack icon filename */",
+      "public String ic;",
+      "",
+    ].join("\n"),
+    "RecEx item metadata fields",
+  );
+}
 await fs.writeFile(itemPath, itemSource);
 
 const recipeUtilPath = path.join(
@@ -530,6 +550,20 @@ fluidSource = fluidSource.replace(
     "",
   ].join("\n"),
 );
+if (!fluidSource.includes("public String ic;")) {
+  fluidSource = replaceRequired(
+    fluidSource,
+    /public String lN;\s*/,
+    [
+      "public String lN;",
+      "",
+      "/** rendered fluid icon filename */",
+      "public String ic;",
+      "",
+    ].join("\n"),
+    "RecEx fluid icon field",
+  );
+}
 await fs.writeFile(fluidPath, fluidSource);
 
 const iconPackageDir = path.join(repoDir, "src/main/java/com/bigbass/recex/icons");
