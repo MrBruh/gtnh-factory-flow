@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
-import { gunzipSync } from "node:zlib";
+import readline from "node:readline";
+import { createGunzip } from "node:zlib";
 
 const rootDir = process.env.GTNH_DATASETS_ROOT ?? path.join("public", "datasets", "gtnh");
 const entries = existsSync(rootDir) ? await fs.readdir(rootDir, { withFileTypes: true }) : [];
@@ -20,7 +21,7 @@ for (const entry of entries) {
     continue;
   }
 
-  const dataset = await readRecipeDataset(recipesPath);
+  const dataset = await readRecipeDatasetMetadata(recipesPath);
   const recipeIndexPath = getRecipeIndexPath(entry.name);
   const recipeLookupIndexPath = getRecipeLookupIndexPath(entry.name);
   const resourceIndexPath = getResourceIndexPath(entry.name);
@@ -142,12 +143,44 @@ function getRecipeLookupIndexPath(versionId) {
   return undefined;
 }
 
-async function readRecipeDataset(filePath) {
-  const data = await fs.readFile(filePath);
-  const source = filePath.endsWith(".gz")
-    ? gunzipSync(data).toString("utf8")
-    : data.toString("utf8");
-  return JSON.parse(source);
+async function readRecipeDatasetMetadata(filePath) {
+  const dataset = {};
+  const fileStream = createReadStream(filePath, { encoding: filePath.endsWith(".gz") ? undefined : "utf8" });
+  const input = filePath.endsWith(".gz") ? fileStream.pipe(createGunzip()) : fileStream;
+  const lines = readline.createInterface({ input, crlfDelay: Infinity });
+  const wantedKeys = new Set(["datasetVersionId", "gtnhVersion", "generatedAt", "sourceInfo"]);
+
+  try {
+    for await (const rawLine of lines) {
+      const line = String(rawLine).trim();
+      const match = /^("(?:(?:\\.)|[^"\\])*"):\s*(.*?)(,)?$/.exec(line);
+      if (!match) {
+        continue;
+      }
+
+      const key = JSON.parse(match[1]);
+      if (!wantedKeys.has(key)) {
+        continue;
+      }
+
+      dataset[key] = JSON.parse(match[2]);
+      if ([...wantedKeys].every((wantedKey) => dataset[wantedKey] !== undefined)) {
+        break;
+      }
+    }
+  } finally {
+    lines.close();
+    input.destroy();
+    fileStream.destroy();
+  }
+
+  for (const key of wantedKeys) {
+    if (dataset[key] === undefined) {
+      throw new Error(`Missing ${key} in ${filePath}.`);
+    }
+  }
+
+  return dataset;
 }
 
 function newestVersion(versions, channel) {
