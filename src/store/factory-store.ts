@@ -38,6 +38,7 @@ interface FactoryStore {
   datasetManifestUrl?: string;
   selectedDatasetVersionId?: string;
   isDatasetLoading: boolean;
+  isProjectImporting: boolean;
   datasetError?: string;
   recipeSearch: string;
   maxTierFilter: TierFilter;
@@ -57,6 +58,7 @@ interface FactoryStore {
   setDataset: (dataset: RecipeDataset) => void;
   clearDataset: () => void;
   setDatasetLoading: (isLoading: boolean) => void;
+  setProjectImporting: (isImporting: boolean) => void;
   setDatasetError: (error?: string) => void;
   setRecipeSearch: (query: string) => void;
   setMaxTierFilter: (tier: TierFilter) => void;
@@ -172,6 +174,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   datasetManifestUrl: undefined,
   selectedDatasetVersionId: undefined,
   isDatasetLoading: false,
+  isProjectImporting: false,
   datasetError: undefined,
   recipeSearch: "",
   maxTierFilter: "all",
@@ -240,6 +243,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   setDatasetLoading: (isLoading) => {
     set({ isDatasetLoading: isLoading });
+  },
+  setProjectImporting: (isImporting) => {
+    set({ isProjectImporting: isImporting });
   },
   setDatasetError: (error) => {
     set({ datasetError: error, isDatasetLoading: false });
@@ -1251,8 +1257,7 @@ function buildEdgeBetweenNodes(
           output.kind === selectedResource.kind &&
           output.id === selectedResource.id &&
           targetRecipe.inputs.some(
-            (input) =>
-              isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
+            (input) => isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
           ),
       )
     : sourceRecipe.outputs.find((output) =>

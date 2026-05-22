@@ -43,18 +43,6 @@ import { useFactoryStore } from "@/store/factory-store";
 interface TopBarProps {
   onLoadDatasetVersion: (versionId: string) => void;
 }
-
-type ImportNotice =
-  | {
-      kind: "success";
-      message: string;
-    }
-  | {
-      kind: "warning" | "error";
-      message: string;
-      details?: string[];
-    };
-
 export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
@@ -62,12 +50,13 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const [pendingExport, setPendingExport] = useState<
     { format: "json" | "svg" | "png"; requestId: string } | undefined
   >();
-  const [importNotice, setImportNotice] = useState<ImportNotice>();
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
   const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
+  const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const setProject = useFactoryStore((state) => state.setProject);
+  const setProjectImporting = useFactoryStore((state) => state.setProjectImporting);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
   const optimizeMachineCounts = useFactoryStore((state) => state.optimizeMachineCounts);
 
@@ -107,7 +96,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   };
 
   const importProjectJson = async (file: File) => {
-    setImportNotice(undefined);
+    setProjectImporting(true);
 
     try {
       const text = await readProjectFile(file);
@@ -118,10 +107,9 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
 
       if (!selectedDatasetVersion) {
         setProject(importedProject);
-        setImportNotice({
-          kind: "warning",
-          message: "Plan imported without an active GTNH dataset; embedded recipe data was kept.",
-        });
+        console.warn(
+          "Plan imported without an active GTNH dataset; embedded recipe data was kept.",
+        );
         return;
       }
 
@@ -131,60 +119,17 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
       );
       setProject(hydration.project);
 
-      if (hydration.missingRecipes.length || hydration.migratedRecipes.length) {
-        const recipeLabel =
-          hydration.missingRecipes.length === 1 ? "recipe ID was" : "recipe IDs were";
-        const migrationLabel =
-          hydration.migratedRecipes.length === 1
-            ? "legacy recipe ID was"
-            : "legacy recipe IDs were";
-        const messageParts = [];
-        if (hydration.migratedRecipes.length) {
-          messageParts.push(
-            `${hydration.migratedRecipes.length} ${migrationLabel} updated during import`,
-          );
-        }
-        if (hydration.missingRecipes.length) {
-          messageParts.push(
-            `${hydration.missingRecipes.length} ${recipeLabel} not found in ${selectedDatasetVersion.gtnhVersion}`,
-          );
-        }
-        setImportNotice({
-          kind: hydration.missingRecipes.length ? "warning" : "success",
-          message: `${messageParts.join("; ")}${
-            hydration.missingRecipes.length
-              ? "; embedded legacy recipes were kept for those nodes"
-              : ""
-          }.`,
-          details: [
-            ...hydration.migratedRecipes
-              .slice(0, 8)
-              .map((recipe) => `${recipe.name}: ${recipe.fromId} -> ${recipe.toId}`),
-            ...hydration.missingRecipes
-              .slice(0, 8)
-              .map((recipe) => `${recipe.name}: unresolved ${recipe.id}`),
-          ],
-        });
-        if (hydration.missingRecipes.length) {
-          console.warn(
-            "Imported plan contains recipe IDs that are not present in the selected dataset.",
-            hydration.missingRecipes,
-          );
-        }
-      } else {
-        setImportNotice({
-          kind: "success",
-          message: `Plan imported and recipes matched ${selectedDatasetVersion.gtnhVersion}.`,
-        });
+      if (hydration.missingRecipes.length) {
+        console.warn(
+          "Imported plan contains recipe IDs that are not present in the selected dataset.",
+          hydration.missingRecipes,
+        );
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Plan import failed.";
       console.error(message);
-      setImportNotice({
-        kind: "error",
-        message,
-      });
     } finally {
+      setProjectImporting(false);
       if (projectInputRef.current) {
         projectInputRef.current.value = "";
       }
@@ -275,6 +220,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
         <ToolbarButton
           icon={Upload}
           label="Import plan"
+          disabled={isProjectImporting}
           onClick={() => projectInputRef.current?.click()}
         />
         <div ref={exportMenuRef} className="relative">
@@ -318,8 +264,6 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           ) : null}
         </div>
       </div>
-
-      {importNotice ? <ImportNoticeBanner notice={importNotice} /> : null}
 
       <input
         ref={projectInputRef}
@@ -619,25 +563,6 @@ function outputsAreCompatible(
     candidateOutputs.map((output) => `${output.kind}:${output.id}`),
   );
   return importedOutputs.every((output) => candidateResources.has(`${output.kind}:${output.id}`));
-}
-
-function ImportNoticeBanner({ notice }: { notice: ImportNotice }) {
-  const details =
-    "details" in notice && notice.details?.length
-      ? `${notice.details.join("\n")}${notice.details.length === 12 ? "\n..." : ""}`
-      : undefined;
-  const className =
-    notice.kind === "error"
-      ? "basis-full border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900"
-      : notice.kind === "warning"
-        ? "basis-full border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950"
-        : "basis-full border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm text-emerald-900";
-
-  return (
-    <div role={notice.kind === "error" ? "alert" : "status"} className={className} title={details}>
-      {notice.message}
-    </div>
-  );
 }
 
 function ExportMenuItem({

@@ -25,7 +25,7 @@ import {
   useStore,
 } from "@xyflow/react";
 import { toBlob, toSvg } from "html-to-image";
-import { Paintbrush, X } from "lucide-react";
+import { LoaderCircle, Paintbrush, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -153,6 +153,7 @@ export function FactoryFlow() {
   const setFlowViewportCenter = useFactoryStore((state) => state.setFlowViewportCenter);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
+  const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
 
   const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
@@ -230,83 +231,76 @@ export function FactoryFlow() {
     [],
   );
 
-  const edges = useMemo<ResourceFlowEdge[]>(
-    () => {
-      const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
+  const edges = useMemo<ResourceFlowEdge[]>(() => {
+    const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
 
-      return project.edges.map((edge) => {
-        const edgeResult = result.edges[edge.id];
-        const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
-        const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
-        const transferred = edgeResult?.transferredPerSecond ?? demand;
-        const sourceStorage = (project.storages ?? []).find(
-          (storage) => storage.id === edge.source,
-        );
-        const targetStorage = (project.storages ?? []).find(
-          (storage) => storage.id === edge.target,
-        );
-        const isStorageEdge = Boolean(sourceStorage || targetStorage);
-        const storageResourceKey = sourceStorage
-          ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
-          : targetStorage
-            ? `${targetStorage.kind}:${targetStorage.resourceId}`
-            : undefined;
-        const resource = getEdgeResource(project, edge);
-        const edgeColor = getInitialResourceColor(resource);
-        const sourceHandle = parseResourceHandleId(edge.sourceHandle);
-        const targetHandle = parseResourceHandleId(edge.targetHandle);
-        const isStorageEdgeActive =
-          !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
-        const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
-        const isStorageEdgeEmphasized = Boolean(
-          isStorageEdge && (isStorageEdgeActive || isSearchEdgeActive),
-        );
+    return project.edges.map((edge) => {
+      const edgeResult = result.edges[edge.id];
+      const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
+      const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
+      const transferred = edgeResult?.transferredPerSecond ?? demand;
+      const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
+      const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
+      const isStorageEdge = Boolean(sourceStorage || targetStorage);
+      const storageResourceKey = sourceStorage
+        ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
+        : targetStorage
+          ? `${targetStorage.kind}:${targetStorage.resourceId}`
+          : undefined;
+      const resource = getEdgeResource(project, edge);
+      const edgeColor = getInitialResourceColor(resource);
+      const sourceHandle = parseResourceHandleId(edge.sourceHandle);
+      const targetHandle = parseResourceHandleId(edge.targetHandle);
+      const isStorageEdgeActive =
+        !isStorageEdge || hoveredStorageResourceKey === storageResourceKey;
+      const isSearchEdgeActive = edgeMatchesSearch(edge, resource, recipeSearch);
+      const isStorageEdgeEmphasized = Boolean(
+        isStorageEdge && (isStorageEdgeActive || isSearchEdgeActive),
+      );
 
-        return {
-          id: edge.id,
-          zIndex: isNodeDragging ? 2000 : 20,
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: edge.sourceHandle,
-          targetHandle: edge.targetHandle,
-          type: "resourceEdge",
-          data: {
-            resource,
-            color: edgeColor,
-            demand: formatRate(demand),
-            transferred: edgeResult?.isLimited === true ? formatRate(transferred) : undefined,
-            unit,
-            isLimited: edgeResult?.isLimited === true,
-            isStorageEdge,
-            showLabel: true,
-            labelOffset: edge.labelOffset,
-            sourceHandleId: edge.sourceHandle,
-            targetHandleId: edge.targetHandle,
-            sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
-            targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
-            sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
-            targetStorageEndpoint: Boolean(targetHandle && targetStorage),
-            bundle: edgeBundles.get(edge.id),
-          },
-          style: {
-            stroke: edgeColor,
-            strokeDasharray: edgeResult?.isLimited ? "4 6" : undefined,
-            strokeOpacity: edgeResult?.isLimited ? 0.58 : isStorageEdge ? 0.86 : 0.92,
-            strokeWidth: isStorageEdge
-              ? isStorageEdgeEmphasized
-                ? 3.5
-                : 2.6
-              : edgeResult?.isLimited
-                ? 2.2
-                : edge.resourceKind === "fluid"
-                  ? 2.8
-                  : 2.35,
-          },
-        };
-      });
-    },
-    [hoveredStorageResourceKey, isNodeDragging, project, recipeSearch, result.edges],
-  );
+      return {
+        id: edge.id,
+        zIndex: isNodeDragging ? 2000 : 20,
+        source: edge.source,
+        target: edge.target,
+        sourceHandle: edge.sourceHandle,
+        targetHandle: edge.targetHandle,
+        type: "resourceEdge",
+        data: {
+          resource,
+          color: edgeColor,
+          demand: formatRate(demand),
+          transferred: edgeResult?.isLimited === true ? formatRate(transferred) : undefined,
+          unit,
+          isLimited: edgeResult?.isLimited === true,
+          isStorageEdge,
+          showLabel: true,
+          labelOffset: edge.labelOffset,
+          sourceHandleId: edge.sourceHandle,
+          targetHandleId: edge.targetHandle,
+          sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
+          targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
+          sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
+          targetStorageEndpoint: Boolean(targetHandle && targetStorage),
+          bundle: edgeBundles.get(edge.id),
+        },
+        style: {
+          stroke: edgeColor,
+          strokeDasharray: edgeResult?.isLimited ? "4 6" : undefined,
+          strokeOpacity: edgeResult?.isLimited ? 0.58 : isStorageEdge ? 0.86 : 0.92,
+          strokeWidth: isStorageEdge
+            ? isStorageEdgeEmphasized
+              ? 3.5
+              : 2.6
+            : edgeResult?.isLimited
+              ? 2.2
+              : edge.resourceKind === "fluid"
+                ? 2.8
+                : 2.35,
+        },
+      };
+    });
+  }, [hoveredStorageResourceKey, isNodeDragging, project, recipeSearch, result.edges]);
 
   const connectResourceEdges = useCallback(
     (
@@ -871,6 +865,22 @@ export function FactoryFlow() {
         <Controls position="bottom-left" />
       </ReactFlow>
       <PaintToolbar paintMode={nodeColorPaintMode} onPaintModeChange={setNodeColorPaintMode} />
+      {isProjectImporting ? <FlowLoadingOverlay /> : null}
+    </div>
+  );
+}
+
+function FlowLoadingOverlay() {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="pointer-events-auto absolute inset-0 z-50 grid place-items-center bg-neutral-950/18 backdrop-blur-[1px]"
+    >
+      <div className="flex items-center gap-3 border-2 border-[#252525] bg-[#c6c6c6] px-4 py-3 text-sm font-semibold text-[#1f1f1f] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.18)]">
+        <LoaderCircle className="h-5 w-5 animate-spin" />
+        <span>Loading flowchart...</span>
+      </div>
     </div>
   );
 }
@@ -1044,18 +1054,18 @@ function ResourceEdge({
             targetPosition,
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
           })
-      : getDirectEdgePath({
-          sourceNodeId: source,
-          sourceIsRecipeNode: !data?.sourceStorageEndpoint,
-          sourceX: visualSource.x,
-          sourceY: visualSource.y,
-          sourcePosition,
-          targetNodeId: target,
-          targetIsRecipeNode: !data?.targetStorageEndpoint,
-          targetX: visualTarget.x,
-          targetY: visualTarget.y,
-          targetPosition,
-        });
+        : getDirectEdgePath({
+            sourceNodeId: source,
+            sourceIsRecipeNode: !data?.sourceStorageEndpoint,
+            sourceX: visualSource.x,
+            sourceY: visualSource.y,
+            sourcePosition,
+            targetNodeId: target,
+            targetIsRecipeNode: !data?.targetStorageEndpoint,
+            targetX: visualTarget.x,
+            targetY: visualTarget.y,
+            targetPosition,
+          });
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
 
@@ -1641,7 +1651,12 @@ function getTopLaneEdgePoints({
   const targetPointInsideNode = targetY >= targetBounds.top && targetY <= targetBounds.bottom;
   const roughlySameRow = Math.abs(targetY - sourceY) <= 90;
 
-  if (horizontalGap < 24 || horizontalGap > 900 || !sourcePointInsideNode || !targetPointInsideNode) {
+  if (
+    horizontalGap < 24 ||
+    horizontalGap > 900 ||
+    !sourcePointInsideNode ||
+    !targetPointInsideNode
+  ) {
     return undefined;
   }
 
