@@ -1,12 +1,17 @@
 "use client";
 
-import { Download, Trash2, Upload } from "lucide-react";
-import { useRef } from "react";
+import { ChevronDown, Download, FileImage, ImageDown, Trash2, Upload } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   cloneImportedProject,
   parseFactoryProjectJson,
   serializeFactoryProject,
 } from "@/lib/import-export";
+import {
+  FLOW_IMAGE_EXPORT_EVENT,
+  extractProjectJsonFromPng,
+  extractProjectJsonFromSvg,
+} from "@/lib/import-export/plan-image";
 import { useFactoryStore } from "@/store/factory-store";
 
 interface TopBarProps {
@@ -15,6 +20,8 @@ interface TopBarProps {
 
 export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const projectInputRef = useRef<HTMLInputElement>(null);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+  const [isExportMenuOpen, setExportMenuOpen] = useState(false);
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
   const selectedDatasetVersionId = useFactoryStore((state) => state.selectedDatasetVersionId);
@@ -33,9 +40,22 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
     URL.revokeObjectURL(url);
   };
 
+  const exportImage = (format: "svg" | "png") => {
+    setExportMenuOpen(false);
+    window.dispatchEvent(
+      new CustomEvent(FLOW_IMAGE_EXPORT_EVENT, {
+        detail: {
+          format,
+          fileName: project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "factory",
+          projectJson: serializeFactoryProject(project),
+        },
+      }),
+    );
+  };
+
   const importProjectJson = async (file: File) => {
     try {
-      const text = await file.text();
+      const text = await readProjectFile(file);
       setProject(cloneImportedProject(parseFactoryProjectJson(text)));
     } catch (error) {
       console.error(error instanceof Error ? error.message : "Plan import failed.");
@@ -45,6 +65,17 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
       }
     }
   };
+
+  useEffect(() => {
+    const closeExportMenu = (event: MouseEvent) => {
+      if (!exportMenuRef.current?.contains(event.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", closeExportMenu);
+    return () => window.removeEventListener("mousedown", closeExportMenu);
+  }, []);
 
   return (
     <header className="flex min-h-16 flex-wrap items-center gap-3 border-b border-neutral-200 bg-white px-4 py-3">
@@ -91,16 +122,50 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
         />
         <ToolbarButton
           icon={Upload}
-          label="Import plan JSON"
+          label="Import plan"
           onClick={() => projectInputRef.current?.click()}
         />
-        <ToolbarButton icon={Download} label="Export plan JSON" onClick={exportJson} />
+        <div ref={exportMenuRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setExportMenuOpen((isOpen) => !isOpen)}
+            title="Export plan"
+            aria-label="Export plan"
+            aria-expanded={isExportMenuOpen}
+            className="inline-flex h-9 items-center justify-center gap-1 rounded border border-neutral-300 bg-white px-2 text-neutral-800 hover:bg-neutral-50"
+          >
+            <Download className="h-4 w-4" />
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          {isExportMenuOpen ? (
+            <div className="absolute right-0 top-10 z-50 min-w-44 border border-neutral-300 bg-white py-1 text-sm shadow-lg">
+              <ExportMenuItem
+                icon={Download}
+                label="Export plan JSON"
+                onClick={() => {
+                  setExportMenuOpen(false);
+                  exportJson();
+                }}
+              />
+              <ExportMenuItem
+                icon={FileImage}
+                label="Export plan SVG"
+                onClick={() => exportImage("svg")}
+              />
+              <ExportMenuItem
+                icon={ImageDown}
+                label="Export plan PNG"
+                onClick={() => exportImage("png")}
+              />
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <input
         ref={projectInputRef}
         type="file"
-        accept="application/json,.json"
+        accept="application/json,image/svg+xml,image/png,.json,.svg,.png"
         className="hidden"
         onChange={(event) => {
           const file = event.target.files?.[0];
@@ -110,6 +175,49 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
         }}
       />
     </header>
+  );
+}
+
+async function readProjectFile(file: File): Promise<string> {
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (extension === "svg" || file.type === "image/svg+xml") {
+    const projectJson = extractProjectJsonFromSvg(await file.text());
+    if (!projectJson) {
+      throw new Error("This SVG does not contain a GTNH Factory Flow plan.");
+    }
+    return projectJson;
+  }
+
+  if (extension === "png" || file.type === "image/png") {
+    const projectJson = await extractProjectJsonFromPng(file);
+    if (!projectJson) {
+      throw new Error("This PNG does not contain a GTNH Factory Flow plan.");
+    }
+    return projectJson;
+  }
+
+  return file.text();
+}
+
+function ExportMenuItem({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2 px-3 py-2 text-left text-neutral-800 hover:bg-neutral-100"
+    >
+      <Icon className="h-4 w-4" />
+      <span>{label}</span>
+    </button>
   );
 }
 

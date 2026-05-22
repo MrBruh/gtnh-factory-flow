@@ -8,7 +8,9 @@ import {
   EdgeLabelRenderer,
   ReactFlow,
   applyNodeChanges,
+  getNodesBounds,
   getSmoothStepPath,
+  getViewportForBounds,
   type Connection,
   type ConnectionLineComponentProps,
   type Edge,
@@ -22,8 +24,16 @@ import {
   type OnSelectionChangeParams,
   type ReactFlowInstance,
 } from "@xyflow/react";
+import { toPng, toSvg } from "html-to-image";
 import { Paintbrush, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FLOW_IMAGE_EXPORT_EVENT,
+  dataUrlToBlob,
+  dataUrlToText,
+  embedProjectJsonInPng,
+  embedProjectJsonInSvg,
+} from "@/lib/import-export/plan-image";
 import { formatRate, isRecipeInputConsumed } from "@/lib/model";
 import type {
   FactoryEdge,
@@ -60,6 +70,9 @@ const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_RECONNECT_RADIUS = STORAGE_SLOT_EDGE_OFFSET + 14;
+const EXPORT_IMAGE_MIN_SIZE = 1024;
+const EXPORT_IMAGE_MAX_SIZE = 4096;
+const EXPORT_IMAGE_PADDING = 80;
 type ResourceEdgeData = {
   resource: Pick<
     ResourceAmount,
@@ -507,6 +520,75 @@ export function FactoryFlow() {
     },
     [updateFlowViewportCenter],
   );
+
+  const exportFlowImage = useCallback(
+    async (format: "svg" | "png", fileName: string, projectJson: string) => {
+      const viewportElement = boardRef.current?.querySelector<HTMLElement>(".react-flow__viewport");
+
+      if (!viewportElement) {
+        return;
+      }
+
+      const nodesBounds = getNodesBounds(flowNodes);
+      const imageWidth = clampImageSize(Math.ceil(nodesBounds.width + EXPORT_IMAGE_PADDING * 2));
+      const imageHeight = clampImageSize(Math.ceil(nodesBounds.height + EXPORT_IMAGE_PADDING * 2));
+      const viewport = getViewportForBounds(
+        nodesBounds,
+        imageWidth,
+        imageHeight,
+        0.15,
+        1.8,
+        EXPORT_IMAGE_PADDING / Math.max(imageWidth, imageHeight),
+      );
+      const options = {
+        backgroundColor: "#f5f5f5",
+        width: imageWidth,
+        height: imageHeight,
+        style: {
+          width: `${imageWidth}px`,
+          height: `${imageHeight}px`,
+          transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.zoom})`,
+        },
+      };
+
+      if (format === "svg") {
+        const svgText = embedProjectJsonInSvg(
+          dataUrlToText(await toSvg(viewportElement, options)),
+          projectJson,
+        );
+        downloadBlob(new Blob([svgText], { type: "image/svg+xml" }), `${fileName}.svg`);
+        return;
+      }
+
+      const pngBlob = await embedProjectJsonInPng(
+        await dataUrlToBlob(await toPng(viewportElement, { ...options, pixelRatio: 2 })),
+        projectJson,
+      );
+      downloadBlob(pngBlob, `${fileName}.png`);
+    },
+    [flowNodes],
+  );
+
+  useEffect(() => {
+    const handleExportImage = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { format?: unknown; fileName?: unknown; projectJson?: unknown }
+        | undefined;
+
+      if (
+        (detail?.format !== "svg" && detail?.format !== "png") ||
+        typeof detail.fileName !== "string" ||
+        typeof detail.projectJson !== "string"
+      ) {
+        return;
+      }
+
+      void exportFlowImage(detail.format, detail.fileName, detail.projectJson);
+    };
+
+    window.addEventListener(FLOW_IMAGE_EXPORT_EVENT, handleExportImage);
+    return () => window.removeEventListener(FLOW_IMAGE_EXPORT_EVENT, handleExportImage);
+  }, [exportFlowImage]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1381,6 +1463,23 @@ function getClientPosition(event: MouseEvent | TouchEvent) {
   }
 
   return undefined;
+}
+
+function clampImageSize(size: number) {
+  if (!Number.isFinite(size)) {
+    return EXPORT_IMAGE_MIN_SIZE;
+  }
+
+  return Math.min(Math.max(size, EXPORT_IMAGE_MIN_SIZE), EXPORT_IMAGE_MAX_SIZE);
+}
+
+function downloadBlob(blob: Blob, fileName: string) {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 function getEdgeResource(
