@@ -348,6 +348,22 @@ describe("factory machine count optimization", () => {
     expect(Math.max(...machineCounts)).toBeLessThanOrEqual(2);
   });
 
+  it("keeps global optimization idempotent across repeated clicks", () => {
+    useFactoryStore.getState().setProject(createStorageBusCycleProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+    const firstCounts = useFactoryStore
+      .getState()
+      .project.nodes.map((node) => [node.id, node.machineCount]);
+
+    useFactoryStore.getState().optimizeMachineCounts();
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(
+      useFactoryStore.getState().project.nodes.map((node) => [node.id, node.machineCount]),
+    ).toEqual(firstCounts);
+  });
+
   it("still propagates ratios through separate buses when there is no feedback loop", () => {
     useFactoryStore.getState().setProject(createAcyclicStorageBusProject());
 

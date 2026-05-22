@@ -835,15 +835,24 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
 
       for (let pass = 0; pass < maxPasses; pass += 1) {
         let passChanged = false;
+        const untargetedCyclicMachineCounts = getUntargetedCyclicMachineCounts(
+          project,
+          cyclicNodeIds,
+          result,
+        );
         const nodes = project.nodes.map((node) => {
           const isCyclicNode = cyclicNodeIds.has(node.id);
-          const nodeResult = isCyclicNode ? state.lastResult.nodes[node.id] : result.nodes[node.id];
+          const nodeResult = result.nodes[node.id];
           if (!node.enabled || !nodeResult || nodeResult.status === "missing-recipe") {
             return node;
           }
 
           const machineCount = isCyclicNode
-            ? getCyclicOptimizedMachineCount(project, node)
+            ? getCyclicOptimizedMachineCount(
+                project,
+                node,
+                untargetedCyclicMachineCounts.get(node.id),
+              )
             : getOptimizedMachineCount(nodeResult.theoreticalMachinesRequired, node.machineCount);
           if (machineCount === node.machineCount) {
             return node;
@@ -1407,9 +1416,37 @@ function getOptimizedMachineCount(theoreticalMachinesRequired: number, current: 
   return Math.max(1, Math.round(theoreticalMachinesRequired));
 }
 
-function getCyclicOptimizedMachineCount(project: FactoryProject, node: FactoryNode): number {
+function getUntargetedCyclicMachineCounts(
+  project: FactoryProject,
+  cyclicNodeIds: Set<string>,
+  result: ThroughputResult,
+): Map<string, number> {
+  const machineCounts = new Map<string, number>();
+
+  for (const node of project.nodes) {
+    if (!cyclicNodeIds.has(node.id) || node.targetOutput) {
+      continue;
+    }
+
+    const theoreticalMachinesRequired = result.nodes[node.id]?.theoreticalMachinesRequired ?? 0;
+    const machineCount = getOptimizedMachineCount(theoreticalMachinesRequired, node.machineCount);
+    if (node.machineCount <= 1 || machineCount < node.machineCount) {
+      machineCounts.set(node.id, machineCount);
+    } else {
+      machineCounts.set(node.id, Math.max(1, Math.round(node.machineCount)));
+    }
+  }
+
+  return machineCounts;
+}
+
+function getCyclicOptimizedMachineCount(
+  project: FactoryProject,
+  node: FactoryNode,
+  untargetedMachineCount: number | undefined,
+): number {
   if (!node.targetOutput) {
-    return getOptimizedMachineCount(0, node.machineCount);
+    return untargetedMachineCount ?? Math.max(1, Math.round(node.machineCount));
   }
 
   const recipe = project.recipes.find((entry) => entry.id === node.recipeId);

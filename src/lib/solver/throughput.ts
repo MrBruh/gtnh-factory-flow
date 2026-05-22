@@ -162,16 +162,24 @@ export function calculateThroughput(
         const targetDemand = storageOutgoingDemand.get(key) ?? 0;
         const targetCount = storageIncomingCounts.get(key) ?? 1;
         const sourceCapacity = sourceResult?.outputs[key]?.amountPerSecond ?? 0;
-        const demandPerSecond = Math.max(sourceCapacity, targetDemand / targetCount);
-        const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
+        const demandedPerSecond = targetDemand / targetCount;
+        const displayedDemandPerSecond = Math.max(sourceCapacity, demandedPerSecond);
+        const transferredPerSecond = Math.min(sourceCapacity, displayedDemandPerSecond);
 
-        addRequiredRate(requiredByNodeAndResource, edge.source, key, demandPerSecond);
+        if (demandedPerSecond > EPSILON) {
+          addRequiredRate(requiredByNodeAndResource, edge.source, key, demandedPerSecond);
+        }
         storageIncomingTransferred.set(
           countKey,
           (storageIncomingTransferred.get(countKey) ?? 0) + transferredPerSecond,
         );
         updateStorageFlow(storages[targetStorage.id], transferredPerSecond, 0);
-        edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, transferredPerSecond);
+        edgeResults[edge.id] = buildEdgeResult(
+          edge,
+          key,
+          displayedDemandPerSecond,
+          transferredPerSecond,
+        );
         continue;
       }
 
@@ -439,6 +447,10 @@ function calculateStorageOutgoingDemand(
   const storageIds = new Set(storages.map((storage) => storage.id));
   const demand = new Map<string, number>();
   const incomingEdgeCounts = countIncomingEdgesByTargetResource(project);
+  const feedbackGraph = buildStorageFeedbackGraph(project, storages);
+  const storageResourceKeys = new Map(
+    storages.map((storage) => [storage.id, makeResourceKey(storage.kind, storage.resourceId)]),
+  );
 
   for (const edge of project.edges) {
     if (!storageIds.has(edge.source)) {
@@ -446,6 +458,10 @@ function calculateStorageOutgoingDemand(
     }
 
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    if (canReachStorageResource(feedbackGraph, storageResourceKeys, edge.target, key)) {
+      continue;
+    }
+
     const targetResult = nodes[edge.target];
     const targetCount = incomingEdgeCounts.get(`${edge.target}|${key}`) ?? 1;
     const targetDemand = targetResult?.inputs[key]?.amountPerSecond ?? 0;
@@ -454,6 +470,85 @@ function calculateStorageOutgoingDemand(
   }
 
   return demand;
+}
+
+function buildStorageFeedbackGraph(
+  project: FactoryProject,
+  storages: FactoryStorage[],
+): Map<string, string[]> {
+  const adjacency = new Map<string, string[]>();
+  const storageIds = new Set(storages.map((storage) => storage.id));
+  const storagesByResource = new Map<ResourceKey, FactoryStorage[]>();
+  const producerStorageIds = new Set<string>();
+  const consumerStorageIds = new Set<string>();
+
+  for (const node of project.nodes) {
+    adjacency.set(node.id, []);
+  }
+  for (const storage of storages) {
+    adjacency.set(storage.id, []);
+    const key = makeResourceKey(storage.kind, storage.resourceId);
+    storagesByResource.set(key, [...(storagesByResource.get(key) ?? []), storage]);
+  }
+
+  for (const edge of project.edges) {
+    if (!adjacency.has(edge.source) || !adjacency.has(edge.target)) {
+      continue;
+    }
+
+    adjacency.get(edge.source)?.push(edge.target);
+
+    const sourceIsStorage = storageIds.has(edge.source);
+    const targetIsStorage = storageIds.has(edge.target);
+    if (targetIsStorage && !sourceIsStorage) {
+      producerStorageIds.add(edge.target);
+    }
+    if (sourceIsStorage && !targetIsStorage) {
+      consumerStorageIds.add(edge.source);
+    }
+  }
+
+  for (const storagesForResource of storagesByResource.values()) {
+    for (const producer of storagesForResource) {
+      if (!producerStorageIds.has(producer.id)) {
+        continue;
+      }
+
+      for (const consumer of storagesForResource) {
+        if (producer.id !== consumer.id && consumerStorageIds.has(consumer.id)) {
+          adjacency.get(producer.id)?.push(consumer.id);
+        }
+      }
+    }
+  }
+
+  return adjacency;
+}
+
+function canReachStorageResource(
+  adjacency: Map<string, string[]>,
+  storageResourceKeys: Map<string, ResourceKey>,
+  startId: string,
+  resourceKey: ResourceKey,
+): boolean {
+  const visited = new Set<string>();
+  const stack = [...(adjacency.get(startId) ?? [])];
+
+  while (stack.length > 0) {
+    const currentId = stack.pop();
+    if (!currentId || visited.has(currentId)) {
+      continue;
+    }
+
+    visited.add(currentId);
+    if (storageResourceKeys.get(currentId) === resourceKey) {
+      return true;
+    }
+
+    stack.push(...(adjacency.get(currentId) ?? []));
+  }
+
+  return false;
 }
 
 function buildEdgeResult(
