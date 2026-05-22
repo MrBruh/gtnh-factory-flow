@@ -1,280 +1,21 @@
 "use client";
 
-import { Power, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
-import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
-import { formatRate, formatResourceRate, makeResourceKey, primaryOutput } from "@/lib/model";
+import { formatRate } from "@/lib/model";
 import type {
   FactoryProject,
   ResourceAmount,
   ResourceBalance,
-  ResourceKind,
-  TargetRate,
 } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
 export function InspectorPanel() {
-  const project = useFactoryStore((state) => state.project);
-  const dataset = useFactoryStore((state) => state.dataset);
-  const projectRecipes = useFactoryStore((state) => state.project.recipes);
-  const result = useFactoryStore((state) => state.lastResult);
-  const selectedNodeId = useFactoryStore((state) => state.selectedNodeId);
-  const updateNode = useFactoryStore((state) => state.updateNode);
-  const deleteNode = useFactoryStore((state) => state.deleteNode);
-  const deleteEdge = useFactoryStore((state) => state.deleteEdge);
   const selectFuelProfile = useFactoryStore((state) => state.selectFuelProfile);
-  const datasetRecipes = dataset?.recipes;
-
-  const recipes = useMemo(
-    () => mergeDatasetAndProjectRecipes(datasetRecipes ?? [], projectRecipes),
-    [datasetRecipes, projectRecipes],
-  );
-
-  const selectedNode = project.nodes.find((node) => node.id === selectedNodeId);
-  const selectedRecipe = selectedNode
-    ? recipes.find((recipe) => recipe.id === selectedNode.recipeId)
-    : undefined;
-  const nodeResult = selectedNode ? result.nodes[selectedNode.id] : undefined;
-  const selectedNodeEdges = selectedNode
-    ? project.edges.filter((edge) => edge.source === selectedNode.id || edge.target === selectedNode.id)
-    : [];
-
-  if (!selectedNode || !selectedRecipe) {
-    return (
-      <aside className="flex h-full min-h-[360px] flex-col bg-white">
-        <SummaryPanel onSelectFuel={selectFuelProfile} />
-      </aside>
-    );
-  }
-
-  const primary = primaryOutput(selectedRecipe);
-  const primaryFlow = primary
-    ? nodeResult?.outputs[makeResourceKey(primary.kind, primary.id)]
-    : undefined;
-  const targetDraft: TargetRate = selectedNode.targetOutput ?? {
-    kind: primary?.kind ?? "fluid",
-    resourceId: primary?.id ?? "",
-    amountPerSecond: nodeResult?.requiredRatePerSecond || nodeResult?.maxRatePerSecond || 1,
-    displayName: primary?.displayName,
-  };
-
-  const updateTarget = (patch: Partial<TargetRate>) => {
-    const nextTarget = {
-      ...targetDraft,
-      ...patch,
-    };
-
-    if (nextTarget.resourceId && nextTarget.amountPerSecond > 0) {
-      updateNode(selectedNode.id, { targetOutput: nextTarget });
-    } else {
-      updateNode(selectedNode.id, { targetOutput: undefined });
-    }
-  };
 
   return (
     <aside className="flex h-full min-h-[360px] flex-col bg-white">
-      <div className="border-b border-neutral-200 px-4 py-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-neutral-950">
-              {selectedRecipe.name}
-            </h2>
-            <p className="mt-1 truncate text-xs text-neutral-500">
-              {selectedRecipe.source?.recipeMap ?? selectedRecipe.machineType}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => deleteNode(selectedNode.id)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded border border-neutral-300 bg-white text-red-700 hover:bg-red-50"
-            aria-label="Delete node"
-            title="Delete node"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <section className="space-y-3">
-          <div className="grid grid-cols-2 gap-2">
-            <Metric
-              label="Utilization"
-              value={`${formatRate((nodeResult?.utilization ?? 0) * 100, 1)}%`}
-            />
-            <Metric label="Node EU/t" value={formatRate(nodeResult?.euT ?? 0, 0)} />
-            <Metric label="Primary output" value={formatResourceRate(primaryFlow)} wide />
-            <Metric
-              label="Machines required"
-              value={formatRate(nodeResult?.theoreticalMachinesRequired ?? 0, 2)}
-            />
-          </div>
-
-          <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-              Node settings
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Machines
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={selectedNode.machineCount}
-                  onChange={(event) =>
-                    updateNode(selectedNode.id, { machineCount: toNumber(event.target.value, 0) })
-                  }
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Parallel
-                <input
-                  type="number"
-                  min="0.001"
-                  step="1"
-                  value={selectedNode.parallel}
-                  onChange={(event) =>
-                    updateNode(selectedNode.id, { parallel: toNumber(event.target.value, 1) })
-                  }
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Overclock tier
-                <input
-                  value={selectedNode.overclockTier}
-                  onChange={(event) =>
-                    updateNode(selectedNode.id, { overclockTier: event.target.value || "DEMO" })
-                  }
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                />
-              </label>
-              <label className="mt-5 inline-flex h-9 items-center gap-2 rounded border border-neutral-300 bg-white px-3 text-sm text-neutral-700">
-                <input
-                  type="checkbox"
-                  checked={selectedNode.enabled}
-                  onChange={(event) =>
-                    updateNode(selectedNode.id, { enabled: event.target.checked })
-                  }
-                />
-                <Power className="h-4 w-4" />
-                Enabled
-              </label>
-            </div>
-          </div>
-
-          <FlowIOPanel className="rounded border border-neutral-200 bg-neutral-50 p-3" />
-
-          <StorageSummary />
-
-          <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Resource links
-              </h3>
-            </div>
-            {selectedNodeEdges.length === 0 ? (
-              <p className="text-sm text-neutral-500">No links yet.</p>
-            ) : (
-              <div className="space-y-1">
-                {selectedNodeEdges.map((edge) => {
-                  const isOutput = edge.source === selectedNode.id;
-                  const otherNode = project.nodes.find((node) =>
-                    isOutput ? node.id === edge.target : node.id === edge.source,
-                  );
-                  const otherRecipe = recipes.find((recipe) => recipe.id === otherNode?.recipeId);
-                  const edgeResult = result.edges[edge.id];
-                  const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
-                  const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
-                  return (
-                    <div
-                      key={edge.id}
-                      className="grid grid-cols-[18px_minmax(0,1fr)_auto_24px] items-center gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-xs"
-                    >
-                      <span className="font-semibold text-neutral-500">
-                        {isOutput ? ">" : "<"}
-                      </span>
-                      <span className="min-w-0 truncate text-neutral-800">
-                        {edge.label ?? edge.resourceId}
-                        <span className="text-neutral-400">
-                          {" "}
-                          {isOutput ? "to" : "from"} {otherRecipe?.machineType ?? "node"}
-                        </span>
-                      </span>
-                      <span className="font-semibold text-neutral-950">
-                        {formatRate(demand, 3)}
-                        {unit}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => deleteEdge(edge.id)}
-                        className="h-6 w-6 rounded border border-neutral-300 text-neutral-600 hover:bg-red-50 hover:text-red-700"
-                        aria-label="Delete link"
-                        title="Delete link"
-                      >
-                        <X className="mx-auto h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="rounded border border-neutral-200 bg-neutral-50 p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Node target output
-              </h3>
-              <button
-                type="button"
-                onClick={() => updateNode(selectedNode.id, { targetOutput: undefined })}
-                className="inline-flex h-8 items-center gap-1 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear
-              </button>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-[90px_minmax(0,1fr)_96px]">
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Kind
-                <select
-                  value={targetDraft.kind}
-                  onChange={(event) => updateTarget({ kind: event.target.value as ResourceKind })}
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                >
-                  <option value="item">Item</option>
-                  <option value="fluid">Fluid</option>
-                </select>
-              </label>
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Resource
-                <input
-                  value={targetDraft.resourceId}
-                  onChange={(event) => updateTarget({ resourceId: event.target.value })}
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                />
-              </label>
-              <label className="grid gap-1 text-xs font-medium text-neutral-600">
-                Rate/s
-                <input
-                  type="number"
-                  min="0"
-                  step="0.001"
-                  value={targetDraft.amountPerSecond}
-                  onChange={(event) =>
-                    updateTarget({ amountPerSecond: toNumber(event.target.value, 0) })
-                  }
-                  className="h-9 rounded border border-neutral-300 bg-white px-2 text-sm text-neutral-900"
-                />
-              </label>
-            </div>
-          </div>
-        </section>
-      </div>
+      <SummaryPanel onSelectFuel={selectFuelProfile} />
     </aside>
   );
 }
@@ -287,7 +28,7 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
     <>
       <div className="border-b border-neutral-200 px-4 py-3">
         <h2 className="text-sm font-semibold text-neutral-950">Calculation summary</h2>
-        <p className="mt-1 text-xs text-neutral-500">Select a dataset recipe or a graph node.</p>
+        <p className="mt-1 text-xs text-neutral-500">Global flow overview.</p>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <div className="grid grid-cols-2 gap-2">
@@ -320,7 +61,6 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
         </section>
 
         <FlowIOPanel className="mt-4 rounded border border-neutral-200 bg-white p-3" />
-        <StorageSummary className="mt-4" />
       </div>
     </>
   );
@@ -561,78 +301,6 @@ function buildProjectResourceLookup(project: FactoryProject): Map<string, FlowRe
   return resources;
 }
 
-function StorageSummary({ className = "" }: { className?: string }) {
-  const project = useFactoryStore((state) => state.project);
-  const result = useFactoryStore((state) => state.lastResult);
-  const deleteStorage = useFactoryStore((state) => state.deleteStorage);
-  const setHoveredStorageResourceKey = useFactoryStore((state) => state.setHoveredStorageResourceKey);
-  const storages = project.storages ?? [];
-
-  return (
-    <section className={[className, "rounded border border-neutral-200 bg-white p-3"].join(" ")}>
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-        Resource buses
-      </h3>
-      {storages.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-500">No tank or drawer buses.</p>
-      ) : (
-        <div className="mt-2 space-y-2">
-          {storages.map((storage) => {
-            const storageResult = result.storages[storage.id];
-            const unit = storage.kind === "fluid" ? "L/s" : "/s";
-            const resourceKey = `${storage.kind}:${storage.resourceId}`;
-            const producerCount = project.edges.filter((edge) => edge.target === storage.id).length;
-            const consumerCount = project.edges.filter((edge) => edge.source === storage.id).length;
-            return (
-              <div
-                key={storage.id}
-                onMouseEnter={() => setHoveredStorageResourceKey(resourceKey)}
-                onMouseLeave={() => setHoveredStorageResourceKey(undefined)}
-                className="grid grid-cols-[34px_minmax(0,1fr)_56px] gap-2 rounded border border-neutral-200 bg-neutral-50 p-2 text-xs"
-              >
-                <ResourceIcon
-                  resource={{ ...storage, id: storage.resourceId, amount: 1 }}
-                  size="sm"
-                  showAmount={false}
-                  bare
-                  className="!h-8 !w-8"
-                />
-                <div className="min-w-0">
-                  <div className="truncate font-medium text-neutral-900">
-                    {storage.displayName ?? storage.resourceId}
-                  </div>
-                  <div className="mt-0.5 grid grid-cols-3 gap-1 text-[11px] text-neutral-600">
-                    <span>+{formatRate(storageResult?.producedPerSecond ?? 0, 2)}{unit}</span>
-                    <span>-{formatRate(storageResult?.consumedPerSecond ?? 0, 2)}{unit}</span>
-                    <span>
-                      {(storageResult?.netPerSecond ?? 0) >= 0 ? "+" : ""}
-                      {formatRate(storageResult?.netPerSecond ?? 0, 2)}{unit}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-[10px] text-neutral-500">
-                    {producerCount} in / {consumerCount} out
-                  </div>
-                </div>
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => deleteStorage(storage.id)}
-                    className="h-7 w-8 rounded border border-neutral-300 bg-white text-red-700 hover:bg-red-50"
-                    title="Delete bus"
-                    aria-label="Delete bus"
-                  >
-                    <Trash2 className="mx-auto h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function Metric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
   return (
     <div
@@ -649,7 +317,3 @@ function Metric({ label, value, wide = false }: { label: string; value: string; 
   );
 }
 
-function toNumber(value: string, fallback: number): number {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-}
