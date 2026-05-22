@@ -51,6 +51,7 @@ import type {
   FactoryEdge,
   FactoryNodeColorTag,
   FactoryProject,
+  Recipe,
   ResourceAmount,
   ResourceKind,
 } from "@/lib/model/types";
@@ -172,6 +173,10 @@ export function FactoryFlow() {
           id: node.id,
           type: "recipeNode",
           position: node.position,
+          zIndex:
+            activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+              ? 1500
+              : undefined,
           data: {
             projectNode: node,
             recipe:
@@ -196,6 +201,10 @@ export function FactoryFlow() {
             id: storage.id,
             type: "storageNode",
             position: storage.position,
+            zIndex:
+              activeFlowResourceKey === makeResourceKey(storage.kind, storage.resourceId)
+                ? 1500
+                : undefined,
             data: {
               storage,
               result: result.storages[storage.id],
@@ -203,7 +212,14 @@ export function FactoryFlow() {
           }) satisfies StorageFlowNode,
       ),
     ],
-    [project.nodes, project.recipes, project.storages, result.nodes, result.storages],
+    [
+      activeFlowResourceKey,
+      project.nodes,
+      project.recipes,
+      project.storages,
+      result.nodes,
+      result.storages,
+    ],
   );
   const [flowNodes, setFlowNodes] = useState<Array<RecipeFlowNode | StorageFlowNode>>(
     () => nodesFromProject,
@@ -2439,6 +2455,20 @@ function edgeMatchesSearch(
   return `${resource.displayName ?? ""} ${resource.id} ${edge.resourceId}`
     .toLowerCase()
     .includes(normalizedQuery);
+}
+
+function recipeContainsResourceKey(recipe: Recipe | undefined, resourceKey: string) {
+  if (!recipe) {
+    return false;
+  }
+
+  return [...recipe.inputs, ...recipe.outputs].some(
+    (resource) =>
+      makeResourceKey(resource.kind, resource.id) === resourceKey ||
+      resource.alternatives?.some(
+        (alternative) => makeResourceKey(alternative.kind, alternative.id) === resourceKey,
+      ),
+  );
 }
 
 function exportNodeFilter(domNode: HTMLElement) {

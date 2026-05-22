@@ -56,6 +56,9 @@ export function StorageNode({ data, selected }: NodeProps<StorageFlowNode>) {
         "group relative text-[#202020]",
         storageColor ? "storage-node-tinted" : "",
         selected ? "ring-2 ring-cyan-300" : "",
+        isHighlighted
+          ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
+          : "",
       ].join(" ")}
       style={
         storageColor
@@ -133,7 +136,7 @@ function FluidStorageCard({
     <div
       className={[
         "storage-node-card storage-node-card--tank w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]",
-        isHighlighted ? "brightness-110" : "",
+        isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
       <StorageHeader title="Super Tank" variant="tank" />
@@ -181,7 +184,7 @@ function ItemStorageCard({
     <div
       className={[
         "storage-node-card w-[174px] border-2 border-[#2b1c0e] bg-[#8a6030] p-1 shadow-[inset_3px_3px_0_#ad7b3e,inset_-3px_-3px_0_#3e2a13]",
-        isHighlighted ? "brightness-110" : "",
+        isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
       <StorageHeader title="Drawer" variant="drawer" />

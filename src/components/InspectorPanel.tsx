@@ -31,7 +31,6 @@ function SummaryPanel() {
         <Metric label="Total EU/t" value={formatRate(result.totalEuT, 0)} />
         <Metric label="EU/s" value={formatRate(result.totalEuPerSecond, 0)} />
         <Metric label="Node bottlenecks" value={String(nodeBottlenecks)} />
-        <Metric label="External inputs" value={String(result.externalInputs.length)} />
         <Metric label="Nodes" value={String(project.nodes.length)} />
       </div>
 
@@ -104,13 +103,7 @@ function FlowIOPanel({ className = "" }: { className?: string }) {
 
   return (
     <section className={["flex min-h-0 flex-1 flex-col", className].join(" ")}>
-      <div className="min-w-0 shrink-0">
-        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-          Flow I/O
-        </h3>
-      </div>
-
-      <label className="mt-3 block shrink-0">
+      <label className="block shrink-0">
         <span className="sr-only">Filter Flow I/O resources</span>
         <input
           value={filter}

@@ -71,7 +71,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
-        isFlowResourceHighlighted ? "ring-4 ring-cyan-300" : "",
+        isFlowResourceHighlighted
+          ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
+          : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
       ].join(" ")}
       style={
