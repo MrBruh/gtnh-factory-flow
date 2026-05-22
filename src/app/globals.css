@@ -35,11 +35,11 @@ textarea {
   fill: #ffffff;
 }
 
-.factory-flow-board > .react-flow .react-flow__renderer > .react-flow__edges {
+.factory-flow-board .react-flow__edges {
   z-index: 80 !important;
 }
 
-.factory-flow-board > .react-flow .react-flow__renderer > .react-flow__nodes {
+.factory-flow-board .react-flow__nodes {
   z-index: 20 !important;
 }
 
@@ -51,7 +51,7 @@ textarea {
   z-index: 30 !important;
 }
 
-.factory-flow-board--dragging > .react-flow .react-flow__renderer > .react-flow__edges {
+.factory-flow-board--dragging .react-flow__edges {
   z-index: 2000 !important;
 }
 
