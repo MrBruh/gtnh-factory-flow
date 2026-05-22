@@ -67,14 +67,21 @@ textarea {
   z-index: 60;
 }
 
-.factory-flow-board .react-flow__edge-path,
+.factory-flow-board .react-flow__edge-path {
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
 .factory-flow-board .react-flow__edge-text {
   pointer-events: none;
 }
 
-.factory-flow-board .react-flow__edgeupdater,
-.factory-flow-board .react-flow__edge-interaction {
+.factory-flow-board .react-flow__edgeupdater {
   pointer-events: auto;
+}
+
+.factory-flow-board .react-flow__edge-interaction {
+  pointer-events: none;
 }
 
 .factory-flow-board .resource-slot-handle.react-flow__handle {

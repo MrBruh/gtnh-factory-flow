@@ -77,7 +77,7 @@ const DEFAULT_ITEM_EDGE_COLOR = "#8b8f98";
 const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
-const EDGE_RECONNECT_RADIUS = STORAGE_SLOT_EDGE_OFFSET + 14;
+const EDGE_RECONNECT_RADIUS = 12;
 const EDGE_BUNDLE_CLEARANCE = 14;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
@@ -1043,7 +1043,7 @@ function ResourceEdge({
       {!isHiddenBundleMember ? (
         <BaseEdge
           path={routedEdge.path}
-          interactionWidth={selected ? 14 : 6}
+          interactionWidth={0}
           style={{
             ...style,
             stroke: edgeColor,
@@ -1073,6 +1073,7 @@ function ResourceEdge({
           style={{
             opacity: data?.isLimited ? 0.72 : 0.95,
             filter: selected ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
+            pointerEvents: "none",
           }}
         />
       ) : null}
