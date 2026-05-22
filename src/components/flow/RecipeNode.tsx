@@ -36,6 +36,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const updateNode = useFactoryStore((state) => state.updateNode);
+  const optimizeMachineCount = useFactoryStore((state) => state.optimizeMachineCount);
   const nodeColorPaintMode = useFactoryStore((state) => state.nodeColorPaintMode);
   const maxTierFilter = useFactoryStore((state) => state.maxTierFilter);
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
@@ -234,6 +235,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
             machineCount={projectNode.machineCount}
             suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
             onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
+            onOptimize={() => optimizeMachineCount(projectNode.id)}
           />
           <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
           <Stat label="EU/t" value={formatRate(result?.euT ?? 0, 0)} />
@@ -348,10 +350,12 @@ function MachineCountStat({
   machineCount,
   suggestedMachineCount,
   onChange,
+  onOptimize,
 }: {
   machineCount: number;
   suggestedMachineCount: number;
   onChange: (machineCount: number) => void;
+  onOptimize: () => void;
 }) {
   const machineCountText = String(machineCount);
   const [draftState, setDraftState] = useState({
@@ -400,11 +404,7 @@ function MachineCountStat({
           type="button"
           onClick={(event) => {
             event.stopPropagation();
-            setDraftState({
-              machineCount: suggestedMachineCount,
-              draft: String(suggestedMachineCount),
-            });
-            onChange(suggestedMachineCount);
+            onOptimize();
           }}
           onPointerDown={(event) => event.stopPropagation()}
           className="nodrag flex h-4 w-4 shrink-0 items-center justify-center border border-[#555] bg-[#d0d0d0] text-[#202020] shadow-[inset_1px_1px_0_#fff,inset_-1px_-1px_0_#777] hover:bg-white"

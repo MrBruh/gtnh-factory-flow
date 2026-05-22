@@ -402,6 +402,23 @@ describe("factory machine count optimization", () => {
     ).toEqual(firstCounts);
   });
 
+  it("keeps single-node optimization idempotent across repeated clicks", () => {
+    useFactoryStore.getState().setProject(createStorageBusCycleProject());
+
+    useFactoryStore.getState().optimizeMachineCount("bus-cycle-b");
+    const firstCount = useFactoryStore
+      .getState()
+      .project.nodes.find((node) => node.id === "bus-cycle-b")?.machineCount;
+
+    useFactoryStore.getState().optimizeMachineCount("bus-cycle-b");
+    useFactoryStore.getState().optimizeMachineCount("bus-cycle-b");
+
+    expect(
+      useFactoryStore.getState().project.nodes.find((node) => node.id === "bus-cycle-b")
+        ?.machineCount,
+    ).toBe(firstCount);
+  });
+
   it("still propagates ratios through separate buses when there is no feedback loop", () => {
     useFactoryStore.getState().setProject(createAcyclicStorageBusProject());
 

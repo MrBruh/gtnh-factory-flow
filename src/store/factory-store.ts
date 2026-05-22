@@ -130,6 +130,7 @@ interface FactoryStore {
   ) => void;
   updateEdge: (edgeId: string, patch: Partial<FactoryEdge>) => void;
   autoConnectNode: (nodeId: string) => void;
+  optimizeMachineCount: (nodeId: string) => void;
   optimizeMachineCounts: () => void;
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
@@ -820,6 +821,64 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return {
         project,
         lastResult: calculateThroughput(project),
+      };
+    });
+  },
+  optimizeMachineCount: (nodeId) => {
+    set((state) => {
+      if (!state.project.nodes.some((node) => node.id === nodeId)) {
+        return state;
+      }
+
+      let project = state.project;
+      let result = state.lastResult;
+      const cyclicNodeIds = getCyclicRecipeNodeIds(project);
+      const maxPasses = Math.max(1, project.nodes.length + 1);
+      let changed = false;
+
+      for (let pass = 0; pass < maxPasses; pass += 1) {
+        const node = project.nodes.find((entry) => entry.id === nodeId);
+        const nodeResult = result.nodes[nodeId];
+        if (!node || !node.enabled || !nodeResult || nodeResult.status === "missing-recipe") {
+          break;
+        }
+
+        const isCyclicNode = cyclicNodeIds.has(node.id);
+        const untargetedCyclicMachineCounts = getUntargetedCyclicMachineCounts(
+          project,
+          cyclicNodeIds,
+          result,
+        );
+        const machineCount = isCyclicNode
+          ? getCyclicOptimizedMachineCount(
+              project,
+              node,
+              untargetedCyclicMachineCounts.get(node.id),
+            )
+          : getOptimizedMachineCount(nodeResult.theoreticalMachinesRequired, node.machineCount);
+
+        if (machineCount === node.machineCount) {
+          break;
+        }
+
+        changed = true;
+        project = {
+          ...project,
+          nodes: project.nodes.map((entry) =>
+            entry.id === nodeId ? { ...entry, machineCount } : entry,
+          ),
+        };
+        result = calculateThroughput(project);
+      }
+
+      if (!changed) {
+        return state;
+      }
+
+      const touchedProject = touchProject(project);
+      return {
+        project: touchedProject,
+        lastResult: calculateThroughput(touchedProject),
       };
     });
   },
