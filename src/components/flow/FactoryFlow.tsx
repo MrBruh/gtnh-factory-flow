@@ -69,6 +69,8 @@ type ResourceEdgeData = {
   isLimited: boolean;
   isStorageEdge: boolean;
   showLabel: boolean;
+  sourceHandleId?: string | null;
+  targetHandleId?: string | null;
   sourceSlotEndpoint: boolean;
   targetSlotEndpoint: boolean;
   sourceStorageEndpoint: boolean;
@@ -238,6 +240,8 @@ export function FactoryFlow() {
             isLimited: edgeResult?.isLimited === true,
             isStorageEdge,
             showLabel: true,
+            sourceHandleId: edge.sourceHandle,
+            targetHandleId: edge.targetHandle,
             sourceSlotEndpoint: Boolean(sourceHandle && !sourceStorage),
             targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
             sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
@@ -747,7 +751,7 @@ function ResourceEdge({
   const edgeColor = resourceColor;
   const visualSource = getSlotEdgeEndpoint({
     nodeId: source,
-    handleId: sourceHandleId,
+    handleId: data?.sourceHandleId ?? sourceHandleId,
     position: sourcePosition,
     fallbackX: sourceX,
     fallbackY: sourceY,
@@ -757,7 +761,7 @@ function ResourceEdge({
   });
   const visualTarget = getSlotEdgeEndpoint({
     nodeId: target,
-    handleId: targetHandleId,
+    handleId: data?.targetHandleId ?? targetHandleId,
     position: targetPosition,
     fallbackX: targetX,
     fallbackY: targetY,
@@ -936,12 +940,12 @@ function getMeasuredSlotEndpoint({
     return undefined;
   }
 
-  const nodeElement = document.querySelector<HTMLElement>(
-    `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
-  );
   const slotElement =
     findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
     findResourceEndpointElement("[data-resource-handle='true']", nodeId, handleId);
+  const nodeElement =
+    slotElement?.closest<HTMLElement>(".react-flow__node") ??
+    document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
 
   if (!nodeElement || !slotElement) {
     return undefined;
