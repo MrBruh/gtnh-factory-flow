@@ -22,6 +22,7 @@ import {
   type NodeChange,
   type NodeTypes,
   type OnSelectionChangeParams,
+  type Position,
   type ReactFlowInstance,
   useStore,
 } from "@xyflow/react";
@@ -921,17 +922,17 @@ function ResourceEdge({
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
     preferredSide: "target",
   });
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
+  const rate = formatEdgeRateLabel(data);
+  const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
+  const [edgePath, labelX, labelY] = getOffsetEdgePath({
     sourceX: visualSource.x,
     sourceY: visualSource.y,
     sourcePosition,
     targetX: visualTarget.x,
     targetY: visualTarget.y,
     targetPosition,
+    offset: labelOffset,
   });
-
-  const rate = formatEdgeRateLabel(data);
-  const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
 
   const stopLabelDrag = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -978,7 +979,7 @@ function ResourceEdge({
               borderColor: edgeColor,
               boxShadow: selected ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
             }}
-            title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag to move label. Double click to reset.`}
+            title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag to move link. Double click to reset.`}
             onPointerDown={(event) => {
               event.stopPropagation();
               event.currentTarget.setPointerCapture(event.pointerId);
@@ -1068,6 +1069,45 @@ function ResourceConnectionLine({
       <circle cx={toX} cy={toY} r={6} fill={color} stroke="#052e36" strokeWidth={2} />
     </g>
   );
+}
+
+function getOffsetEdgePath({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+  offset,
+}: {
+  sourceX: number;
+  sourceY: number;
+  sourcePosition: Position;
+  targetX: number;
+  targetY: number;
+  targetPosition: Position;
+  offset: { x: number; y: number };
+}): [string, number, number] {
+  if (Math.abs(offset.x) < 0.5 && Math.abs(offset.y) < 0.5) {
+    const [path, labelX, labelY] = getSmoothStepPath({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    });
+    return [path, labelX, labelY];
+  }
+
+  const middleX = (sourceX + targetX) / 2;
+  const middleY = (sourceY + targetY) / 2;
+  const labelX = middleX + offset.x;
+  const labelY = middleY + offset.y;
+  const controlX = middleX + offset.x * 2;
+  const controlY = middleY + offset.y * 2;
+
+  return [`M ${sourceX},${sourceY} Q ${controlX},${controlY} ${targetX},${targetY}`, labelX, labelY];
 }
 
 function getSlotEdgeEndpoint({

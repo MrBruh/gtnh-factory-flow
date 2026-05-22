@@ -289,6 +289,21 @@ describe("factory resource links", () => {
   });
 });
 
+describe("factory machine count optimization", () => {
+  it("propagates suggested machine counts through connected recipe chains", () => {
+    useFactoryStore.getState().setProject(createRatioOptimizationProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "dust-source", machineCount: 10 }),
+        expect.objectContaining({ id: "plate-target", machineCount: 10 }),
+      ]),
+    );
+  });
+});
+
 function createLinkTestProject(): FactoryProject {
   return {
     schemaVersion: PROJECT_SCHEMA_VERSION,
@@ -377,6 +392,60 @@ function createLinkTestProject(): FactoryProject {
       },
     ],
     edges: [],
+    fuelProfiles: [],
+  };
+}
+
+function createRatioOptimizationProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "ratio-optimization",
+    name: "Ratio optimization",
+    recipes: [
+      {
+        id: "dust-source-recipe",
+        name: "Dust source",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [{ kind: "item", id: "dust", amount: 1 }],
+      },
+      {
+        id: "plate-target-recipe",
+        name: "Plate target",
+        machineType: "Assembler",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "dust", amount: 1 }],
+        outputs: [{ kind: "item", id: "plate", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("dust-source", "dust-source-recipe", 0),
+      {
+        ...makeNode("plate-target", "plate-target-recipe", 240),
+        targetOutput: {
+          kind: "item",
+          resourceId: "plate",
+          amountPerSecond: 10,
+        },
+      },
+    ],
+    storages: [],
+    edges: [
+      {
+        id: "dust-edge",
+        source: "dust-source",
+        target: "plate-target",
+        sourceHandle: makeResourceHandleId("output", { kind: "item", id: "dust" }, 0),
+        targetHandle: makeResourceHandleId("input", { kind: "item", id: "dust" }, 0),
+        resourceKind: "item",
+        resourceId: "dust",
+      },
+    ],
     fuelProfiles: [],
   };
 }

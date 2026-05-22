@@ -122,6 +122,7 @@ interface FactoryStore {
   ) => void;
   updateEdge: (edgeId: string, patch: Partial<FactoryEdge>) => void;
   autoConnectNode: (nodeId: string) => void;
+  optimizeMachineCounts: () => void;
   deleteEdge: (edgeId: string) => void;
   setTargetRate: (targetRate?: TargetRate) => void;
   selectFuelProfile: (fuelProfileId: string) => void;
@@ -813,6 +814,60 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       };
     });
   },
+  optimizeMachineCounts: () => {
+    set((state) => {
+      if (state.project.nodes.length === 0) {
+        return state;
+      }
+
+      let project = state.project;
+      let result = state.lastResult;
+      let changed = false;
+      const maxPasses = Math.max(1, project.nodes.length + 1);
+
+      for (let pass = 0; pass < maxPasses; pass += 1) {
+        let passChanged = false;
+        const nodes = project.nodes.map((node) => {
+          const nodeResult = result.nodes[node.id];
+          if (!node.enabled || !nodeResult || nodeResult.status === "missing-recipe") {
+            return node;
+          }
+
+          const machineCount = getOptimizedMachineCount(
+            nodeResult.theoreticalMachinesRequired,
+            node.machineCount,
+          );
+          if (machineCount === node.machineCount) {
+            return node;
+          }
+
+          passChanged = true;
+          return { ...node, machineCount };
+        });
+
+        if (!passChanged) {
+          break;
+        }
+
+        changed = true;
+        project = {
+          ...project,
+          nodes,
+        };
+        result = calculateThroughput(project);
+      }
+
+      if (!changed) {
+        return state;
+      }
+
+      const touchedProject = touchProject(project);
+      return {
+        project: touchedProject,
+        lastResult: calculateThroughput(touchedProject),
+      };
+    });
+  },
   deleteEdge: (edgeId) => {
     set((state) => {
       const project = touchProject(
@@ -1330,6 +1385,18 @@ function parseResourceHandleId(handleId?: string | null):
     kind,
     resourceId: decodeURIComponent(encodedResourceId),
   };
+}
+
+function getOptimizedMachineCount(theoreticalMachinesRequired: number, current: number): number {
+  if (
+    !Number.isFinite(theoreticalMachinesRequired) ||
+    theoreticalMachinesRequired === undefined ||
+    theoreticalMachinesRequired <= 0
+  ) {
+    return Math.max(1, Math.round(current));
+  }
+
+  return Math.max(1, Math.round(theoreticalMachinesRequired));
 }
 
 function touchProject(project: FactoryProject): FactoryProject {

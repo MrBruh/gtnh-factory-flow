@@ -1,6 +1,14 @@
 "use client";
 
-import { ChevronDown, Download, FileImage, ImageDown, Trash2, Upload } from "lucide-react";
+import {
+  ChevronDown,
+  Download,
+  FileImage,
+  ImageDown,
+  Trash2,
+  Upload,
+  WandSparkles,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import {
   cloneImportedProject,
@@ -28,6 +36,7 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const isDatasetLoading = useFactoryStore((state) => state.isDatasetLoading);
   const setProject = useFactoryStore((state) => state.setProject);
   const cleanBoard = useFactoryStore((state) => state.cleanBoard);
+  const optimizeMachineCounts = useFactoryStore((state) => state.optimizeMachineCounts);
 
   const exportJson = () => {
     const json = serializeFactoryProject(project);
@@ -105,6 +114,16 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={optimizeMachineCounts}
+          disabled={project.nodes.length === 0}
+          title="Set every machine count to its suggested best ratio"
+          className="inline-flex h-9 items-center justify-center gap-2 rounded border border-cyan-700 bg-cyan-600 px-3 text-sm font-semibold text-white hover:bg-cyan-500 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-100 disabled:text-neutral-400"
+        >
+          <WandSparkles className="h-4 w-4" />
+          <span>Best ratios</span>
+        </button>
         <ToolbarButton
           icon={Trash2}
           label="Clean board"
