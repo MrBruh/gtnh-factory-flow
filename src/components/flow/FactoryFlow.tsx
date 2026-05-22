@@ -81,6 +81,7 @@ const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
 const EXPORT_PNG_PIXEL_RATIO = 2;
+const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
 type ResourceEdgeData = {
   resource: Pick<
     ResourceAmount,
@@ -106,6 +107,7 @@ type ResourceEdgeData = {
     size: number;
     sourceHandleIds: string[];
     primarySourceHandleId: string;
+    edgeIds: string[];
     demand?: string;
     transferred?: string;
     isLimited: boolean;
@@ -674,6 +676,25 @@ export function FactoryFlow() {
   }, [exportFlowImage]);
 
   useEffect(() => {
+    const handleEdgeLabelSelect = (event: Event) => {
+      const detail = (event as CustomEvent).detail as { edgeIds?: unknown } | undefined;
+      if (
+        !Array.isArray(detail?.edgeIds) ||
+        !detail.edgeIds.every((edgeId) => typeof edgeId === "string")
+      ) {
+        return;
+      }
+
+      setSelectedEdgeIds(detail.edgeIds);
+      setSelectedNodeIds([]);
+      selectNode(undefined);
+    };
+
+    window.addEventListener(FLOW_EDGE_LABEL_SELECT_EVENT, handleEdgeLabelSelect);
+    return () => window.removeEventListener(FLOW_EDGE_LABEL_SELECT_EVENT, handleEdgeLabelSelect);
+  }, [selectNode]);
+
+  useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Delete") {
         if (isEditableKeyboardTarget(event.target)) {
@@ -1132,6 +1153,11 @@ function ResourceEdge({
             title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag along cable. Double click to reset label.`}
             onPointerDown={(event) => {
               event.stopPropagation();
+              window.dispatchEvent(
+                new CustomEvent(FLOW_EDGE_LABEL_SELECT_EVENT, {
+                  detail: { edgeIds: data.bundle?.edgeIds ?? [id] },
+                }),
+              );
               event.currentTarget.setPointerCapture(event.pointerId);
               labelDragRef.current = {
                 pointerId: event.pointerId,
@@ -1298,6 +1324,7 @@ function getEdgeBundles(
     );
     const isLimited = group.some((edge) => edgeResults[edge.id]?.isLimited === true);
     const primarySourceHandleId = primaryEdge.sourceHandle ?? sourceHandleIds[0];
+    const edgeIds = group.map((edge) => edge.id);
     if (!primarySourceHandleId) {
       continue;
     }
@@ -1309,6 +1336,7 @@ function getEdgeBundles(
         size: group.length,
         sourceHandleIds,
         primarySourceHandleId,
+        edgeIds,
         demand: mode === "single-target" ? formatRate(demand) : undefined,
         transferred: mode === "single-target" && isLimited ? formatRate(transferred) : undefined,
         isLimited,
