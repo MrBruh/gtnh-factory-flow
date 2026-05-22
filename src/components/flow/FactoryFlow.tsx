@@ -1000,7 +1000,7 @@ function ResourceEdge({
           <div
             className="nodrag nopan absolute flex cursor-grab items-center gap-1 border border-[#252525] bg-[#2b2d32] px-1.5 py-1 text-[11px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX + labelOffset.x}px, ${labelY + labelOffset.y}px)`,
+              transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
               color: data.isLimited ? "#fecaca" : "#f8fafc",
               borderColor: edgeColor,
@@ -1129,15 +1129,20 @@ function getOffsetEdgePath({
 
   const middleX = (sourceX + targetX) / 2;
   const middleY = (sourceY + targetY) / 2;
-  const labelX = middleX + offset.x;
-  const labelY = middleY + offset.y;
+  const desiredLabelX = middleX + offset.x;
+  const desiredLabelY = middleY + offset.y;
+  const useVerticalLabelAxis = Math.abs(offset.y) >= Math.abs(offset.x);
+  const bendX = useVerticalLabelAxis ? desiredLabelX : middleX;
+  const bendY = useVerticalLabelAxis ? middleY : desiredLabelY;
+  const labelX = useVerticalLabelAxis ? bendX : (bendX + targetX) / 2;
+  const labelY = useVerticalLabelAxis ? (sourceY + bendY) / 2 : bendY;
 
   return [
     [
       `M ${sourceX},${sourceY}`,
-      `L ${labelX},${sourceY}`,
-      `L ${labelX},${labelY}`,
-      `L ${targetX},${labelY}`,
+      `L ${bendX},${sourceY}`,
+      `L ${bendX},${bendY}`,
+      `L ${targetX},${bendY}`,
       `L ${targetX},${targetY}`,
     ].join(" "),
     labelX,
