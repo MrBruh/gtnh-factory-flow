@@ -380,6 +380,51 @@ describe("calculateThroughput", () => {
     expect(result.resources["item:dust"].consumedPerSecond).toBeCloseTo(2);
   });
 
+  it("applies output chance to production and capacity", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "chance-output-project",
+      name: "Chance output test",
+      targetRate: {
+        kind: "item",
+        resourceId: "tiny_dust",
+        amountPerSecond: 0.25,
+      },
+      recipes: [
+        {
+          id: "chance-recipe",
+          name: "Chance recipe",
+          machineType: "Ore Washer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "ore", amount: 1 }],
+          outputs: [{ kind: "item", id: "tiny_dust", amount: 1, chance: 0.25 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node",
+          recipeId: "chance-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.node.outputs["item:tiny_dust"].amountPerSecond).toBeCloseTo(0.25);
+    expect(result.resources["item:tiny_dust"].producedPerSecond).toBeCloseTo(0.25);
+    expect(result.nodes.node.maxRatePerSecond).toBeCloseTo(0.25);
+    expect(result.nodes.node.utilization).toBeCloseTo(1);
+  });
+
   it("applies voltage tier overclocks to speed and EU/t", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,

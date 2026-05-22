@@ -34,7 +34,7 @@ export function ResourceIcon({
   tooltip = true,
   iconPixelSize,
 }: ResourceIconProps) {
-  const title = resource?.tooltip?.join("\n") ?? resource?.displayName ?? resource?.id;
+  const title = buildTooltipLabel(resource);
   const icon = (
     <div
       className={[
@@ -73,6 +73,22 @@ export function ResourceIcon({
   }
 
   return <MinecraftTooltip label={title}>{icon}</MinecraftTooltip>;
+}
+
+function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
+  if (!resource) {
+    return undefined;
+  }
+
+  const baseLines = resource.tooltip?.length
+    ? resource.tooltip
+    : [resource.displayName ?? resource.id].filter(Boolean);
+  const chanceLine =
+    resource.chance !== undefined && Number.isFinite(resource.chance) && resource.chance < 1
+      ? `Chance: ${trimAmount(resource.chance * 100)}%`
+      : undefined;
+
+  return [...baseLines, chanceLine].filter(Boolean).join("\n");
 }
 
 function ChanceLabel({ chance }: { chance: number }) {
