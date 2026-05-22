@@ -69,6 +69,7 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
 function FlowIOPanel({ className = "" }: { className?: string }) {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
+  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
   const browseResource = useFactoryStore((state) => state.browseResource);
   const resourcesByKey = useMemo(() => buildProjectResourceLookup(project), [project]);
@@ -120,13 +121,15 @@ function FlowIOPanel({ className = "" }: { className?: string }) {
             Global resources entering, leaving, or balanced inside the chart.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setRecipeSearch("")}
-          className="h-7 shrink-0 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-        >
-          Clear
-        </button>
+        {recipeSearch ? (
+          <button
+            type="button"
+            onClick={() => setRecipeSearch("")}
+            className="h-7 shrink-0 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+          >
+            Clear
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
