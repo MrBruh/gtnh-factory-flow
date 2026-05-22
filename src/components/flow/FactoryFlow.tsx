@@ -2283,11 +2283,13 @@ function edgeMatchesSearch(
 }
 
 function exportNodeFilter(domNode: HTMLElement) {
+  const element = domNode instanceof Element ? domNode : undefined;
+
   return !(
-    domNode.classList?.contains("react-flow__edgeupdater") ||
-    domNode.classList?.contains("react-flow__selection") ||
-    domNode.classList?.contains("react-flow__nodesselection") ||
-    domNode.dataset.resourceHandle === "true"
+    element?.classList.contains("react-flow__edgeupdater") ||
+    element?.classList.contains("react-flow__selection") ||
+    element?.classList.contains("react-flow__nodesselection") ||
+    element?.getAttribute("data-resource-handle") === "true"
   );
 }
 
