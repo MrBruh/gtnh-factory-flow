@@ -93,7 +93,7 @@ if [[ "$GTNH_EXPORT_DISABLE_CLIENT_UI_MODS" == "true" ]]; then
     mv "$mod_jar" "$disabled_mod_dir/"
   done < <(
     find "$instance_root/mods" -maxdepth 1 -type f \
-      \( -iname 'NotEnoughEnergistics-*.jar' -o -iname 'visualprospecting-*.jar' \) \
+      \( -iname 'visualprospecting-*.jar' \) \
       | sort
   )
 fi
