@@ -1104,10 +1104,18 @@ function getOffsetEdgePath({
   const middleY = (sourceY + targetY) / 2;
   const labelX = middleX + offset.x;
   const labelY = middleY + offset.y;
-  const controlX = middleX + offset.x * 2;
-  const controlY = middleY + offset.y * 2;
 
-  return [`M ${sourceX},${sourceY} Q ${controlX},${controlY} ${targetX},${targetY}`, labelX, labelY];
+  return [
+    [
+      `M ${sourceX},${sourceY}`,
+      `L ${labelX},${sourceY}`,
+      `L ${labelX},${labelY}`,
+      `L ${targetX},${labelY}`,
+      `L ${targetX},${targetY}`,
+    ].join(" "),
+    labelX,
+    labelY,
+  ];
 }
 
 function getSlotEdgeEndpoint({
