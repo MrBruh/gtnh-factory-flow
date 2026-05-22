@@ -568,7 +568,7 @@ function ResourceHistoryPanel({
 
 function useVisibleResourceHistorySlots() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [visibleSlotCount, setVisibleSlotCount] = useState(8);
+  const [visibleSlotCount, setVisibleSlotCount] = useState(0);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -579,8 +579,8 @@ function useVisibleResourceHistorySlots() {
     const updateVisibleSlotCount = () => {
       const slotSize = 40;
       const gap = 8;
-      const width = container.clientWidth;
-      setVisibleSlotCount(Math.max(1, Math.floor((width + gap) / (slotSize + gap))));
+      const width = Math.max(0, container.clientWidth - 1);
+      setVisibleSlotCount(Math.max(0, Math.floor((width + gap) / (slotSize + gap))));
     };
 
     updateVisibleSlotCount();
