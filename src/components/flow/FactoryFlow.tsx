@@ -904,8 +904,6 @@ function getSlotEdgeEndpoint({
     nodeId,
     handleId,
     edgeSide,
-    fallbackX,
-    fallbackY,
   });
   if (measuredEndpoint) {
     return measuredEndpoint;
@@ -927,14 +925,10 @@ function getMeasuredSlotEndpoint({
   nodeId,
   handleId,
   edgeSide,
-  fallbackX,
-  fallbackY,
 }: {
   nodeId: string;
   handleId?: string | null;
   edgeSide: string;
-  fallbackX: number;
-  fallbackY: number;
 }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
@@ -951,22 +945,58 @@ function getMeasuredSlotEndpoint({
     return undefined;
   }
 
-  const nodeRect = nodeElement.getBoundingClientRect();
   const slotRect = slotElement.getBoundingClientRect();
-  const nodeWidth = nodeElement.offsetWidth || nodeRect.width;
-  const nodeHeight = nodeElement.offsetHeight || nodeRect.height;
-  const zoomX = nodeWidth > 0 ? nodeRect.width / nodeWidth : 1;
-  const zoomY = nodeHeight > 0 ? nodeRect.height / nodeHeight : zoomX;
-  const zoom = zoomX || zoomY || 1;
+  const screenPoint = {
+    x: edgeSide === "right" ? slotRect.right : slotRect.left,
+    y: slotRect.top + slotRect.height / 2,
+  };
 
-  const screenX = edgeSide === "right" ? slotRect.right : slotRect.left;
-  const screenY = slotRect.top + slotRect.height / 2;
-  const fallbackScreenX = edgeSide === "right" ? nodeRect.right : nodeRect.left;
-  const fallbackScreenY = nodeRect.top + nodeRect.height / 2;
+  return screenToFlowPoint(screenPoint, nodeElement);
+}
+
+function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement) {
+  const viewport = element.closest<HTMLElement>(".react-flow__viewport");
+  const renderer = element.closest<HTMLElement>(".react-flow__renderer");
+  if (!viewport || !renderer) {
+    return undefined;
+  }
+
+  const rendererRect = renderer.getBoundingClientRect();
+  const transform = parseCssMatrix(getComputedStyle(viewport).transform);
+  return {
+    x: (point.x - rendererRect.left - transform.translateX) / transform.scaleX,
+    y: (point.y - rendererRect.top - transform.translateY) / transform.scaleY,
+  };
+}
+
+function parseCssMatrix(transform: string) {
+  if (!transform || transform === "none") {
+    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 };
+  }
+
+  const values = transform
+    .match(/matrix(?:3d)?\(([^)]+)\)/)?.[1]
+    ?.split(",")
+    .map((value) => Number.parseFloat(value.trim()));
+
+  if (!values || values.some((value) => !Number.isFinite(value))) {
+    return { scaleX: 1, scaleY: 1, translateX: 0, translateY: 0 };
+  }
+
+  if (values.length === 16) {
+    return {
+      scaleX: values[0] || 1,
+      scaleY: values[5] || values[0] || 1,
+      translateX: values[12] ?? 0,
+      translateY: values[13] ?? 0,
+    };
+  }
 
   return {
-    x: fallbackX + (screenX - fallbackScreenX) / zoom,
-    y: fallbackY + (screenY - fallbackScreenY) / zoom,
+    scaleX: values[0] || 1,
+    scaleY: values[3] || values[0] || 1,
+    translateX: values[4] ?? 0,
+    translateY: values[5] ?? 0,
   };
 }
 
