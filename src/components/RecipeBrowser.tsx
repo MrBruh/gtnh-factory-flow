@@ -25,6 +25,7 @@ const RESOURCE_DEFAULT_PAGE_SIZE = 6;
 const RESOURCE_ROW_HEIGHT = 62;
 const RESOURCE_ROW_GAP = 8;
 const RESOURCE_PAGER_HEIGHT = 40;
+const RESOURCE_HISTORY_VISIBLE_FALLBACK = 8;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
 
@@ -536,7 +537,7 @@ function ResourceHistoryPanel({
     mode: "recipes" | "uses",
   ) => void;
 }) {
-  const { containerRef, visibleSlotCount } = useVisibleResourceHistorySlots();
+  const { containerRef, visibleSlotCount } = useVisibleResourceHistorySlots(resources.length);
   const visibleResources = resources.slice(0, visibleSlotCount);
 
   if (resources.length === 0) {
@@ -566,13 +567,17 @@ function ResourceHistoryPanel({
   );
 }
 
-function useVisibleResourceHistorySlots() {
+function useVisibleResourceHistorySlots(resourceCount: number) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [visibleSlotCount, setVisibleSlotCount] = useState(0);
+  const [visibleSlotCount, setVisibleSlotCount] = useState(RESOURCE_HISTORY_VISIBLE_FALLBACK);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || typeof ResizeObserver === "undefined") {
+    if (!container) {
+      return;
+    }
+
+    if (typeof ResizeObserver === "undefined") {
       return;
     }
 
@@ -583,11 +588,14 @@ function useVisibleResourceHistorySlots() {
       setVisibleSlotCount(Math.max(0, Math.floor((width + gap) / (slotSize + gap))));
     };
 
-    updateVisibleSlotCount();
+    const animationFrame = window.requestAnimationFrame(updateVisibleSlotCount);
     const observer = new ResizeObserver(updateVisibleSlotCount);
     observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      observer.disconnect();
+    };
+  }, [resourceCount]);
 
   return { containerRef, visibleSlotCount };
 }
