@@ -161,9 +161,12 @@ export function FactoryFlow() {
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
+  const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
+  const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const activeFlowResourceKey = hoveredFlowResourceKey ?? selectedFlowResourceKey;
+  const activeNodeBottlenecks = hoveredNodeBottlenecks || selectedNodeBottlenecks;
 
   const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
@@ -174,9 +177,11 @@ export function FactoryFlow() {
           type: "recipeNode",
           position: node.position,
           zIndex:
-            activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+            activeNodeBottlenecks && result.nodes[node.id]?.status === "bottleneck"
               ? 1500
-              : undefined,
+              : activeFlowResourceKey && recipeContainsResourceKey(recipe, activeFlowResourceKey)
+                ? 1500
+                : undefined,
           data: {
             projectNode: node,
             recipe:
@@ -214,6 +219,7 @@ export function FactoryFlow() {
     ],
     [
       activeFlowResourceKey,
+      activeNodeBottlenecks,
       project.nodes,
       project.recipes,
       project.storages,

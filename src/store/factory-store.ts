@@ -51,6 +51,8 @@ interface FactoryStore {
   hoveredStorageResourceKey?: string;
   hoveredFlowResourceKey?: string;
   selectedFlowResourceKey?: string;
+  hoveredNodeBottlenecks: boolean;
+  selectedNodeBottlenecks: boolean;
   flowViewportCenter?: FactoryNode["position"];
   selectedNodeId?: string;
   selectedRecipeId?: string;
@@ -75,6 +77,8 @@ interface FactoryStore {
   setHoveredStorageResourceKey: (key?: string) => void;
   setHoveredFlowResourceKey: (key?: string) => void;
   selectFlowResourceKey: (key?: string) => void;
+  setHoveredNodeBottlenecks: (isHovered: boolean) => void;
+  toggleNodeBottlenecks: () => void;
   setFlowViewportCenter: (position: FactoryNode["position"]) => void;
   recalculate: () => void;
   selectNode: (nodeId?: string) => void;
@@ -191,6 +195,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   hoveredStorageResourceKey: undefined,
   hoveredFlowResourceKey: undefined,
   selectedFlowResourceKey: undefined,
+  hoveredNodeBottlenecks: false,
+  selectedNodeBottlenecks: false,
   selectedNodeId: undefined,
   selectedRecipeId: undefined,
   lastResult: calculateThroughput(initialProject),
@@ -405,6 +411,12 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
     set((state) => ({
       selectedFlowResourceKey: state.selectedFlowResourceKey === key ? undefined : key,
     }));
+  },
+  setHoveredNodeBottlenecks: (isHovered) => {
+    set({ hoveredNodeBottlenecks: isHovered });
+  },
+  toggleNodeBottlenecks: () => {
+    set((state) => ({ selectedNodeBottlenecks: !state.selectedNodeBottlenecks }));
   },
   setFlowViewportCenter: (position) => {
     set({ flowViewportCenter: position });

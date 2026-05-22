@@ -21,6 +21,10 @@ export function InspectorPanel() {
 function SummaryPanel() {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
+  const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
+  const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
+  const setHoveredNodeBottlenecks = useFactoryStore((state) => state.setHoveredNodeBottlenecks);
+  const toggleNodeBottlenecks = useFactoryStore((state) => state.toggleNodeBottlenecks);
   const nodeBottlenecks = result.bottlenecks.filter(
     (bottleneck) => bottleneck.kind === "node-capacity",
   ).length;
@@ -30,7 +34,17 @@ function SummaryPanel() {
       <div className="grid shrink-0 grid-cols-2 gap-2">
         <Metric label="Total EU/t" value={formatRate(result.totalEuT, 0)} />
         <Metric label="EU/s" value={formatRate(result.totalEuPerSecond, 0)} />
-        <Metric label="Node bottlenecks" value={String(nodeBottlenecks)} />
+        <Metric
+          label="Node bottlenecks"
+          value={String(nodeBottlenecks)}
+          active={hoveredNodeBottlenecks || selectedNodeBottlenecks}
+          interactive={nodeBottlenecks > 0}
+          onMouseEnter={() => setHoveredNodeBottlenecks(nodeBottlenecks > 0)}
+          onMouseLeave={() => setHoveredNodeBottlenecks(false)}
+          onFocus={() => setHoveredNodeBottlenecks(nodeBottlenecks > 0)}
+          onBlur={() => setHoveredNodeBottlenecks(false)}
+          onClick={nodeBottlenecks > 0 ? toggleNodeBottlenecks : undefined}
+        />
         <Metric label="Nodes" value={String(project.nodes.length)} />
       </div>
 
@@ -340,19 +354,63 @@ function buildProjectResourceLookup(project: FactoryProject): Map<string, FlowRe
   return resources;
 }
 
-function Metric({ label, value, wide = false }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div
-      className={[
-        "rounded border border-neutral-200 bg-neutral-50 p-2",
-        wide ? "col-span-2" : "",
-      ].join(" ")}
-    >
+function Metric({
+  label,
+  value,
+  wide = false,
+  active = false,
+  interactive = false,
+  onMouseEnter,
+  onMouseLeave,
+  onFocus,
+  onBlur,
+  onClick,
+}: {
+  label: string;
+  value: string;
+  wide?: boolean;
+  active?: boolean;
+  interactive?: boolean;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+  onFocus?: () => void;
+  onBlur?: () => void;
+  onClick?: () => void;
+}) {
+  const className = [
+    "rounded border p-2 text-left",
+    active
+      ? "border-cyan-500 bg-cyan-100 ring-1 ring-cyan-300"
+      : "border-neutral-200 bg-neutral-50",
+    interactive ? "cursor-pointer hover:border-cyan-300 hover:bg-cyan-50" : "",
+    wide ? "col-span-2" : "",
+  ].join(" ");
+  const content = (
+    <>
       <div className="text-[10px] font-semibold uppercase tracking-wide text-neutral-500">
         {label}
       </div>
       <div className="mt-0.5 truncate text-sm font-semibold text-neutral-950">{value}</div>
-    </div>
+    </>
+  );
+
+  if (!interactive) {
+    return <div className={className}>{content}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      className={className}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      onFocus={onFocus}
+      onBlur={onBlur}
+      onClick={onClick}
+      title="Highlight bottleneck nodes"
+    >
+      {content}
+    </button>
   );
 }
 

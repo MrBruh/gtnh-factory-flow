@@ -37,6 +37,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
   const selectedFlowResourceKey = useFactoryStore((state) => state.selectedFlowResourceKey);
+  const hoveredNodeBottlenecks = useFactoryStore((state) => state.hoveredNodeBottlenecks);
+  const selectedNodeBottlenecks = useFactoryStore((state) => state.selectedNodeBottlenecks);
   const deleteNode = useFactoryStore((state) => state.deleteNode);
   const updateNode = useFactoryStore((state) => state.updateNode);
   const optimizeMachineCount = useFactoryStore((state) => state.optimizeMachineCount);
@@ -50,6 +52,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     recipe,
     hoveredFlowResourceKey ?? selectedFlowResourceKey,
   );
+  const isNodeBottleneckHighlighted =
+    (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
+  const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
   const recipePowerTier = getRecipePowerTier(recipe);
   const tierControl = getNodeTierControl(recipe, projectNode);
@@ -71,7 +76,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
-        isFlowResourceHighlighted
+        isInspectorHighlighted
           ? "outline outline-4 outline-offset-4 outline-yellow-300 ring-8 ring-cyan-300 [filter:drop-shadow(0_0_16px_rgba(34,211,238,0.95))]"
           : "",
         exceedsMaxTier ? "ring-4 ring-red-500" : "",
