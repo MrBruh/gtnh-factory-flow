@@ -24,7 +24,14 @@ import {
   resolveRecipeDatasetRecipes,
 } from "@/lib/datasets/browser-loader";
 import type { DatasetVersion } from "@/lib/datasets";
-import type { FactoryProject, Recipe, RecipeOutput } from "@/lib/model/types";
+import type {
+  FactoryEdge,
+  FactoryProject,
+  Recipe,
+  RecipeOutput,
+  ResourceKind,
+} from "@/lib/model/types";
+import { makeResourceHandleId, parseResourceHandleId } from "./flow/resource-handles";
 import {
   FLOW_IMAGE_EXPORT_COMPLETE_EVENT,
   FLOW_IMAGE_EXPORT_EVENT,
@@ -397,6 +404,7 @@ async function hydrateImportedProjectRecipes(
   );
   const missingRecipes: Array<Pick<FactoryProject["recipes"][number], "id" | "name">> = [];
   const migratedRecipes: Array<{ fromId: string; toId: string; name: string }> = [];
+  const recipeIdMigration = new Map<string, string>();
 
   const hydratedRecipes = await Promise.all(
     project.recipes.map(async (recipe) => {
@@ -411,6 +419,7 @@ async function hydrateImportedProjectRecipes(
             toId: migratedRecipe.id,
             name: recipe.name,
           });
+          recipeIdMigration.set(recipe.id, migratedRecipe.id);
           return migratedRecipe;
         }
 
@@ -421,15 +430,153 @@ async function hydrateImportedProjectRecipes(
       return getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, recipe.id);
     }),
   );
+  const hydratedProject = {
+    ...project,
+    recipes: hydratedRecipes,
+  };
 
   return {
-    project: {
-      ...project,
-      recipes: hydratedRecipes,
-    },
+    project: remapMigratedRecipeReferences(hydratedProject, recipeIdMigration),
     missingRecipes,
     migratedRecipes,
   };
+}
+
+function remapMigratedRecipeReferences(
+  project: FactoryProject,
+  recipeIdMigration: Map<string, string>,
+): FactoryProject {
+  if (recipeIdMigration.size === 0) {
+    return project;
+  }
+
+  const nodes = project.nodes.map((node) => ({
+    ...node,
+    recipeId: recipeIdMigration.get(node.recipeId) ?? node.recipeId,
+  }));
+  const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
+  const originalNodesById = new Map(project.nodes.map((node) => [node.id, node] as const));
+
+  return {
+    ...project,
+    nodes,
+    edges: project.edges.map((edge) =>
+      remapMigratedRecipeEdgeHandles(
+        project,
+        nodesById,
+        originalNodesById,
+        recipeIdMigration,
+        edge,
+      ),
+    ),
+  };
+}
+
+function remapMigratedRecipeEdgeHandles(
+  project: FactoryProject,
+  nodesById: Map<string, FactoryProject["nodes"][number]>,
+  originalNodesById: Map<string, FactoryProject["nodes"][number]>,
+  recipeIdMigration: Map<string, string>,
+  edge: FactoryEdge,
+): FactoryEdge {
+  const sourceNode = nodesById.get(edge.source);
+  const targetNode = nodesById.get(edge.target);
+  const originalSourceNode = originalNodesById.get(edge.source);
+  const originalTargetNode = originalNodesById.get(edge.target);
+  const sourceRecipeMigrated = Boolean(
+    originalSourceNode && recipeIdMigration.has(originalSourceNode.recipeId),
+  );
+  const targetRecipeMigrated = Boolean(
+    originalTargetNode && recipeIdMigration.has(originalTargetNode.recipeId),
+  );
+
+  if (!sourceRecipeMigrated && !targetRecipeMigrated) {
+    return edge;
+  }
+
+  const sourceRecipe = project.recipes.find((recipe) => recipe.id === sourceNode?.recipeId);
+  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
+
+  return {
+    ...edge,
+    sourceHandle:
+      sourceRecipeMigrated && sourceRecipe
+        ? remapRecipeHandle(
+            sourceRecipe,
+            edge.sourceHandle,
+            "output",
+            edge.resourceKind,
+            edge.resourceId,
+          )
+        : edge.sourceHandle,
+    targetHandle:
+      targetRecipeMigrated && targetRecipe
+        ? remapRecipeHandle(
+            targetRecipe,
+            edge.targetHandle,
+            "input",
+            edge.resourceKind,
+            edge.resourceId,
+          )
+        : edge.targetHandle,
+  };
+}
+
+function remapRecipeHandle(
+  recipe: Recipe,
+  handleId: string | undefined,
+  expectedSide: "input" | "output",
+  resourceKind: ResourceKind,
+  resourceId: string,
+): string | undefined {
+  const handle = parseResourceHandleId(handleId);
+  const resources = expectedSide === "input" ? recipe.inputs : recipe.outputs;
+  const handleResourceKind = handle?.kind ?? resourceKind;
+  const handleResourceId = handle?.resourceId ?? resourceId;
+  const slotIndex = parseResourceHandleSlotIndex(handleId);
+
+  if (
+    handle?.side === expectedSide &&
+    resources.some(
+      (resource, index) =>
+        resource.kind === handleResourceKind &&
+        resource.id === handleResourceId &&
+        makeResourceHandleId(expectedSide, resource, index) === handleId,
+    )
+  ) {
+    return handleId;
+  }
+
+  if (slotIndex !== undefined) {
+    const indexedResource = resources[slotIndex];
+    if (indexedResource?.kind === handleResourceKind && indexedResource.id === handleResourceId) {
+      return makeResourceHandleId(expectedSide, indexedResource, slotIndex);
+    }
+  }
+
+  const nextIndex = resources.findIndex(
+    (resource) => resource.kind === resourceKind && resource.id === resourceId,
+  );
+  if (nextIndex !== -1) {
+    return makeResourceHandleId(expectedSide, resources[nextIndex], nextIndex);
+  }
+
+  const fallbackIndex = resources.findIndex(
+    (resource) => resource.kind === handleResourceKind && resource.id === handleResourceId,
+  );
+  return fallbackIndex === -1
+    ? handleId
+    : makeResourceHandleId(expectedSide, resources[fallbackIndex], fallbackIndex);
+}
+
+function parseResourceHandleSlotIndex(handleId: string | undefined): number | undefined {
+  const rawIndex = handleId?.split(":")[3];
+  if (rawIndex === undefined) {
+    return undefined;
+  }
+
+  const index = Number(rawIndex);
+  return Number.isInteger(index) && index >= 0 ? index : undefined;
 }
 
 async function resolveImportedRecipe(
