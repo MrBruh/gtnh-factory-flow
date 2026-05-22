@@ -71,12 +71,16 @@ if (!existsSync(recipeDatasetPath)) {
 
 let dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
 validateDataset(dataset);
+const datasetStats = {
+  recipeCount: dataset.recipes.length,
+  resourceCount: dataset.resources.length,
+  recipeMapCount: dataset.recipeMaps.length,
+};
+dataset = undefined;
 await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
 await finalizeRenderedIcons(recipeDatasetPath, outDir);
 await buildResourceIndex(recipeDatasetPath);
 await buildRecipeIndex(recipeDatasetPath, outDir);
-dataset = JSON.parse(await fs.readFile(recipeDatasetPath, "utf8"));
-validateDataset(dataset);
 
 const compressedRecipeDatasetPath = `${recipeDatasetPath}.gz`;
 const uncompressedSizeBytes = (await fs.stat(recipeDatasetPath)).size;
@@ -86,9 +90,7 @@ await fs.rm(recipeDatasetPath, { force: true });
 await writePipelineRecord({
   ...pipelineRecord,
   status: "generated",
-  recipeCount: dataset.recipes.length,
-  resourceCount: dataset.resources.length,
-  recipeMapCount: dataset.recipeMaps.length,
+  ...datasetStats,
   recipeDatasetPath: compressedRecipeDatasetPath,
   uncompressedSizeBytes,
   compressedSizeBytes: (await fs.stat(compressedRecipeDatasetPath)).size,
