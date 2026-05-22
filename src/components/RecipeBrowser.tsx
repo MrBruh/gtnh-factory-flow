@@ -455,21 +455,6 @@ export function RecipeBrowser() {
               ))}
             </select>
           </label>
-
-          {activeResource ? (
-            <div className="mt-3 flex items-center gap-2 rounded-[4px] border border-cyan-500 bg-[#303238] p-2">
-              <ResourceIcon
-                resource={{ ...activeResource, amount: 1 }}
-                size="sm"
-                showAmount={false}
-              />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold text-neutral-50">
-                  {resourceLabel(activeResource)}
-                </div>
-              </div>
-            </div>
-          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-hidden p-3">
