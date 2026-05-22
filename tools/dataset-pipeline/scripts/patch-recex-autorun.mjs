@@ -229,7 +229,6 @@ exporterSource = exporterSource.replace(
   "                // item inputs\n",
   [
     "                // item inputs",
-    "                int[] inputChances = getInputChances(rec, rec.mInputs.length);",
     "                int inputIndex = 0;",
   ].join("\n") + "\n",
 );
@@ -247,7 +246,7 @@ exporterSource = exporterSource.replace(
 exporterSource = exporterSource.replace(
   "                    gtr.iI.add(item);\n",
   [
-    "                    if (inputChances != null && inputIndex < inputChances.length && inputChances[inputIndex] <= 0) {",
+    "                    if (rec.getInputChance(inputIndex) <= 0) {",
     "                        item.nc = Boolean.TRUE;",
     "                    }",
     "                    inputIndex++;",
@@ -280,7 +279,6 @@ exporterSource = exporterSource.replace(
     "                }",
     "",
     "                // item outputs",
-    "                int[] outputChances = getOutputChances(rec, rec.mOutputs.length);",
     "                int outputIndex = 0;",
   ].join("\n") + "\n",
 );
@@ -288,8 +286,9 @@ exporterSource = exporterSource.replace(
 exporterSource = exporterSource.replace(
   "                    gtr.iO.add(item);\n",
   [
-    "                    if (outputChances != null && outputIndex < outputChances.length) {",
-    "                        item.ch = Integer.valueOf(outputChances[outputIndex]);",
+    "                    int outputChance = rec.getOutputChance(outputIndex);",
+    "                    if (outputChance > 0 && outputChance < 10000) {",
+    "                        item.ch = Integer.valueOf(outputChance);",
     "                    }",
     "                    outputIndex++;",
     "",
@@ -380,7 +379,6 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
     /\/\/ item inputs\s+for\(ItemStack stack : rec\.mInputs\)\{\s+Item item = RecipeUtil\.formatGregtechItemStack\(stack\);\s+if\(item == null\)\{\s+continue;\s+\}\s+gtr\.iI\.add\(item\);\s+\}\s+\/\/ item outputs/,
     [
       "// item inputs",
-      "int[] inputChances = getInputChances(rec, rec.mInputs.length);",
       "int inputIndex = 0;",
       "for(ItemStack stack : rec.mInputs){",
       "    Item item = RecipeUtil.formatGregtechItemStack(stack);",
@@ -388,7 +386,7 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
       "        inputIndex++;",
       "        continue;",
       "    }",
-      "    if (inputChances != null && inputIndex < inputChances.length && inputChances[inputIndex] <= 0) {",
+      "    if (rec.getInputChance(inputIndex) <= 0) {",
       "        item.nc = Boolean.TRUE;",
       "    }",
       "    inputIndex++;",
@@ -400,7 +398,7 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
   );
 }
 
-if (!exporterSource.includes("item.ch = Integer.valueOf(outputChances[outputIndex]);")) {
+if (!exporterSource.includes("item.ch = Integer.valueOf(outputChance);")) {
   exporterSource = replaceRequired(
     exporterSource,
     /\/\/ item outputs\s+for\(ItemStack stack : rec\.mOutputs\)\{\s+Item item = RecipeUtil\.formatGregtechItemStack\(stack\);\s+if\(item == null\)\{\s+continue;\s+\}\s+gtr\.iO\.add\(item\);\s+\}\s+\/\/ fluid inputs/,
@@ -425,7 +423,6 @@ if (!exporterSource.includes("item.ch = Integer.valueOf(outputChances[outputInde
       "    }",
       "}",
       "// item outputs",
-      "int[] outputChances = getOutputChances(rec, rec.mOutputs.length);",
       "int outputIndex = 0;",
       "for(ItemStack stack : rec.mOutputs){",
       "    Item item = RecipeUtil.formatGregtechItemStack(stack);",
@@ -433,8 +430,9 @@ if (!exporterSource.includes("item.ch = Integer.valueOf(outputChances[outputInde
       "        outputIndex++;",
       "        continue;",
       "    }",
-      "    if (outputChances != null && outputIndex < outputChances.length) {",
-      "        item.ch = Integer.valueOf(outputChances[outputIndex]);",
+      "    int outputChance = rec.getOutputChance(outputIndex);",
+      "    if (outputChance > 0 && outputChance < 10000) {",
+      "        item.ch = Integer.valueOf(outputChance);",
       "    }",
       "    outputIndex++;",
       "    gtr.iO.add(item);",
