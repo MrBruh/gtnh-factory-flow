@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { formatRate } from "@/lib/model";
 import type {
   FactoryProject,
@@ -69,9 +69,10 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
 function FlowIOPanel({ className = "" }: { className?: string }) {
   const project = useFactoryStore((state) => state.project);
   const result = useFactoryStore((state) => state.lastResult);
-  const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
   const browseResource = useFactoryStore((state) => state.browseResource);
+  const [activeTab, setActiveTab] = useState<FlowIOTab>("need");
+  const [filter, setFilter] = useState("");
   const resourcesByKey = useMemo(() => buildProjectResourceLookup(project), [project]);
   const allBalances = useMemo(
     () =>
@@ -93,6 +94,40 @@ function FlowIOPanel({ className = "" }: { className?: string }) {
         balance.surplusPerSecond <= 0.000001,
     )
     .sort((left, right) => right.consumedPerSecond - left.consumedPerSecond);
+  const tabs: FlowIOTabConfig[] = [
+    {
+      id: "need",
+      label: "Need",
+      empty: "No missing inputs.",
+      items: externalInputs,
+      mode: "uses",
+      tone: "red",
+      value: (balance) => balance.deficitPerSecond,
+    },
+    {
+      id: "output",
+      label: "Output",
+      empty: "No unconsumed outputs.",
+      items: finalOutputs,
+      mode: "recipes",
+      tone: "emerald",
+      value: (balance) => balance.surplusPerSecond,
+    },
+    {
+      id: "internal",
+      label: "Internal",
+      empty: "No balanced internal resources.",
+      items: balanced,
+      mode: "uses",
+      tone: "neutral",
+      value: (balance) => balance.consumedPerSecond,
+    },
+  ];
+  const activeConfig = tabs.find((tab) => tab.id === activeTab) ?? tabs[0];
+  const filteredItems = useMemo(
+    () => filterFlowItems(activeConfig.items, filter),
+    [activeConfig.items, filter],
+  );
 
   const inspectResource = (balance: ResourceBalance, mode: "recipes" | "uses") => {
     const resource = resourcesByKey.get(balance.key);
@@ -112,84 +147,99 @@ function FlowIOPanel({ className = "" }: { className?: string }) {
 
   return (
     <section className={className}>
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-            Flow I/O
-          </h3>
-          <p className="mt-1 text-xs text-neutral-500">
-            Global resources entering, leaving, or balanced inside the chart.
-          </p>
-        </div>
-        {recipeSearch ? (
-          <button
-            type="button"
-            onClick={() => setRecipeSearch("")}
-            className="h-7 shrink-0 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
-          >
-            Clear
-          </button>
-        ) : null}
+      <div className="min-w-0">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+          Flow I/O
+        </h3>
+        <p className="mt-1 text-xs text-neutral-500">
+          Global resources entering, leaving, or balanced inside the chart.
+        </p>
       </div>
+
+      <label className="mt-3 block">
+        <span className="sr-only">Filter Flow I/O resources</span>
+        <input
+          value={filter}
+          onChange={(event) => setFilter(event.target.value)}
+          placeholder="Filter resources..."
+          className="h-8 w-full rounded border border-neutral-300 bg-white px-2 text-xs text-neutral-900 outline-none focus:border-cyan-600 focus:ring-1 focus:ring-cyan-300"
+        />
+      </label>
 
       <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
-        <FlowCount label="Need" value={externalInputs.length} tone="red" />
-        <FlowCount label="Output" value={finalOutputs.length} tone="emerald" />
-        <FlowCount label="Internal" value={balanced.length} tone="neutral" />
+        {tabs.map((tab) => (
+          <FlowTabButton
+            key={tab.id}
+            active={activeConfig.id === tab.id}
+            label={tab.label}
+            value={tab.items.length}
+            tone={tab.tone}
+            onClick={() => setActiveTab(tab.id)}
+          />
+        ))}
       </div>
 
       <FlowIOSection
-        title="Needed inputs"
-        empty="No missing inputs."
-        items={externalInputs}
+        title={activeConfig.label}
+        empty={filter ? "No matching resources." : activeConfig.empty}
+        items={filteredItems}
+        totalCount={activeConfig.items.length}
         resourcesByKey={resourcesByKey}
-        mode="uses"
-        value={(balance) => balance.deficitPerSecond}
-        onInspect={inspectResource}
-      />
-      <FlowIOSection
-        title="Final outputs"
-        empty="No unconsumed outputs."
-        items={finalOutputs}
-        resourcesByKey={resourcesByKey}
-        mode="recipes"
-        value={(balance) => balance.surplusPerSecond}
-        onInspect={inspectResource}
-      />
-      <FlowIOSection
-        title="Balanced internal"
-        empty="No balanced internal resources."
-        items={balanced}
-        resourcesByKey={resourcesByKey}
-        mode="uses"
-        value={(balance) => balance.consumedPerSecond}
+        mode={activeConfig.mode}
+        value={activeConfig.value}
         onInspect={inspectResource}
       />
     </section>
   );
 }
 
-function FlowCount({
+type FlowIOTab = "need" | "output" | "internal";
+
+interface FlowIOTabConfig {
+  id: FlowIOTab;
+  label: string;
+  empty: string;
+  items: ResourceBalance[];
+  mode: "recipes" | "uses";
+  tone: "red" | "emerald" | "neutral";
+  value: (balance: ResourceBalance) => number;
+}
+
+function FlowTabButton({
   label,
   value,
   tone,
+  active,
+  onClick,
 }: {
   label: string;
   value: number;
   tone: "red" | "emerald" | "neutral";
+  active: boolean;
+  onClick: () => void;
 }) {
   const toneClass =
     tone === "red"
-      ? "border-red-200 bg-red-50 text-red-900"
+      ? active
+        ? "border-red-400 bg-red-100 text-red-950"
+        : "border-red-200 bg-red-50 text-red-900"
       : tone === "emerald"
-        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
-        : "border-neutral-200 bg-neutral-50 text-neutral-800";
+        ? active
+          ? "border-emerald-400 bg-emerald-100 text-emerald-950"
+          : "border-emerald-200 bg-emerald-50 text-emerald-900"
+        : active
+          ? "border-neutral-400 bg-neutral-200 text-neutral-950"
+          : "border-neutral-200 bg-neutral-50 text-neutral-800";
 
   return (
-    <div className={["rounded border px-2 py-1", toneClass].join(" ")}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={["rounded border px-2 py-1 hover:brightness-95", toneClass].join(" ")}
+    >
       <div className="font-semibold">{value}</div>
       <div className="uppercase tracking-wide opacity-70">{label}</div>
-    </div>
+    </button>
   );
 }
 
@@ -197,6 +247,7 @@ function FlowIOSection({
   title,
   empty,
   items,
+  totalCount,
   resourcesByKey,
   mode,
   value,
@@ -205,6 +256,7 @@ function FlowIOSection({
   title: string;
   empty: string;
   items: ResourceBalance[];
+  totalCount: number;
   resourcesByKey: Map<string, FlowResourceDisplay>;
   mode: "recipes" | "uses";
   value: (balance: ResourceBalance) => number;
@@ -214,15 +266,15 @@ function FlowIOSection({
     <div className="mt-3">
       <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
         <span>{title}</span>
-        {items.length > 8 ? <span>Top 8 / {items.length}</span> : null}
+        <span>{items.length === totalCount ? items.length : `${items.length} / ${totalCount}`}</span>
       </div>
       {items.length === 0 ? (
         <p className="rounded border border-neutral-200 bg-white px-2 py-2 text-xs text-neutral-500">
           {empty}
         </p>
       ) : (
-        <div className="space-y-1">
-          {items.slice(0, 8).map((balance) => {
+        <div className="max-h-[420px] space-y-1 overflow-y-auto pr-1">
+          {items.map((balance) => {
             const resource = resourcesByKey.get(balance.key);
             return (
               <button
@@ -266,6 +318,25 @@ function FlowIOSection({
         </div>
       )}
     </div>
+  );
+}
+
+function filterFlowItems(items: ResourceBalance[], filter: string) {
+  const normalizedFilter = filter.trim().toLowerCase();
+  if (!normalizedFilter) {
+    return items;
+  }
+
+  return items.filter((balance) =>
+    [
+      balance.key,
+      balance.resourceId,
+      balance.displayName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedFilter),
   );
 }
 
