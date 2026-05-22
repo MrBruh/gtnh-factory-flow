@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       force_rebuild:
-        description: "Rebuild selected datasets even if they are already published"
+        description: "Rebuild and publish selected datasets even if they are already published"
         required: true
         default: false
         type: boolean
@@ -147,7 +147,7 @@ jobs:
   publish:
     name: Publish generated datasets
     needs: build
-    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || inputs.publish == true) }}
+    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || inputs.publish == true || inputs.force_rebuild == true) }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
       - uses: actions/checkout@v4
