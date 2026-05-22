@@ -761,8 +761,13 @@ export function FactoryFlow() {
     ({ nodes: selectedNodes, edges: selectedEdges }: OnSelectionChangeParams) => {
       setSelectedNodeIds(selectedNodes.map((node) => node.id));
       setSelectedEdgeIds(selectedEdges.map((edge) => edge.id));
+
+      const selectedRecipeNode = [...selectedNodes]
+        .reverse()
+        .find((node) => node.type === "recipeNode");
+      selectNode(selectedRecipeNode?.id);
     },
-    [],
+    [selectNode],
   );
 
   const handleNodeClick = useCallback(
