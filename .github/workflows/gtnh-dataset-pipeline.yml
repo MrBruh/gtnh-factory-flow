@@ -101,9 +101,10 @@ jobs:
           staging_root="$HOME/data/gtnh-factory-flow/staging/${GITHUB_RUN_ID}/datasets/gtnh"
           rm -rf "$staging_root/${GTNH_VERSION_ID}"
           mkdir -p "$staging_root"
+          container_name="gtnh-export-${GTNH_VERSION_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
           docker run --rm \
-            --name "gtnh-export-${GTNH_VERSION_ID}" \
+            --name "$container_name" \
             --user "$(id -u):$(id -g)" \
             --shm-size=2g \
             --memory=10g \
