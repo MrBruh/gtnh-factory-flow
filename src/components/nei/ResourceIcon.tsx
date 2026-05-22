@@ -3,11 +3,16 @@
 import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
 import { MinecraftTooltip } from "./MinecraftTooltip";
 
+type DisplayResourceAmount = Pick<
+  ResourceAmount,
+  "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "tooltip" | "alternatives"
+> & {
+  consumed?: boolean;
+  chance?: number;
+};
+
 interface ResourceIconProps {
-  resource?: Pick<
-    ResourceAmount,
-    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "tooltip" | "alternatives"
-  > & { consumed?: boolean; chance?: number };
+  resource?: DisplayResourceAmount;
   size?: "sm" | "md" | "lg" | "xl";
   showAmount?: boolean;
   showName?: boolean;
@@ -55,7 +60,10 @@ export function ResourceIcon({
       {resource?.chance !== undefined ? <ChanceLabel chance={resource.chance} /> : null}
 
       {resource?.consumed === false ? (
-        <span className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]">
+        <span
+          title="Not consumed"
+          className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]"
+        >
           NC
         </span>
       ) : null}
@@ -93,6 +101,7 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
     resource.chance !== undefined && Number.isFinite(resource.chance) && resource.chance < 1
       ? `Chance: ${trimAmount(resource.chance * 100)}%`
       : undefined;
+  const consumedLine = resource.consumed === false ? "Not consumed" : undefined;
   const alternativesLine = resource.alternatives?.length
     ? `Accepts: ${resource.alternatives
         .slice(0, 12)
@@ -100,7 +109,7 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
         .join(", ")}${resource.alternatives.length > 12 ? `, +${resource.alternatives.length - 12} more` : ""}`
     : undefined;
 
-  return [...baseLines, alternativesLine, chanceLine].filter(Boolean).join("\n");
+  return [...baseLines, alternativesLine, chanceLine, consumedLine].filter(Boolean).join("\n");
 }
 
 function ChanceLabel({ chance }: { chance: number }) {
@@ -110,7 +119,7 @@ function ChanceLabel({ chance }: { chance: number }) {
 
   const label = `${trimAmount(chance * 100)}%`;
   return (
-    <span className="absolute right-0.5 top-0 max-w-[95%] truncate font-mono text-[9px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]">
+    <span className="absolute left-0 top-0 max-w-[95%] truncate font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]">
       {label}
     </span>
   );
