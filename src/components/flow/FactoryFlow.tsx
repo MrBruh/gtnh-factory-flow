@@ -1129,20 +1129,15 @@ function getOffsetEdgePath({
 
   const middleX = (sourceX + targetX) / 2;
   const middleY = (sourceY + targetY) / 2;
-  const desiredLabelX = middleX + offset.x;
-  const desiredLabelY = middleY + offset.y;
-  const useVerticalLabelAxis = Math.abs(offset.y) >= Math.abs(offset.x);
-  const bendX = useVerticalLabelAxis ? desiredLabelX : middleX;
-  const bendY = useVerticalLabelAxis ? middleY : desiredLabelY;
-  const labelX = useVerticalLabelAxis ? bendX : (bendX + targetX) / 2;
-  const labelY = useVerticalLabelAxis ? (sourceY + bendY) / 2 : bendY;
+  const labelX = middleX + offset.x;
+  const labelY = middleY + offset.y;
 
   return [
     [
       `M ${sourceX},${sourceY}`,
-      `L ${bendX},${sourceY}`,
-      `L ${bendX},${bendY}`,
-      `L ${targetX},${bendY}`,
+      `L ${labelX},${sourceY}`,
+      `L ${labelX},${labelY}`,
+      `L ${targetX},${labelY}`,
       `L ${targetX},${targetY}`,
     ].join(" "),
     labelX,
