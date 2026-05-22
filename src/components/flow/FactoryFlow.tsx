@@ -963,10 +963,12 @@ function ResourceEdge({
           })
       : getDirectEdgePath({
           sourceNodeId: source,
+          sourceIsRecipeNode: !data?.sourceStorageEndpoint,
           sourceX: visualSource.x,
           sourceY: visualSource.y,
           sourcePosition,
           targetNodeId: target,
+          targetIsRecipeNode: !data?.targetStorageEndpoint,
           targetX: visualTarget.x,
           targetY: visualTarget.y,
           targetPosition,
@@ -1282,57 +1284,50 @@ function inferRepeatedOutputHandleIds(project: FactoryProject, edge: FactoryEdge
 
 function getDirectEdgePath({
   sourceNodeId,
+  sourceIsRecipeNode,
   sourceX,
   sourceY,
   sourcePosition,
   targetNodeId,
+  targetIsRecipeNode,
   targetX,
   targetY,
   targetPosition,
 }: {
   sourceNodeId?: string;
+  sourceIsRecipeNode?: boolean;
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
   targetNodeId?: string;
+  targetIsRecipeNode?: boolean;
   targetX: number;
   targetY: number;
   targetPosition: Position;
 }) {
-  const isOpposedHorizontal =
-    (sourcePosition === Position.Right && targetPosition === Position.Left) ||
-    (sourcePosition === Position.Left && targetPosition === Position.Right);
-  const isForward =
-    (sourcePosition === Position.Right && targetX >= sourceX) ||
-    (sourcePosition === Position.Left && targetX <= sourceX);
+  const topLanePoints =
+    sourceIsRecipeNode && targetIsRecipeNode
+      ? getTopLaneEdgePoints({
+          sourceNodeId,
+          sourceX,
+          sourceY,
+          targetNodeId,
+          targetX,
+          targetY,
+        })
+      : undefined;
 
-  if (isOpposedHorizontal && isForward && Math.abs(targetY - sourceY) < 18) {
-    const topLanePoints = getTopLaneEdgePoints({
-      sourceNodeId,
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetNodeId,
-      targetX,
-      targetY,
-      targetPosition,
-    });
-    const points =
-      topLanePoints ??
-      compactPolylinePoints([
-        { x: sourceX, y: sourceY },
-        { x: targetX, y: targetY },
-      ]);
-    const labelPoint = getPointAtPolylineRatio(points, 0.5) ?? {
+  if (topLanePoints) {
+    const labelPoint = getPointAtPolylineRatio(topLanePoints, 0.5) ?? {
       x: (sourceX + targetX) / 2,
       y: (sourceY + targetY) / 2,
     };
 
     return {
-      path: pointsToSvgPath(points),
+      path: pointsToSvgPath(topLanePoints),
       labelX: labelPoint.x,
       labelY: labelPoint.y,
-      points,
+      points: topLanePoints,
     };
   }
 
@@ -1516,20 +1511,16 @@ function getTopLaneEdgePoints({
   sourceNodeId,
   sourceX,
   sourceY,
-  sourcePosition,
   targetNodeId,
   targetX,
   targetY,
-  targetPosition,
 }: {
   sourceNodeId?: string;
   sourceX: number;
   sourceY: number;
-  sourcePosition: Position;
   targetNodeId?: string;
   targetX: number;
   targetY: number;
-  targetPosition: Position;
 }) {
   if (!sourceNodeId || !targetNodeId) {
     return undefined;
@@ -1541,11 +1532,25 @@ function getTopLaneEdgePoints({
     return undefined;
   }
 
-  const laneY = Math.min(sourceBounds.top, targetBounds.top) - 18;
-  const sourceExitX =
-    sourcePosition === Position.Right ? sourceBounds.right + 14 : sourceBounds.left - 14;
-  const targetApproachX =
-    targetPosition === Position.Left ? targetBounds.left - 14 : targetBounds.right + 14;
+  const goesRight = targetX >= sourceX;
+  const horizontalGap = goesRight
+    ? targetBounds.left - sourceBounds.right
+    : sourceBounds.left - targetBounds.right;
+  const sourcePointInsideNode = sourceY >= sourceBounds.top && sourceY <= sourceBounds.bottom;
+  const targetPointInsideNode = targetY >= targetBounds.top && targetY <= targetBounds.bottom;
+  const roughlySameRow = Math.abs(targetY - sourceY) <= 90;
+
+  if (horizontalGap < 24 || horizontalGap > 900 || !sourcePointInsideNode || !targetPointInsideNode) {
+    return undefined;
+  }
+
+  if (!roughlySameRow) {
+    return undefined;
+  }
+
+  const laneY = Math.min(sourceBounds.top, targetBounds.top, sourceY, targetY) - 28;
+  const sourceExitX = goesRight ? sourceBounds.right + 14 : sourceBounds.left - 14;
+  const targetApproachX = goesRight ? targetBounds.left - 14 : targetBounds.right + 14;
 
   return compactPolylinePoints([
     { x: sourceX, y: sourceY },
