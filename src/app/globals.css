@@ -43,6 +43,10 @@ textarea {
   z-index: 20 !important;
 }
 
+.factory-flow-board .react-flow__node.selected {
+  z-index: 20 !important;
+}
+
 .factory-flow-board .react-flow__node.dragging {
   z-index: 30 !important;
 }
