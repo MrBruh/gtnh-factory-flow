@@ -306,6 +306,20 @@ function requiredEnv(name) {
   return value;
 }
 
+function positiveIntEnv(name, fallback) {
+  const rawValue = process.env[name];
+  if (!rawValue) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer.`);
+  }
+
+  return parsed;
+}
+
 async function gzipFile(inputPath, outputPath) {
   await pipeline(
     createReadStream(inputPath),
