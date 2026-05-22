@@ -15,6 +15,9 @@ import {
   parseFactoryProjectJson,
   serializeFactoryProject,
 } from "@/lib/import-export";
+import { DEFAULT_DATASET_MANIFEST_URL } from "@/lib/datasets";
+import { getRecipeDatasetRecipe } from "@/lib/datasets/browser-loader";
+import type { DatasetVersion } from "@/lib/datasets";
 import {
   FLOW_IMAGE_EXPORT_EVENT,
   extractProjectJsonFromPng,
@@ -65,7 +68,15 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const importProjectJson = async (file: File) => {
     try {
       const text = await readProjectFile(file);
-      setProject(cloneImportedProject(parseFactoryProjectJson(text)));
+      const selectedDatasetVersion = manifest?.versions.find(
+        (version) => version.id === selectedDatasetVersionId,
+      );
+      const importedProject = cloneImportedProject(parseFactoryProjectJson(text));
+      setProject(
+        selectedDatasetVersion
+          ? await hydrateImportedProjectRecipes(importedProject, selectedDatasetVersion)
+          : importedProject,
+      );
     } catch (error) {
       console.error(error instanceof Error ? error.message : "Plan import failed.");
     } finally {
@@ -217,6 +228,26 @@ async function readProjectFile(file: File): Promise<string> {
   }
 
   return file.text();
+}
+
+async function hydrateImportedProjectRecipes(
+  project: ReturnType<typeof parseFactoryProjectJson>,
+  version: DatasetVersion,
+) {
+  const hydratedRecipes = await Promise.all(
+    project.recipes.map(async (recipe) => {
+      try {
+        return await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, recipe.id);
+      } catch {
+        return recipe;
+      }
+    }),
+  );
+
+  return {
+    ...project,
+    recipes: hydratedRecipes,
+  };
 }
 
 function ExportMenuItem({
