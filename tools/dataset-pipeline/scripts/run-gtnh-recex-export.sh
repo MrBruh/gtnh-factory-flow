@@ -107,6 +107,7 @@ export _JAVA_OPTIONS="${_JAVA_OPTIONS:-} -Xms4G -Xmx${GTNH_EXPORT_MAX_MEMORY}"
 if [[ "$GTNH_EXPORT_PACK_KIND" == "client" ]]; then
   client_runtime_dir="$GTNH_INSTANCE_DIR/client-runtime"
   launch_script="$(node tools/dataset-pipeline/scripts/prepare-forge-client-launch.mjs "$instance_root" "$client_runtime_dir")"
+  bash tools/dataset-pipeline/scripts/install-ae2fc-nei-compat-shim.sh "$instance_root" "$client_runtime_dir" "$GTNH_RAW_EXPORT_DIR"
   if command -v xvfb-run >/dev/null 2>&1 && [[ -z "${DISPLAY:-}" ]]; then
     runtime_command="xvfb-run -a bash '$launch_script'"
   else
