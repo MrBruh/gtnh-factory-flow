@@ -1,4 +1,8 @@
 import type { Recipe, ResourceAmount, ResourceKind } from "@/lib/model/types";
+import {
+  knownRecipeMapSlotCapacity,
+  mergeRecipeMapSlotCapacity,
+} from "@/lib/model/recipe-map-capacities";
 
 export interface NeiPoint {
   x: number;
@@ -128,11 +132,14 @@ const CRAFTING_TABLE_MAPS = new Set([
 ]);
 
 const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
+  "Blast Furnace": {
+    id: "blast-furnace",
+  },
   Centrifuge: {
     id: "centrifuge",
-    maxItemInputs: 1,
+    maxItemInputs: 2,
     maxItemOutputs: 6,
-    maxFluidInputs: 0,
+    maxFluidInputs: 1,
     maxFluidOutputs: 1,
   },
   "Chemical Plant": {
@@ -346,11 +353,13 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
 
 function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLayoutDefinition {
   const exact = findRecipeMapLayout(recipeMap);
+  if (exact && recipeMapMatches(recipeMap, "Blast Furnace")) return exact;
+
   if (matchesKnownRecipeMap(recipeMap, CRAFTING_TABLE_MAPS)) {
     return craftingTableLayout(recipe);
   }
 
-  if (recipeMapMatches(recipeMap, "Furnace")) {
+  if (isPlainFurnaceRecipeMap(recipeMap)) {
     return furnaceLayout();
   }
 
@@ -412,6 +421,10 @@ function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLa
   return {
     id: "default",
   };
+}
+
+function isPlainFurnaceRecipeMap(recipeMap: string): boolean {
+  return normalizeRecipeMapName(recipeMap) === "furnace";
 }
 
 function craftingTableLayout(recipe: Recipe): RecipeMapLayoutDefinition {
@@ -724,7 +737,8 @@ function withRequiredMaxes(
   definition: RecipeMapLayoutDefinition,
   recipe: Recipe,
 ): RequiredRecipeMapLayoutDefinition {
-  const machineDefinition = withMachineMaxes(definition, recipe);
+  const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  const machineDefinition = withMachineMaxes(definition, recipe, recipeMap);
 
   return {
     maxItemInputs: Math.max(machineDefinition.maxItemInputs, countKind(recipe.inputs, "item")),
@@ -740,8 +754,12 @@ function withRequiredMaxes(
 function withMachineMaxes(
   definition: RecipeMapLayoutDefinition,
   recipe: Recipe,
+  recipeMap: string,
 ): RequiredRecipeMapLayoutDefinition {
-  const capacity = recipe.nei?.slotCapacity;
+  const capacity = mergeRecipeMapSlotCapacity(
+    recipe.nei?.slotCapacity,
+    knownRecipeMapSlotCapacity(recipeMap),
+  );
 
   return {
     maxItemInputs: Math.max(definition.maxItemInputs ?? 1, capacity?.maxItemInputs ?? 0),
@@ -761,7 +779,11 @@ function buildOverflowGroups(
     fluidOutputs: number;
   },
 ): NeiOverflowGroup[] {
-  const capacity = recipe.nei?.slotCapacity;
+  const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  const capacity = mergeRecipeMapSlotCapacity(
+    recipe.nei?.slotCapacity,
+    knownRecipeMapSlotCapacity(recipeMap),
+  );
 
   return [
     overflowGroup(

@@ -163,7 +163,17 @@ describe("NEI layout", () => {
     const itemOutputFrames = layout.frames.filter(
       (frame) => frame.kind === "item" && frame.side === "output",
     );
+    const itemInputFrames = layout.frames.filter(
+      (frame) => frame.kind === "item" && frame.side === "input",
+    );
+    const fluidInputFrames = layout.frames.filter(
+      (frame) => frame.kind === "fluid" && frame.side === "input",
+    );
 
+    expect(itemInputFrames).toHaveLength(2);
+    expect(itemInputFrames.filter((frame) => frame.resource)).toHaveLength(1);
+    expect(fluidInputFrames).toHaveLength(1);
+    expect(fluidInputFrames.filter((frame) => frame.resource)).toHaveLength(1);
     expect(itemOutputFrames).toHaveLength(6);
     expect(itemOutputFrames.filter((frame) => frame.resource)).toHaveLength(3);
     expect(itemOutputFrames.map((frame) => [frame.x, frame.y])).toEqual([
@@ -174,6 +184,35 @@ describe("NEI layout", () => {
       [124, 26],
       [142, 26],
     ]);
+  });
+
+  it("does not collapse Blast Furnace into the plain furnace layout", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Blast Furnace",
+        sourceRecipeMap: "Blast Furnace",
+        inputs: [{ kind: "item", id: "dust", amount: 1 }],
+        outputs: [
+          { kind: "item", id: "ingot", amount: 1 },
+          { kind: "fluid", id: "chlorine", amount: 87 },
+        ],
+      }),
+    );
+
+    expect(layout.id).toBe("blast-furnace");
+    expect(layout.overflowGroups).toEqual([]);
+    expect(
+      layout.frames.filter((frame) => frame.kind === "item" && frame.side === "input"),
+    ).toHaveLength(6);
+    expect(
+      layout.frames.filter((frame) => frame.kind === "item" && frame.side === "output"),
+    ).toHaveLength(6);
+    expect(
+      layout.frames.filter((frame) => frame.kind === "fluid" && frame.side === "input"),
+    ).toHaveLength(1);
+    expect(
+      layout.frames.filter((frame) => frame.kind === "fluid" && frame.side === "output"),
+    ).toHaveLength(1);
   });
 
   it("uses enriched recipe map slot capacities for partial electrolyzer outputs", () => {

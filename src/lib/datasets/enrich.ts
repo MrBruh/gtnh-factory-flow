@@ -1,53 +1,10 @@
 import type { DatasetResource, DatasetResourceIndexEntry, RecipeDataset } from "./types";
 import type { Recipe, ResourceAmount } from "../model/types";
-
-interface RecipeMapSlotCapacity {
-  maxItemInputs?: number;
-  maxItemOutputs?: number;
-  maxFluidInputs?: number;
-  maxFluidOutputs?: number;
-}
-
-const RECIPE_MAP_SLOT_CAPACITY_OVERRIDES: Array<{
-  patterns: string[];
-  capacity: RecipeMapSlotCapacity;
-}> = [
-  {
-    patterns: ["centrifuge"],
-    capacity: { maxItemOutputs: 6, maxFluidOutputs: 1 },
-  },
-  {
-    patterns: ["chemical plant"],
-    capacity: { maxItemInputs: 4, maxItemOutputs: 6, maxFluidInputs: 4, maxFluidOutputs: 3 },
-  },
-  {
-    patterns: ["distillation tower"],
-    capacity: { maxItemOutputs: 1, maxFluidOutputs: 11 },
-  },
-  {
-    patterns: ["zhuhai", "fishing port"],
-    capacity: { maxItemInputs: 1, maxItemOutputs: 25 },
-  },
-  {
-    patterns: [
-      "entropic processing",
-      "large chemical reactor",
-      "plasma arc furnace",
-      "vacuum furnace",
-      "vacuum freezer",
-      "multiblock centrifuge",
-      "multiblock electrolyzer",
-      "multiblock mixer",
-      "multiblock dehydrator",
-      "transcendent plasma mixer",
-    ],
-    capacity: { maxItemInputs: 6, maxItemOutputs: 6, maxFluidInputs: 6, maxFluidOutputs: 6 },
-  },
-  {
-    patterns: ["electrolyzer"],
-    capacity: { maxItemOutputs: 6 },
-  },
-];
+import {
+  knownRecipeMapSlotCapacity,
+  mergeRecipeMapSlotCapacity,
+  type RecipeMapSlotCapacity,
+} from "../model/recipe-map-capacities";
 
 export function enrichDatasetRecipes(dataset: RecipeDataset): RecipeDataset {
   const resourcesByKey = new Map(
@@ -110,9 +67,9 @@ function enrichRecipe(
   slotCapacitiesByRecipeMap: Map<string, RecipeMapSlotCapacity>,
 ): Recipe {
   const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
-  const slotCapacity = mergeSlotCapacity(
+  const slotCapacity = mergeRecipeMapSlotCapacity(
     slotCapacitiesByRecipeMap.get(recipeMap),
-    recipeMapSlotCapacityOverride(recipeMap),
+    knownRecipeMapSlotCapacity(recipeMap),
   );
 
   return {
@@ -122,7 +79,7 @@ function enrichRecipe(
     nei: slotCapacity
       ? {
           ...recipe.nei,
-          slotCapacity: mergeSlotCapacity(recipe.nei?.slotCapacity, slotCapacity),
+          slotCapacity: mergeRecipeMapSlotCapacity(recipe.nei?.slotCapacity, slotCapacity),
         }
       : recipe.nei,
   };
@@ -166,17 +123,10 @@ function buildRecipeMapSlotCapacities(recipes: Recipe[]): Map<string, RecipeMapS
   for (const recipe of recipes) {
     const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
     const existing = capacities.get(recipeMap) ?? {};
-    capacities.set(recipeMap, mergeSlotCapacity(existing, observedSlotCapacity(recipe)));
+    capacities.set(recipeMap, mergeRecipeMapSlotCapacity(existing, observedSlotCapacity(recipe)));
   }
 
   return capacities;
-}
-
-function recipeMapSlotCapacityOverride(recipeMap: string): RecipeMapSlotCapacity | undefined {
-  const normalized = recipeMap.toLowerCase();
-  return RECIPE_MAP_SLOT_CAPACITY_OVERRIDES.find((override) =>
-    override.patterns.some((pattern) => normalized.includes(pattern)),
-  )?.capacity;
 }
 
 function observedSlotCapacity(recipe: Recipe): RecipeMapSlotCapacity {
@@ -213,32 +163,10 @@ function gridCapacity(grid?: { width: number; height: number }): number | undefi
   return Math.max(0, grid.width * grid.height);
 }
 
-function mergeSlotCapacity(
-  left: RecipeMapSlotCapacity | undefined,
-  right: RecipeMapSlotCapacity | undefined,
-): RecipeMapSlotCapacity {
-  return compactSlotCapacity({
-    maxItemInputs: maxOptional(left?.maxItemInputs, right?.maxItemInputs),
-    maxItemOutputs: maxOptional(left?.maxItemOutputs, right?.maxItemOutputs),
-    maxFluidInputs: maxOptional(left?.maxFluidInputs, right?.maxFluidInputs),
-    maxFluidOutputs: maxOptional(left?.maxFluidOutputs, right?.maxFluidOutputs),
-  });
-}
-
 function compactSlotCapacity(capacity: RecipeMapSlotCapacity): RecipeMapSlotCapacity {
   return Object.fromEntries(
     Object.entries(capacity).filter(([, value]) => typeof value === "number" && value > 0),
   ) as RecipeMapSlotCapacity;
-}
-
-function maxOptional(left?: number, right?: number): number | undefined {
-  if (left === undefined) {
-    return right;
-  }
-  if (right === undefined) {
-    return left;
-  }
-  return Math.max(left, right);
 }
 
 function countKind(resources: ResourceAmount[], kind: ResourceAmount["kind"]) {
