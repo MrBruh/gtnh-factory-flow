@@ -203,6 +203,8 @@ export function calculateThroughput(
     edgeResults[edge.id] = buildEdgeResult(edge, key, demandPerSecond, transferredPerSecond);
   }
 
+  aggregateStorageFlowsByResource(projectStorages, storages);
+
   for (const storageResult of Object.values(storages)) {
     finalizeStorageFlow(storageResult);
   }
@@ -492,6 +494,61 @@ function updateStorageFlow(
 
   storage.producedPerSecond += producedPerSecond;
   storage.consumedPerSecond += consumedPerSecond;
+}
+
+function aggregateStorageFlowsByResource(
+  projectStorages: FactoryStorage[],
+  storages: Record<string, StorageThroughputResult>,
+) {
+  const aggregateByResource = new Map<
+    ResourceKey,
+    Pick<
+      StorageThroughputResult,
+      "capacity" | "producedPerSecond" | "consumedPerSecond" | "netPerSecond" | "storedAmount"
+    >
+  >();
+
+  for (const storage of projectStorages) {
+    const result = storages[storage.id];
+    if (!result) {
+      continue;
+    }
+
+    const key = makeResourceKey(storage.kind, storage.resourceId);
+    const aggregate = aggregateByResource.get(key);
+    if (aggregate) {
+      aggregate.capacity += result.capacity;
+      aggregate.producedPerSecond += result.producedPerSecond;
+      aggregate.consumedPerSecond += result.consumedPerSecond;
+    } else {
+      aggregateByResource.set(key, {
+        capacity: result.capacity,
+        producedPerSecond: result.producedPerSecond,
+        consumedPerSecond: result.consumedPerSecond,
+        netPerSecond: 0,
+        storedAmount: 0,
+      });
+    }
+  }
+
+  for (const aggregate of aggregateByResource.values()) {
+    aggregate.netPerSecond = aggregate.producedPerSecond - aggregate.consumedPerSecond;
+    aggregate.storedAmount = Math.max(0, Math.min(aggregate.capacity, aggregate.netPerSecond));
+  }
+
+  for (const storage of projectStorages) {
+    const result = storages[storage.id];
+    const aggregate = aggregateByResource.get(makeResourceKey(storage.kind, storage.resourceId));
+    if (!result || !aggregate) {
+      continue;
+    }
+
+    result.capacity = aggregate.capacity;
+    result.producedPerSecond = aggregate.producedPerSecond;
+    result.consumedPerSecond = aggregate.consumedPerSecond;
+    result.netPerSecond = aggregate.netPerSecond;
+    result.storedAmount = aggregate.storedAmount;
+  }
 }
 
 function finalizeStorageFlow(storage: StorageThroughputResult) {

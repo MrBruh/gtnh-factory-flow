@@ -244,6 +244,100 @@ describe("calculateThroughput", () => {
     expect(result.storages["dust-drawer"].status).toBe("draining");
   });
 
+  it("aggregates drawer and tank throughput by referenced resource", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "storage-reference-project",
+      name: "Storage reference aggregation test",
+      recipes: [
+        {
+          id: "source-recipe",
+          name: "Dust source",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "dust", amount: 5 }],
+        },
+        {
+          id: "consumer-recipe",
+          name: "Dust consumer",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "dust", amount: 2 }],
+          outputs: [{ kind: "item", id: "plate", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "source",
+          recipeId: "source-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "consumer",
+          recipeId: "consumer-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 400, y: 0 },
+        },
+      ],
+      storages: [
+        {
+          id: "dust-drawer-a",
+          kind: "item",
+          resourceId: "dust",
+          displayName: "Dust",
+          position: { x: 160, y: 0 },
+        },
+        {
+          id: "dust-drawer-b",
+          kind: "item",
+          resourceId: "dust",
+          displayName: "Dust",
+          position: { x: 260, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "source-to-drawer",
+          source: "source",
+          target: "dust-drawer-a",
+          resourceKind: "item",
+          resourceId: "dust",
+          label: "Dust",
+        },
+        {
+          id: "drawer-to-consumer",
+          source: "dust-drawer-b",
+          target: "consumer",
+          resourceKind: "item",
+          resourceId: "dust",
+          label: "Dust",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    for (const storageId of ["dust-drawer-a", "dust-drawer-b"]) {
+      expect(result.storages[storageId].producedPerSecond).toBeCloseTo(5);
+      expect(result.storages[storageId].consumedPerSecond).toBeCloseTo(2);
+      expect(result.storages[storageId].netPerSecond).toBeCloseTo(3);
+      expect(result.storages[storageId].status).toBe("filling");
+    }
+  });
+
   it("does not consume non-consumed recipe inputs", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
