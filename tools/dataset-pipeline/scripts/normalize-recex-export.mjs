@@ -20,6 +20,7 @@ const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
 const resources = new Map();
 const recipeMaps = [];
 const recipes = [];
+const recipeSignatures = new Set();
 const oreDictionary = {};
 
 const sources = Array.isArray(raw.sources) ? raw.sources : [];
@@ -67,7 +68,7 @@ if (dataset.recipes.length === 0) {
 await pruneUnusedRenderedIcons(dataset, outDir);
 
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
-await fs.writeFile(outputPath, `${JSON.stringify(dataset, null, 2)}\n`);
+await writeDatasetJson(outputPath, dataset);
 console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
 
 function normalizeGregtechRecipes(source) {
@@ -215,10 +216,38 @@ function normalizeSmeltingSource(source) {
 }
 
 function addRecipe(recipe) {
+  const signature = recipeSignature(recipe);
+  if (recipeSignatures.has(signature)) {
+    return;
+  }
+  recipeSignatures.add(signature);
+
   for (const resource of [...recipe.inputs, ...recipe.outputs]) {
     addResource(resource);
   }
   recipes.push(recipe);
+}
+
+function recipeSignature(recipe) {
+  return JSON.stringify({
+    machineType: recipe.machineType,
+    minimumTier: recipe.minimumTier,
+    durationTicks: recipe.durationTicks,
+    eut: recipe.eut,
+    programmedCircuit: recipe.programmedCircuit,
+    inputs: recipe.inputs?.map(resourceSignature) ?? [],
+    outputs: recipe.outputs?.map(resourceSignature) ?? [],
+  });
+}
+
+function resourceSignature(resource) {
+  return [
+    resource.kind,
+    resource.id,
+    resource.amount,
+    resource.consumed === false ? "nc" : "",
+    resource.chance ?? "",
+  ];
 }
 
 function addResource(resource) {
@@ -534,4 +563,47 @@ function addRenderedFile(iconPath, usedFiles) {
     return;
   }
   usedFiles.add(path.basename(String(iconPath)));
+}
+
+async function writeDatasetJson(filePath, dataset) {
+  const handle = await fs.open(filePath, "w");
+  try {
+    await handle.write("{\n");
+    await writeJsonProperty(handle, "schemaVersion", dataset.schemaVersion, true);
+    await writeJsonProperty(handle, "datasetVersionId", dataset.datasetVersionId);
+    await writeJsonProperty(handle, "gtnhVersion", dataset.gtnhVersion);
+    await writeJsonProperty(handle, "sourceInfo", dataset.sourceInfo);
+    await writeJsonArrayProperty(handle, "resources", dataset.resources);
+    await writeJsonArrayProperty(handle, "recipes", dataset.recipes);
+    await writeJsonObjectProperty(handle, "oreDictionary", dataset.oreDictionary);
+    await writeJsonArrayProperty(handle, "recipeMaps", dataset.recipeMaps);
+    await writeJsonProperty(handle, "generatedAt", dataset.generatedAt);
+    await handle.write("\n}\n");
+  } finally {
+    await handle.close();
+  }
+}
+
+async function writeJsonProperty(handle, key, value, first = false) {
+  await handle.write(`${first ? "" : ",\n"}  ${JSON.stringify(key)}: ${JSON.stringify(value)}`);
+}
+
+async function writeJsonArrayProperty(handle, key, values) {
+  await handle.write(`,\n  ${JSON.stringify(key)}: [`);
+  for (let index = 0; index < values.length; index += 1) {
+    await handle.write(`${index === 0 ? "\n" : ",\n"}    ${JSON.stringify(values[index])}`);
+  }
+  await handle.write(values.length > 0 ? "\n  ]" : "]");
+}
+
+async function writeJsonObjectProperty(handle, key, value) {
+  const entries = Object.entries(value);
+  await handle.write(`,\n  ${JSON.stringify(key)}: {`);
+  for (let index = 0; index < entries.length; index += 1) {
+    const [entryKey, entryValue] = entries[index];
+    await handle.write(
+      `${index === 0 ? "\n" : ",\n"}    ${JSON.stringify(entryKey)}: ${JSON.stringify(entryValue)}`,
+    );
+  }
+  await handle.write(entries.length > 0 ? "\n  }" : "}");
 }
