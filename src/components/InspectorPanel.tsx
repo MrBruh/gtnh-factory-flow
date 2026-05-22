@@ -4,7 +4,13 @@ import { Power, Trash2, X } from "lucide-react";
 import { useMemo } from "react";
 import { mergeDatasetAndProjectRecipes } from "@/lib/datasets";
 import { formatRate, formatResourceRate, makeResourceKey, primaryOutput } from "@/lib/model";
-import type { ResourceKind, TargetRate } from "@/lib/model/types";
+import type {
+  FactoryProject,
+  ResourceAmount,
+  ResourceBalance,
+  ResourceKind,
+  TargetRate,
+} from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
@@ -155,6 +161,8 @@ export function InspectorPanel() {
               </label>
             </div>
           </div>
+
+          <FlowIOPanel className="rounded border border-neutral-200 bg-neutral-50 p-3" />
 
           <StorageSummary />
 
@@ -307,20 +315,246 @@ function SummaryPanel({ onSelectFuel }: { onSelectFuel: (fuelProfileId: string) 
           </p>
         </section>
 
-        <ResourceSection
-          title="External inputs required"
-          empty="No external inputs."
-          items={result.externalInputs}
-        />
-        <ResourceSection
-          title="Unconsumed outputs"
-          empty="No surplus outputs."
-          items={result.unconsumedOutputs}
-        />
+        <FlowIOPanel className="mt-4 rounded border border-neutral-200 bg-white p-3" />
         <StorageSummary className="mt-4" />
       </div>
     </>
   );
+}
+
+function FlowIOPanel({ className = "" }: { className?: string }) {
+  const project = useFactoryStore((state) => state.project);
+  const result = useFactoryStore((state) => state.lastResult);
+  const setRecipeSearch = useFactoryStore((state) => state.setRecipeSearch);
+  const browseResource = useFactoryStore((state) => state.browseResource);
+  const resourcesByKey = useMemo(() => buildProjectResourceLookup(project), [project]);
+  const allBalances = useMemo(
+    () =>
+      Object.values(result.resources).sort(
+        (left, right) =>
+          Math.max(right.deficitPerSecond, right.surplusPerSecond) -
+          Math.max(left.deficitPerSecond, left.surplusPerSecond),
+      ),
+    [result.resources],
+  );
+  const externalInputs = result.externalInputs;
+  const finalOutputs = result.unconsumedOutputs;
+  const balanced = allBalances
+    .filter(
+      (balance) =>
+        balance.producedPerSecond > 0 &&
+        balance.consumedPerSecond > 0 &&
+        balance.deficitPerSecond <= 0.000001 &&
+        balance.surplusPerSecond <= 0.000001,
+    )
+    .sort((left, right) => right.consumedPerSecond - left.consumedPerSecond);
+
+  const inspectResource = (balance: ResourceBalance, mode: "recipes" | "uses") => {
+    const resource = resourcesByKey.get(balance.key);
+    setRecipeSearch(balance.displayName ?? balance.resourceId);
+    browseResource(
+      {
+        kind: balance.kind,
+        id: balance.resourceId,
+        displayName: balance.displayName,
+        iconPath: resource?.iconPath,
+        iconAtlas: resource?.iconAtlas,
+        dominantColor: resource?.dominantColor ?? resource?.iconAtlas?.dominantColor,
+      },
+      mode,
+    );
+  };
+
+  return (
+    <section className={className}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Flow I/O
+          </h3>
+          <p className="mt-1 text-xs text-neutral-500">
+            Global resources entering, leaving, or balanced inside the chart.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setRecipeSearch("")}
+          className="h-7 shrink-0 rounded border border-neutral-300 bg-white px-2 text-xs font-medium text-neutral-700 hover:bg-neutral-50"
+        >
+          Clear
+        </button>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-1 text-center text-[11px]">
+        <FlowCount label="Need" value={externalInputs.length} tone="red" />
+        <FlowCount label="Output" value={finalOutputs.length} tone="emerald" />
+        <FlowCount label="Internal" value={balanced.length} tone="neutral" />
+      </div>
+
+      <FlowIOSection
+        title="Needed inputs"
+        empty="No missing inputs."
+        items={externalInputs}
+        resourcesByKey={resourcesByKey}
+        mode="uses"
+        value={(balance) => balance.deficitPerSecond}
+        onInspect={inspectResource}
+      />
+      <FlowIOSection
+        title="Final outputs"
+        empty="No unconsumed outputs."
+        items={finalOutputs}
+        resourcesByKey={resourcesByKey}
+        mode="recipes"
+        value={(balance) => balance.surplusPerSecond}
+        onInspect={inspectResource}
+      />
+      <FlowIOSection
+        title="Balanced internal"
+        empty="No balanced internal resources."
+        items={balanced}
+        resourcesByKey={resourcesByKey}
+        mode="uses"
+        value={(balance) => balance.consumedPerSecond}
+        onInspect={inspectResource}
+      />
+    </section>
+  );
+}
+
+function FlowCount({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "red" | "emerald" | "neutral";
+}) {
+  const toneClass =
+    tone === "red"
+      ? "border-red-200 bg-red-50 text-red-900"
+      : tone === "emerald"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+        : "border-neutral-200 bg-neutral-50 text-neutral-800";
+
+  return (
+    <div className={["rounded border px-2 py-1", toneClass].join(" ")}>
+      <div className="font-semibold">{value}</div>
+      <div className="uppercase tracking-wide opacity-70">{label}</div>
+    </div>
+  );
+}
+
+function FlowIOSection({
+  title,
+  empty,
+  items,
+  resourcesByKey,
+  mode,
+  value,
+  onInspect,
+}: {
+  title: string;
+  empty: string;
+  items: ResourceBalance[];
+  resourcesByKey: Map<string, FlowResourceDisplay>;
+  mode: "recipes" | "uses";
+  value: (balance: ResourceBalance) => number;
+  onInspect: (balance: ResourceBalance, mode: "recipes" | "uses") => void;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
+        <span>{title}</span>
+        {items.length > 8 ? <span>Top 8 / {items.length}</span> : null}
+      </div>
+      {items.length === 0 ? (
+        <p className="rounded border border-neutral-200 bg-white px-2 py-2 text-xs text-neutral-500">
+          {empty}
+        </p>
+      ) : (
+        <div className="space-y-1">
+          {items.slice(0, 8).map((balance) => {
+            const resource = resourcesByKey.get(balance.key);
+            return (
+              <button
+                key={balance.key}
+                type="button"
+                onClick={() => onInspect(balance, mode)}
+                className="grid w-full grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-2 rounded border border-neutral-200 bg-white px-2 py-1 text-left text-xs hover:border-cyan-300 hover:bg-cyan-50"
+                title="Highlight matching nodes and open this resource in the browser"
+              >
+                <ResourceIcon
+                  resource={{
+                    kind: balance.kind,
+                    id: balance.resourceId,
+                    amount: 1,
+                    displayName: balance.displayName,
+                    iconPath: resource?.iconPath,
+                    iconAtlas: resource?.iconAtlas,
+                  }}
+                  size="sm"
+                  showAmount={false}
+                  bare
+                  tooltip={false}
+                  className="!h-6 !w-6"
+                />
+                <span className="min-w-0">
+                  <span className="block truncate font-medium text-neutral-900">
+                    {balance.displayName ?? balance.resourceId}
+                  </span>
+                  <span className="block truncate text-[10px] text-neutral-500">
+                    +{formatRate(balance.producedPerSecond, 3)}/s -
+                    {formatRate(balance.consumedPerSecond, 3)}/s
+                  </span>
+                </span>
+                <span className="font-semibold text-neutral-950">
+                  {formatRate(value(balance), 3)}
+                  {balance.kind === "fluid" ? "L/s" : "/s"}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type FlowResourceDisplay = Pick<
+  ResourceAmount,
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+>;
+
+function buildProjectResourceLookup(project: FactoryProject): Map<string, FlowResourceDisplay> {
+  const resources = new Map<string, FlowResourceDisplay>();
+  const addResource = (resource: FlowResourceDisplay) => {
+    const key = `${resource.kind}:${resource.id}`;
+    const existing = resources.get(key);
+    if (!existing || (!existing.iconPath && resource.iconPath)) {
+      resources.set(key, resource);
+    }
+  };
+
+  for (const recipe of project.recipes) {
+    for (const resource of [...recipe.inputs, ...recipe.outputs]) {
+      addResource(resource);
+    }
+  }
+
+  for (const storage of project.storages ?? []) {
+    addResource({
+      kind: storage.kind,
+      id: storage.resourceId,
+      displayName: storage.displayName,
+      iconPath: storage.iconPath,
+      iconAtlas: storage.iconAtlas,
+      dominantColor: storage.dominantColor,
+    });
+  }
+
+  return resources;
 }
 
 function StorageSummary({ className = "" }: { className?: string }) {
@@ -386,45 +620,6 @@ function StorageSummary({ className = "" }: { className?: string }) {
                     <Trash2 className="mx-auto h-3.5 w-3.5" />
                   </button>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
-function ResourceSection({
-  title,
-  empty,
-  items,
-}: {
-  title: string;
-  empty: string;
-  items: Array<{
-    key: string;
-    displayName?: string;
-    resourceId: string;
-    surplusPerSecond: number;
-    deficitPerSecond: number;
-  }>;
-}) {
-  return (
-    <section className="mt-4 rounded border border-neutral-200 bg-white p-3">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{title}</h3>
-      {items.length === 0 ? (
-        <p className="mt-2 text-sm text-neutral-500">{empty}</p>
-      ) : (
-        <div className="mt-2 space-y-1">
-          {items.slice(0, 10).map((item) => {
-            const rate = Math.max(item.surplusPerSecond, item.deficitPerSecond);
-            return (
-              <div key={item.key} className="flex items-center justify-between gap-3 text-sm">
-                <span className="min-w-0 truncate text-neutral-700">
-                  {item.displayName ?? item.resourceId}
-                </span>
-                <span className="font-semibold text-neutral-950">{formatRate(rate, 3)}/s</span>
               </div>
             );
           })}
