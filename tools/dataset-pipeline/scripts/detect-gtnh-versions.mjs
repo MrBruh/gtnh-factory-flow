@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const channelInput = process.env.CHANNEL ?? "both";
+const forceRebuild = process.env.FORCE_REBUILD === "true";
 const githubToken = process.env.GITHUB_TOKEN;
 const headers = {
   Accept: "application/vnd.github+json",
@@ -64,6 +65,10 @@ async function readCurrentManifest() {
 }
 
 function shouldBuildVersion(version, manifest) {
+  if (forceRebuild) {
+    return true;
+  }
+
   if (!manifest?.versions?.length) {
     return true;
   }

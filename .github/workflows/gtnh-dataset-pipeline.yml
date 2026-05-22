@@ -17,6 +17,11 @@ on:
         required: true
         default: false
         type: boolean
+      force_rebuild:
+        description: "Rebuild selected datasets even if they are already published"
+        required: true
+        default: false
+        type: boolean
   schedule:
     - cron: "35 5 * * *"
 
@@ -46,6 +51,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
           CHANNEL: ${{ inputs.channel || 'both' }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
         run: GTNH_DATASETS_ROOT="$HOME/data/gtnh-factory-flow/datasets/gtnh" node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
 
       - uses: actions/upload-artifact@v4
