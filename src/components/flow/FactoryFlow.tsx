@@ -2289,7 +2289,7 @@ function exportNodeFilter(domNode: HTMLElement) {
     element?.classList.contains("react-flow__edgeupdater") ||
     element?.classList.contains("react-flow__selection") ||
     element?.classList.contains("react-flow__nodesselection") ||
-    element?.getAttribute("data-resource-handle") === "true"
+    element?.classList.contains("react-flow__handle")
   );
 }
 
