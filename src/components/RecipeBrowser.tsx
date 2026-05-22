@@ -1011,7 +1011,7 @@ function RecipeBookOverlay({
           height: `min(${panelSize.height}px, calc(100vh - 32px))`,
         }}
       >
-        <div className="relative flex min-h-0 flex-1 flex-col border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-2 border-[#f4f4f4] bg-[#c6c6c6] text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]">
           <RecipeMapTabBar
             activeRecipeMap={activeRecipeMap}
             tabs={recipeMapTabs}
