@@ -19,6 +19,20 @@ export const datasetResourceSchema = z.object({
   modId: z.string().optional(),
   tooltip: z.array(z.string()).optional(),
   oreDictionary: z.array(z.string()).optional(),
+  alternatives: z
+    .array(
+      z.object({
+        kind: z.enum(["item", "fluid"]),
+        id: z.string().min(1),
+        displayName: z.string().min(1).optional(),
+        iconPath: z.string().optional(),
+        iconAtlas: resourceIconAtlasRefSchema.optional(),
+        dominantColor: dominantColorSchema,
+        modId: z.string().optional(),
+        tooltip: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const datasetResourceIndexEntrySchema = z.object({

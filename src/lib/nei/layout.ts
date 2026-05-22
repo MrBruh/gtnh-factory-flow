@@ -118,6 +118,15 @@ const FLUID_ONLY_MAPS = new Set([
   "Solar Tower",
 ]);
 
+const CRAFTING_TABLE_MAPS = new Set([
+  "Crafting Table",
+  "Crafting Table (Ore Dictionary)",
+  "Crafting Table (Shaped)",
+  "Crafting Table (Shapeless)",
+  "Shaped Crafting",
+  "Shapeless Crafting",
+]);
+
 const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
   Centrifuge: {
     id: "centrifuge",
@@ -337,6 +346,14 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
 
 function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLayoutDefinition {
   const exact = findRecipeMapLayout(recipeMap);
+  if (matchesKnownRecipeMap(recipeMap, CRAFTING_TABLE_MAPS)) {
+    return craftingTableLayout(recipe);
+  }
+
+  if (recipeMapMatches(recipeMap, "Furnace")) {
+    return furnaceLayout();
+  }
+
   const exportedGrid = exportedGridLayout(recipe);
   if (exportedGrid) {
     return exact ? withMinimumSlotCapacity(exportedGrid, exact) : exportedGrid;
@@ -395,6 +412,52 @@ function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLa
   return {
     id: "default",
   };
+}
+
+function craftingTableLayout(recipe: Recipe): RecipeMapLayoutDefinition {
+  const shaped = (recipe.nei?.itemInputGrid?.width ?? 0) >= 3 || countKind(recipe.inputs, "item") > 4;
+
+  return {
+    id: shaped ? "shaped-crafting" : "shapeless-crafting",
+    maxItemInputs: shaped ? 9 : Math.max(1, countKind(recipe.inputs, "item")),
+    maxItemOutputs: 1,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    itemInputPositions: (count) =>
+      shaped ? gridPositions(count, 25, 8, 3, 3) : compactCraftingInputPositions(count),
+    itemOutputPositions: (count) => (count > 0 ? [{ x: 124, y: 26 }] : []),
+    progressBars: [{ x: 84, y: 26, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  };
+}
+
+function furnaceLayout(): RecipeMapLayoutDefinition {
+  return {
+    id: "furnace",
+    maxItemInputs: 1,
+    maxItemOutputs: 1,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    itemInputPositions: (count) => (count > 0 ? [{ x: 52, y: 24 }] : []),
+    itemOutputPositions: (count) => (count > 0 ? [{ x: 124, y: 24 }] : []),
+    progressBars: [{ x: 78, y: 24, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  };
+}
+
+function compactCraftingInputPositions(count: number) {
+  switch (count) {
+    case 0:
+      return [];
+    case 1:
+      return gridPositions(count, 61, 26, 1, 1);
+    case 2:
+      return gridPositions(count, 52, 26, 2, 1);
+    case 3:
+      return gridPositions(count, 43, 26, 3, 1);
+    case 4:
+      return gridPositions(count, 52, 17, 2, 2);
+    default:
+      return gridPositions(count, 43, 17, 3, 2);
+  }
 }
 
 function findRecipeMapLayout(recipeMap: string): RecipeMapLayoutDefinition | undefined {

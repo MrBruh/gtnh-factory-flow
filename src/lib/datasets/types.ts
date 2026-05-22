@@ -1,4 +1,10 @@
-import type { Recipe, RecipeInput, RecipeOutput, ResourceIconAtlasRef } from "../model/types";
+import type {
+  Recipe,
+  RecipeInput,
+  RecipeOutput,
+  ResourceAmount,
+  ResourceIconAtlasRef,
+} from "../model/types";
 
 export interface DatasetSourceInfo {
   sourceId: "nesql" | "recex" | "nerd" | "unknown";
@@ -18,6 +24,7 @@ export interface DatasetResource {
   modId?: string;
   tooltip?: string[];
   oreDictionary?: string[];
+  alternatives?: ResourceAmount["alternatives"];
 }
 
 export interface DatasetResourceIndexEntry {

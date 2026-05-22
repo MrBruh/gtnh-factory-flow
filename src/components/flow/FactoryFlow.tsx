@@ -42,7 +42,7 @@ import {
   embedProjectJsonInPng,
   embedProjectJsonInSvg,
 } from "@/lib/import-export/plan-image";
-import { formatRate, isRecipeInputConsumed } from "@/lib/model";
+import { formatRate, isRecipeInputConsumed, resourceMatchesInput } from "@/lib/model";
 import type {
   FactoryEdge,
   FactoryNodeColorTag,
@@ -78,8 +78,6 @@ const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_RECONNECT_RADIUS = STORAGE_SLOT_EDGE_OFFSET + 14;
-const EDGE_NODE_CLEARANCE = 18;
-const EDGE_LANE_SPACING = 14;
 const EXPORT_IMAGE_MIN_SIZE = 1024;
 const EXPORT_IMAGE_MAX_SIZE = 2400;
 const EXPORT_IMAGE_PADDING = 80;
@@ -103,15 +101,13 @@ type ResourceEdgeData = {
   targetSlotEndpoint: boolean;
   sourceStorageEndpoint: boolean;
   targetStorageEndpoint: boolean;
-  sourceLaneOffset: number;
-  targetLaneOffset: number;
 };
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "alternatives"
 > & {
   nodeId: string;
   side: "input" | "output";
@@ -226,10 +222,8 @@ export function FactoryFlow() {
   );
 
   const edges = useMemo<ResourceFlowEdge[]>(
-    () => {
-      const laneOffsets = getEndpointLaneOffsets(project.edges);
-
-      return project.edges.map((edge) => {
+    () =>
+      project.edges.map((edge) => {
         const edgeResult = result.edges[edge.id];
         const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
         const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
@@ -281,26 +275,23 @@ export function FactoryFlow() {
             targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
             sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
             targetStorageEndpoint: Boolean(targetHandle && targetStorage),
-            sourceLaneOffset: laneOffsets.source.get(edge.id) ?? 0,
-            targetLaneOffset: laneOffsets.target.get(edge.id) ?? 0,
           },
           style: {
             stroke: edgeColor,
-            strokeDasharray: edgeResult?.isLimited ? "8 6" : undefined,
-            strokeOpacity: isStorageEdge ? 0.9 : 1,
+            strokeDasharray: edgeResult?.isLimited ? "4 6" : undefined,
+            strokeOpacity: edgeResult?.isLimited ? 0.58 : isStorageEdge ? 0.86 : 0.92,
             strokeWidth: isStorageEdge
               ? isStorageEdgeEmphasized
-                ? 5
-                : 3.5
+                ? 3.5
+                : 2.6
               : edgeResult?.isLimited
-                ? 4.5
+                ? 2.2
                 : edge.resourceKind === "fluid"
-                  ? 4
-                  : 3.25,
+                  ? 2.8
+                  : 2.35,
           },
         };
-      });
-    },
+      }),
     [hoveredStorageResourceKey, isNodeDragging, project, recipeSearch, result.edges],
   );
 
@@ -405,7 +396,7 @@ export function FactoryFlow() {
       }
 
       if (draggedResource && targetHandle) {
-        if (isCompatibleDraggedResourceTarget(draggedResource, targetHandle)) {
+        if (isCompatibleDraggedResourceTarget(project, draggedResource, targetHandle)) {
           const source =
             draggedResource.side === "output"
               ? {
@@ -426,12 +417,20 @@ export function FactoryFlow() {
                   nodeId: targetHandle.nodeId,
                   handleId: targetHandle.handleId,
                 };
+          const outputResource =
+            draggedResource.side === "output"
+              ? draggedResource
+              : getResourceForHandle(project, targetHandle.nodeId, targetHandle.handleId);
+
+          if (!outputResource) {
+            return;
+          }
 
           connectCompletedRef.current = true;
           connectNodes(source.nodeId, target.nodeId, {
-            kind: draggedResource.kind,
-            id: draggedResource.id,
-            displayName: draggedResource.displayName,
+            kind: outputResource.kind,
+            id: outputResource.id,
+            displayName: outputResource.displayName,
             sourceHandle: source.handleId,
             targetHandle: target.handleId,
           });
@@ -443,7 +442,7 @@ export function FactoryFlow() {
       if (
         !draggedResource ||
         connectCompletedRef.current ||
-        isPointerOverIncompatibleFlowHandle(event, draggedResource) ||
+        isPointerOverIncompatibleFlowHandle(project, event, draggedResource) ||
         !flowInstance
       ) {
         return;
@@ -466,7 +465,7 @@ export function FactoryFlow() {
         draggedResource.handleId,
       );
     },
-    [addStorageForConnection, connectNodes, project.storages],
+    [addStorageForConnection, connectNodes, project],
   );
 
   useEffect(() => {
@@ -962,19 +961,13 @@ function ResourceEdge({
   });
   const rate = formatEdgeRateLabel(data);
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
-  const routedEdge = getRoutedEdgePath({
-    sourceNodeId: source,
+  const routedEdge = getDirectEdgePath({
     sourceX: visualSource.x,
     sourceY: visualSource.y,
     sourcePosition,
-    sourceSlotEndpoint: data?.sourceSlotEndpoint,
-    sourceLaneOffset: data?.sourceLaneOffset ?? 0,
-    targetNodeId: target,
     targetX: visualTarget.x,
     targetY: visualTarget.y,
     targetPosition,
-    targetSlotEndpoint: data?.targetSlotEndpoint,
-    targetLaneOffset: data?.targetLaneOffset ?? 0,
   });
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
@@ -1020,12 +1013,13 @@ function ResourceEdge({
       {data?.showLabel ? (
         <EdgeLabelRenderer>
           <div
-            className="nodrag nopan absolute flex cursor-grab items-center gap-1 border border-[#252525] bg-[#2b2d32] px-1.5 py-1 text-[11px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
+            className="nodrag nopan absolute flex cursor-grab items-center gap-1 border border-[#252525] bg-[#2b2d32] px-1 py-0.5 text-[10px] font-medium text-white shadow-[inset_1px_1px_0_rgba(255,255,255,0.18),inset_-1px_-1px_0_rgba(0,0,0,0.55)] active:cursor-grabbing"
             style={{
               transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
               pointerEvents: "all",
               color: data.isLimited ? "#fecaca" : "#f8fafc",
               borderColor: edgeColor,
+              opacity: selected ? 1 : 0.94,
               boxShadow: selected ? "0 0 0 2px rgba(34,211,238,0.9)" : undefined,
             }}
             title={`${data.resource.displayName ?? data.resource.id}: ${rate}. Drag along cable. Double click to reset label.`}
@@ -1082,7 +1076,7 @@ function ResourceEdge({
               size="sm"
               showAmount={false}
               bare
-              className="!h-6 !w-6"
+              className="!h-4 !w-4"
             />
             <span className="leading-none">{rate}</span>
           </div>
@@ -1135,188 +1129,42 @@ function ResourceConnectionLine({
   );
 }
 
-function getEndpointLaneOffsets(edges: FactoryEdge[]) {
-  const sourceGroups = new Map<string, string[]>();
-  const targetGroups = new Map<string, string[]>();
-
-  for (const edge of edges) {
-    const sourceKey = getEndpointLaneGroupKey(edge, "source");
-    const targetKey = getEndpointLaneGroupKey(edge, "target");
-    if (sourceKey) {
-      pushGroupedEdgeId(sourceGroups, sourceKey, edge.id);
-    }
-    if (targetKey) {
-      pushGroupedEdgeId(targetGroups, targetKey, edge.id);
-    }
-  }
-
-  return {
-    source: buildLaneOffsetMap(sourceGroups),
-    target: buildLaneOffsetMap(targetGroups),
-  };
-}
-
-function getEndpointLaneGroupKey(edge: FactoryEdge, endpoint: "source" | "target") {
-  const handleId = endpoint === "source" ? edge.sourceHandle : edge.targetHandle;
-  const handle = parseResourceHandleId(handleId);
-  if (!handle) {
-    return undefined;
-  }
-
-  const nodeId = endpoint === "source" ? edge.source : edge.target;
-  return `${nodeId}:${handle.side}`;
-}
-
-function pushGroupedEdgeId(groups: Map<string, string[]>, key: string, edgeId: string) {
-  const group = groups.get(key);
-  if (group) {
-    group.push(edgeId);
-  } else {
-    groups.set(key, [edgeId]);
-  }
-}
-
-function buildLaneOffsetMap(groups: Map<string, string[]>) {
-  const offsets = new Map<string, number>();
-  for (const group of groups.values()) {
-    const middle = (group.length - 1) / 2;
-    group.forEach((edgeId, index) => {
-      offsets.set(edgeId, (index - middle) * EDGE_LANE_SPACING);
-    });
-  }
-
-  return offsets;
-}
-
-function getRoutedEdgePath({
-  sourceNodeId,
+function getDirectEdgePath({
   sourceX,
   sourceY,
   sourcePosition,
-  sourceSlotEndpoint,
-  sourceLaneOffset,
-  targetNodeId,
   targetX,
   targetY,
   targetPosition,
-  targetSlotEndpoint,
-  targetLaneOffset,
 }: {
-  sourceNodeId: string;
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
-  sourceSlotEndpoint?: boolean;
-  sourceLaneOffset: number;
-  targetNodeId: string;
   targetX: number;
   targetY: number;
   targetPosition: Position;
-  targetSlotEndpoint?: boolean;
-  targetLaneOffset: number;
 }) {
-  const sourcePoint = { x: sourceX, y: sourceY };
-  const targetPoint = { x: targetX, y: targetY };
-  const sourceOutlet = sourceSlotEndpoint
-    ? getOutsideNodeEndpoint({
-        nodeId: sourceNodeId,
-        slotPoint: sourcePoint,
-        position: sourcePosition,
-        laneOffset: sourceLaneOffset,
-      })
-    : undefined;
-  const targetOutlet = targetSlotEndpoint
-    ? getOutsideNodeEndpoint({
-        nodeId: targetNodeId,
-        slotPoint: targetPoint,
-        position: targetPosition,
-        laneOffset: targetLaneOffset,
-      })
-    : undefined;
-
-  const routeStart = sourceOutlet ?? sourcePoint;
-  const routeEnd = targetOutlet ?? targetPoint;
-  const midX = (routeStart.x + routeEnd.x) / 2;
+  const [path, labelX, labelY] = getSmoothStepPath({
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  const midX = labelX;
   const points = compactPolylinePoints([
-    sourcePoint,
-    sourceOutlet ? { x: sourceOutlet.x, y: sourcePoint.y } : undefined,
-    sourceOutlet,
-    { x: midX, y: routeStart.y },
-    { x: midX, y: routeEnd.y },
-    targetOutlet,
-    targetOutlet ? { x: targetOutlet.x, y: targetPoint.y } : undefined,
-    targetPoint,
+    { x: sourceX, y: sourceY },
+    { x: midX, y: sourceY },
+    { x: midX, y: targetY },
+    { x: targetX, y: targetY },
   ]);
-  const labelPoint = getPointAtPolylineRatio(points, 0.5) ?? {
-    x: (sourceX + targetX) / 2,
-    y: (sourceY + targetY) / 2,
-  };
 
   return {
-    path: pointsToSvgPath(points),
-    labelX: labelPoint.x,
-    labelY: labelPoint.y,
+    path,
+    labelX,
+    labelY,
     points,
-  };
-}
-
-function getOutsideNodeEndpoint({
-  nodeId,
-  slotPoint,
-  position,
-  laneOffset,
-}: {
-  nodeId: string;
-  slotPoint: { x: number; y: number };
-  position: Position;
-  laneOffset: number;
-}) {
-  const bounds = getMeasuredNodeBounds(nodeId);
-  if (!bounds) {
-    const direction = String(position) === "left" ? -1 : 1;
-    return {
-      x: slotPoint.x + direction * (RECIPE_SLOT_EDGE_OFFSET + EDGE_NODE_CLEARANCE),
-      y: slotPoint.y + laneOffset,
-    };
-  }
-
-  if (String(position) === "left") {
-    return {
-      x: bounds.left - EDGE_NODE_CLEARANCE,
-      y: clamp(slotPoint.y + laneOffset, bounds.top + 10, bounds.bottom - 10),
-    };
-  }
-
-  return {
-    x: bounds.right + EDGE_NODE_CLEARANCE,
-    y: clamp(slotPoint.y + laneOffset, bounds.top + 10, bounds.bottom - 10),
-  };
-}
-
-function getMeasuredNodeBounds(nodeId: string) {
-  if (typeof document === "undefined") {
-    return undefined;
-  }
-
-  const nodeElement = document.querySelector<HTMLElement>(
-    `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
-  );
-  if (!nodeElement) {
-    return undefined;
-  }
-
-  const rect = nodeElement.getBoundingClientRect();
-  const topLeft = screenToFlowPoint({ x: rect.left, y: rect.top }, nodeElement);
-  const bottomRight = screenToFlowPoint({ x: rect.right, y: rect.bottom }, nodeElement);
-  if (!topLeft || !bottomRight) {
-    return undefined;
-  }
-
-  return {
-    left: topLeft.x,
-    top: topLeft.y,
-    right: bottomRight.x,
-    bottom: bottomRight.y,
   };
 }
 
@@ -1336,38 +1184,6 @@ function compactPolylinePoints(points: Array<{ x: number; y: number } | undefine
   }
 
   return compacted;
-}
-
-function pointsToSvgPath(points: Array<{ x: number; y: number }>) {
-  const [first, ...rest] = points;
-  if (!first) {
-    return "";
-  }
-
-  return [`M ${first.x},${first.y}`, ...rest.map((point) => `L ${point.x},${point.y}`)].join(" ");
-}
-
-function getPointAtPolylineRatio(points: Array<{ x: number; y: number }>, ratio: number) {
-  const segments = getPolylineSegments(points);
-  const totalLength = segments.reduce((sum, segment) => sum + segment.length, 0);
-  if (totalLength <= 0) {
-    return points[0];
-  }
-
-  let remaining = totalLength * clamp(ratio, 0, 1);
-  for (const segment of segments) {
-    if (remaining <= segment.length) {
-      const t = segment.length <= 0 ? 0 : remaining / segment.length;
-      return {
-        x: segment.start.x + (segment.end.x - segment.start.x) * t,
-        y: segment.start.y + (segment.end.y - segment.start.y) * t,
-      };
-    }
-
-    remaining -= segment.length;
-  }
-
-  return points[points.length - 1];
 }
 
 function getClosestPointOnPolyline(
@@ -1598,6 +1414,7 @@ function trimEdgeNumber(value: number) {
 }
 
 function isPointerOverIncompatibleFlowHandle(
+  project: FactoryProject,
   event: MouseEvent | TouchEvent,
   draggedResource: DraggedResourceConnection,
 ) {
@@ -1617,7 +1434,7 @@ function isPointerOverIncompatibleFlowHandle(
       return true;
     }
 
-    return !isCompatibleDraggedResourceTarget(draggedResource, resourceHandle);
+    return !isCompatibleDraggedResourceTarget(project, draggedResource, resourceHandle);
   });
 }
 
@@ -1718,14 +1535,28 @@ function readResourceHandleElement(element: HTMLElement | null) {
 }
 
 function isCompatibleDraggedResourceTarget(
+  project: FactoryProject,
   draggedResource: DraggedResourceConnection,
   targetHandle: ResolvedResourceHandle,
 ) {
+  const targetResource = getResourceForHandle(project, targetHandle.nodeId, targetHandle.handleId);
+  const dragged = {
+    kind: draggedResource.kind,
+    id: draggedResource.id,
+    alternatives: draggedResource.alternatives,
+  };
+
+  if (!targetResource) {
+    return false;
+  }
+
   return (
     draggedResource.nodeId !== targetHandle.nodeId &&
     draggedResource.side !== targetHandle.side &&
     draggedResource.kind === targetHandle.kind &&
-    draggedResource.id === targetHandle.resourceId
+    (targetHandle.side === "input"
+      ? resourceMatchesInput(dragged, targetResource)
+      : resourceMatchesInput(targetResource, dragged))
   );
 }
 
@@ -1773,10 +1604,13 @@ function getStorageHandleAtPosition(
 
     if (
       nodeId &&
+      resourceId &&
       nodeId !== draggedResource.nodeId &&
       (kind === "item" || kind === "fluid") &&
       kind === draggedResource.kind &&
-      resourceId === draggedResource.id
+      (draggedResource.side === "input"
+        ? resourceMatchesInput({ kind, id: resourceId }, draggedResource)
+        : resourceId === draggedResource.id)
     ) {
       const side = draggedResource.side === "output" ? "input" : "output";
       return {
@@ -1801,8 +1635,8 @@ function getInitialResourceColor(resource: ResourceEdgeData["resource"]) {
 }
 
 function getArrowHeadPoints(targetX: number, targetY: number, targetPosition: unknown) {
-  const length = 11;
-  const width = 6;
+  const length = 8;
+  const width = 5;
 
   switch (String(targetPosition)) {
     case "right":
@@ -1880,7 +1714,38 @@ function getDraggedResourceForHandle(
     iconPath: resource.iconPath,
     iconAtlas: resource.iconAtlas,
     dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
+    alternatives: resource.alternatives,
   };
+}
+
+function getResourceForHandle(
+  project: FactoryProject,
+  nodeId: string,
+  handleId: string,
+): ResourceAmount | undefined {
+  const handle = parseResourceHandleId(handleId);
+  if (!handle) {
+    return undefined;
+  }
+
+  const storage = (project.storages ?? []).find((entry) => entry.id === nodeId);
+  if (storage) {
+    return {
+      kind: storage.kind,
+      id: storage.resourceId,
+      amount: 1,
+      displayName: storage.displayName,
+      iconPath: storage.iconPath,
+      iconAtlas: storage.iconAtlas,
+      dominantColor: storage.dominantColor ?? storage.iconAtlas?.dominantColor,
+    };
+  }
+
+  const node = project.nodes.find((entry) => entry.id === nodeId);
+  const recipe = project.recipes.find((entry) => entry.id === node?.recipeId);
+  const resources = handle.side === "input" ? recipe?.inputs : recipe?.outputs;
+
+  return resources?.find((entry) => entry.kind === handle.kind && entry.id === handle.resourceId);
 }
 
 function getClientPosition(event: MouseEvent | TouchEvent) {

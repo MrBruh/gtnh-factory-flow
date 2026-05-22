@@ -6,7 +6,7 @@ import { MinecraftTooltip } from "./MinecraftTooltip";
 interface ResourceIconProps {
   resource?: Pick<
     ResourceAmount,
-    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "tooltip"
+    "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "tooltip" | "alternatives"
   > & { consumed?: boolean; chance?: number };
   size?: "sm" | "md" | "lg" | "xl";
   showAmount?: boolean;
@@ -60,6 +60,12 @@ export function ResourceIcon({
         </span>
       ) : null}
 
+      {resource?.alternatives?.length ? (
+        <span className="absolute left-0 bottom-0 font-mono text-[9px] font-black leading-none text-[#55ffff] drop-shadow-[1px_1px_0_#000]">
+          +
+        </span>
+      ) : null}
+
       {resource && showName ? (
         <span className="absolute left-0.5 top-0.5 max-w-[calc(100%-4px)] truncate font-mono text-[8px] leading-none text-white drop-shadow-[1px_1px_0_#000]">
           {resource.displayName ?? resource.id}
@@ -87,8 +93,14 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
     resource.chance !== undefined && Number.isFinite(resource.chance) && resource.chance < 1
       ? `Chance: ${trimAmount(resource.chance * 100)}%`
       : undefined;
+  const alternativesLine = resource.alternatives?.length
+    ? `Accepts: ${resource.alternatives
+        .slice(0, 12)
+        .map((alternative) => alternative.displayName ?? alternative.id)
+        .join(", ")}${resource.alternatives.length > 12 ? `, +${resource.alternatives.length - 12} more` : ""}`
+    : undefined;
 
-  return [...baseLines, chanceLine].filter(Boolean).join("\n");
+  return [...baseLines, alternativesLine, chanceLine].filter(Boolean).join("\n");
 }
 
 function ChanceLabel({ chance }: { chance: number }) {

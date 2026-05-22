@@ -12,6 +12,7 @@ import {
   getVoltageTierIndex,
   isRecipeInputConsumed,
   isVoltageTierAbove,
+  resourceMatchesInput,
   resourceLabel,
 } from "@/lib/model";
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
@@ -181,6 +182,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                 slot.side,
                 slot.resource.kind,
                 slot.resource.id,
+                slot.resource.alternatives,
                 handleId,
               );
 
@@ -300,6 +302,7 @@ function getConnectionSlotState(
   side: "input" | "output",
   kind: string,
   resourceId: string,
+  alternatives: Recipe["inputs"][number]["alternatives"],
   handleId: string,
 ): ConnectionSlotState {
   if (!pending) {
@@ -313,10 +316,20 @@ function getConnectionSlotState(
   if (
     pending.nodeId !== nodeId &&
     pending.side !== side &&
-    pending.kind === kind &&
-    pending.resourceId === resourceId
+    pending.kind === kind
   ) {
-    return "compatible";
+    const pendingResource = {
+      kind: pending.kind,
+      id: pending.resourceId,
+      alternatives: pending.alternatives,
+    };
+    const slotResource = { kind, id: resourceId, alternatives };
+    const input = side === "input" ? slotResource : pendingResource;
+    const output = side === "output" ? slotResource : pendingResource;
+
+    if (resourceMatchesInput(output, input)) {
+      return "compatible";
+    }
   }
 
   return "idle";

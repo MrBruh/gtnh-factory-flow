@@ -125,6 +125,80 @@ describe("calculateThroughput", () => {
     expect(result.resources["fluid:water"].netPerSecond).toBeCloseTo(0);
   });
 
+  it("uses concrete item edges to satisfy ore dictionary input demand", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "ore-dictionary-edge-project",
+      name: "Ore dictionary edge test",
+      recipes: [
+        {
+          id: "stick-source",
+          name: "Stick source",
+          machineType: "Source",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 0,
+          inputs: [],
+          outputs: [{ kind: "item", id: "minecraft:stick@0", amount: 1 }],
+        },
+        {
+          id: "crafting",
+          name: "Crafting",
+          machineType: "Shaped Crafting",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 0,
+          inputs: [
+            {
+              kind: "item",
+              id: "oredict:stickWood",
+              amount: 1,
+              alternatives: [{ kind: "item", id: "minecraft:stick@0", displayName: "Stick" }],
+            },
+          ],
+          outputs: [{ kind: "item", id: "crafted", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "source",
+          recipeId: "stick-source",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "target",
+          recipeId: "crafting",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "stick-edge",
+          source: "source",
+          target: "target",
+          resourceKind: "item",
+          resourceId: "minecraft:stick@0",
+          label: "Stick",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.edges["stick-edge"].demandPerSecond).toBeCloseTo(1);
+    expect(result.edges["stick-edge"].transferredPerSecond).toBeCloseTo(1);
+    expect(result.nodes.source.utilization).toBeCloseTo(1);
+  });
+
   it("lets a drawer or tank absorb producer output even without consumers", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,

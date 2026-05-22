@@ -521,6 +521,7 @@ function hydrateResource<T extends ResourceAmount>(
       indexed.dominantColor ??
       resource.iconAtlas?.dominantColor ??
       indexed.iconAtlas?.dominantColor,
+    alternatives: resource.alternatives ?? ("alternatives" in indexed ? indexed.alternatives : undefined),
   };
 }
 
@@ -597,7 +598,7 @@ function getCatalogResourcesByKey(
   }
 
   catalog.resourcesByKey = new Map(
-    [...catalog.resources, ...catalog.resourceIndex].map((resource) => [
+    [...catalog.resourceIndex, ...catalog.resources].map((resource) => [
       `${resource.kind}:${resource.id}`,
       resource,
     ]),
@@ -888,6 +889,7 @@ function findRecipeMapIcon(
 
 function tokenizeRecipeMap(value: string): string[] {
   const aliases: Record<string, string[]> = {
+    crafting: ["crafting", "table", "workbench"],
     washer: ["washing", "wash"],
     wash: ["washing", "washer"],
     extractor: ["extractor", "extract"],

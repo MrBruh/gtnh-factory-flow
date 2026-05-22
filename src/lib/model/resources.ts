@@ -66,3 +66,17 @@ export function getChanceMultiplier(output: RecipeOutput): number {
 export function isRecipeInputConsumed(input: Pick<ResourceAmount, "id"> & { consumed?: boolean }): boolean {
   return input.consumed !== false;
 }
+
+export function resourceMatchesInput(
+  resource: Pick<ResourceAmount, "kind" | "id">,
+  input: Pick<ResourceAmount, "kind" | "id" | "alternatives">,
+): boolean {
+  if (resource.kind !== input.kind) {
+    return false;
+  }
+
+  return (
+    resource.id === input.id ||
+    Boolean(input.alternatives?.some((alternative) => alternative.id === resource.id))
+  );
+}

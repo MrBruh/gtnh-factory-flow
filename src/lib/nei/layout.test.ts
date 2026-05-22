@@ -28,6 +28,63 @@ describe("NEI layout", () => {
     ]);
   });
 
+  it("uses vanilla NEI crafting table positions for shaped crafting", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Shaped Crafting",
+        sourceRecipeMap: "Shaped Crafting",
+        inputs: Array.from({ length: 9 }, (_, index) => ({
+          kind: "item",
+          id: `input-${index}`,
+          amount: 1,
+        })),
+        outputs: [{ kind: "item", id: "output", amount: 1 }],
+        nei: {
+          itemInputGrid: { width: 3, height: 3 },
+          itemOutputGrid: { width: 1, height: 1 },
+        },
+      }),
+    );
+
+    expect(layout.id).toBe("shaped-crafting");
+    expect(layout.frames.filter((frame) => frame.side === "input" && frame.kind === "item")).toHaveLength(
+      9,
+    );
+    expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
+      ["item", "input", 25, 8],
+      ["item", "input", 43, 8],
+      ["item", "input", 61, 8],
+      ["item", "input", 25, 26],
+      ["item", "input", 43, 26],
+      ["item", "input", 61, 26],
+      ["item", "input", 25, 44],
+      ["item", "input", 43, 44],
+      ["item", "input", 61, 44],
+      ["item", "output", 124, 26],
+    ]);
+    expect(layout.progressBars[0]).toMatchObject({ x: 84, y: 26, texture: "arrow" });
+  });
+
+  it("keeps legacy ore dictionary crafting maps on the vanilla crafting layout", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Crafting Table (Ore Dictionary)",
+        sourceRecipeMap: "Crafting Table (Ore Dictionary)",
+        inputs: [{ kind: "item", id: "oredict:stickWood", amount: 1 }],
+        outputs: [{ kind: "item", id: "output", amount: 1 }],
+        nei: {
+          itemInputGrid: { width: 3, height: 3 },
+          itemOutputGrid: { width: 1, height: 1 },
+        },
+      }),
+    );
+
+    expect(layout.id).toBe("shaped-crafting");
+    expect(layout.frames.filter((frame) => frame.side === "input" && frame.kind === "item")).toHaveLength(
+      9,
+    );
+  });
+
   it("uses the LargeNEIFrontend positions for the Large Chemical Reactor", () => {
     const layout = getNeiRecipeLayout(
       recipe({

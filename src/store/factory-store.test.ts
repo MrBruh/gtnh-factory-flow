@@ -28,6 +28,44 @@ describe("factory resource links", () => {
     ]);
   });
 
+  it("connects concrete item outputs to ore dictionary inputs", () => {
+    useFactoryStore.getState().connectNodes("stick-source", "stick-oredict-target", {
+      kind: "item",
+      id: "minecraft:stick@0",
+      sourceHandle: makeResourceHandleId("output", { kind: "item", id: "minecraft:stick@0" }, 0),
+      targetHandle: makeResourceHandleId("input", { kind: "item", id: "oredict:stickWood" }, 0),
+    });
+
+    expect(useFactoryStore.getState().project.edges[0]).toEqual(
+      expect.objectContaining({
+        source: "stick-source",
+        target: "stick-oredict-target",
+        sourceHandle: "output:item:minecraft%3Astick%400:0",
+        targetHandle: "input:item:oredict%3AstickWood:0",
+        resourceKind: "item",
+        resourceId: "minecraft:stick@0",
+      }),
+    );
+  });
+
+  it("connects concrete item drawers to ore dictionary inputs", () => {
+    useFactoryStore.getState().connectNodes("stick-drawer", "stick-oredict-target", {
+      kind: "item",
+      id: "minecraft:stick@0",
+      sourceHandle: makeResourceHandleId("output", { kind: "item", id: "minecraft:stick@0" }),
+      targetHandle: makeResourceHandleId("input", { kind: "item", id: "oredict:stickWood" }, 0),
+    });
+
+    expect(useFactoryStore.getState().project.edges[0]).toEqual(
+      expect.objectContaining({
+        source: "stick-drawer",
+        target: "stick-oredict-target",
+        resourceKind: "item",
+        resourceId: "minecraft:stick@0",
+      }),
+    );
+  });
+
   it("connects matching fluid recipe slots with explicit handles", () => {
     useFactoryStore.getState().connectNodes("fluid-source", "fluid-target", {
       kind: "fluid",
@@ -434,6 +472,37 @@ function createLinkTestProject(): FactoryProject {
         inputs: [{ kind: "item", id: "mold", amount: 1, consumed: false }],
         outputs: [{ kind: "item", id: "gear", amount: 1 }],
       },
+      {
+        id: "stick-source-recipe",
+        name: "Stick source",
+        machineType: "Source",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [{ kind: "item", id: "minecraft:stick@0", amount: 1, displayName: "Stick" }],
+      },
+      {
+        id: "stick-oredict-target-recipe",
+        name: "Ore dictionary target",
+        machineType: "Crafting",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [
+          {
+            kind: "item",
+            id: "oredict:stickWood",
+            amount: 1,
+            displayName: "Stick",
+            alternatives: [
+              { kind: "item", id: "minecraft:stick@0", displayName: "Stick" },
+              { kind: "item", id: "other:stick@0", displayName: "Other Stick" },
+            ],
+          },
+        ],
+        outputs: [{ kind: "item", id: "crafted", amount: 1 }],
+      },
     ],
     nodes: [
       makeNode("item-source", "item-source-recipe", 0),
@@ -441,6 +510,8 @@ function createLinkTestProject(): FactoryProject {
       makeNode("fluid-source", "fluid-source-recipe", 0, 140),
       makeNode("fluid-target", "fluid-target-recipe", 200, 140),
       makeNode("nc-target", "nc-target-recipe", 200, 280),
+      makeNode("stick-source", "stick-source-recipe", 0, 420),
+      makeNode("stick-oredict-target", "stick-oredict-target-recipe", 200, 420),
     ],
     storages: [
       {
@@ -463,6 +534,13 @@ function createLinkTestProject(): FactoryProject {
         resourceId: "water",
         displayName: "Water",
         position: { x: 100, y: 140 },
+      },
+      {
+        id: "stick-drawer",
+        kind: "item",
+        resourceId: "minecraft:stick@0",
+        displayName: "Stick",
+        position: { x: 100, y: 420 },
       },
     ],
     edges: [],

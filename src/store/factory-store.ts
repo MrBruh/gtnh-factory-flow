@@ -8,6 +8,7 @@ import {
   getChanceMultiplier,
   getResourceKey,
   isRecipeInputConsumed,
+  resourceMatchesInput,
   resourceLabel,
 } from "@/lib/model/resources";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
@@ -155,6 +156,7 @@ export interface PendingResourceConnection {
   side: "input" | "output";
   kind: ResourceKind;
   resourceId: string;
+  alternatives?: ResourceAmount["alternatives"];
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceAmount["iconAtlas"];
@@ -929,11 +931,24 @@ function canConnectPendingSlots(
   first: PendingResourceConnection,
   second: PendingResourceConnection,
 ): boolean {
+  const firstResource = {
+    kind: first.kind,
+    id: first.resourceId,
+    alternatives: first.alternatives,
+  };
+  const secondResource = {
+    kind: second.kind,
+    id: second.resourceId,
+    alternatives: second.alternatives,
+  };
+  const input = first.side === "input" ? firstResource : secondResource;
+  const output = first.side === "output" ? firstResource : secondResource;
+
   return (
     first.nodeId !== second.nodeId &&
     first.side !== second.side &&
     first.kind === second.kind &&
-    first.resourceId === second.resourceId
+    resourceMatchesInput(output, input)
   );
 }
 
@@ -1066,8 +1081,7 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
       targetRecipe.inputs.some(
         (input) =>
           isRecipeInputConsumed(input) &&
-          input.kind === edge.resourceKind &&
-          input.id === edge.resourceId,
+          resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
       )
     );
   }
@@ -1093,8 +1107,7 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
     targetRecipe.inputs.some(
       (input) =>
         isRecipeInputConsumed(input) &&
-        input.kind === edge.resourceKind &&
-        input.id === edge.resourceId,
+        resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, input),
     )
   );
 }
@@ -1123,9 +1136,10 @@ function buildEdgeBetweenNodes(
     const matchedInput = targetRecipe.inputs.find(
       (input) =>
         input.kind === sourceStorage.kind &&
-        input.id === sourceStorage.resourceId &&
         input.kind === selectedResource.kind &&
-        input.id === selectedResource.id &&
+        sourceStorage.kind === selectedResource.kind &&
+        sourceStorage.resourceId === selectedResource.id &&
+        resourceMatchesInput(sourceStorageResource(sourceStorage), input) &&
         isRecipeInputConsumed(input),
     );
     if (!matchedInput) {
@@ -1179,13 +1193,12 @@ function buildEdgeBetweenNodes(
           output.id === selectedResource.id &&
           targetRecipe.inputs.some(
             (input) =>
-              isRecipeInputConsumed(input) && getResourceKey(input) === getResourceKey(output),
+              isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
           ),
       )
     : sourceRecipe.outputs.find((output) =>
         targetRecipe.inputs.some(
-          (input) =>
-            isRecipeInputConsumed(input) && getResourceKey(input) === getResourceKey(output),
+          (input) => isRecipeInputConsumed(input) && resourceMatchesInput(output, input),
         ),
       );
 
@@ -1223,7 +1236,7 @@ function buildCompatibleEdgesBetweenNodes(
 
   sourceRecipe.outputs.forEach((output, outputIndex) => {
     targetRecipe.inputs.forEach((input, inputIndex) => {
-      if (input.consumed === false || output.kind !== input.kind || output.id !== input.id) {
+      if (!isRecipeInputConsumed(input) || !resourceMatchesInput(output, input)) {
         return;
       }
 
@@ -1284,7 +1297,7 @@ function buildCompatibleEdgesForStorage(
       if (
         input.consumed === false ||
         input.kind !== storage.kind ||
-        input.id !== storage.resourceId
+        !resourceMatchesInput(sourceStorageResource(storage), input)
       ) {
         return;
       }
@@ -1310,6 +1323,10 @@ function buildCompatibleEdgesForStorage(
   }
 
   return deduped;
+}
+
+function sourceStorageResource(storage: FactoryStorage): Pick<ResourceAmount, "kind" | "id"> {
+  return { kind: storage.kind, id: storage.resourceId };
 }
 
 function hasDuplicateEdge(edges: FactoryEdge[], edge: FactoryEdge): boolean {

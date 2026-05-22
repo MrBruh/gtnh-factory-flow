@@ -32,15 +32,15 @@ if (gregtechSource?.machines?.length) {
 }
 
 normalizeCraftingSource(findSource("shaped"), {
-  machineType: "Crafting Table (Shaped)",
+  machineType: "Shaped Crafting",
   sourceType: "shaped",
 });
 normalizeCraftingSource(findSource("shapeless"), {
-  machineType: "Crafting Table (Shapeless)",
+  machineType: "Shapeless Crafting",
   sourceType: "shapeless",
 });
 normalizeCraftingSource(findSource("shapedOreDict"), {
-  machineType: "Crafting Table (Ore Dictionary)",
+  machineType: "Shaped Crafting",
   sourceType: "shapedOreDict",
 });
 normalizeSmeltingSource(findSource("smelting"));
@@ -264,6 +264,9 @@ function addResource(resource) {
     if (!existingResource.oreDictionary && resource.oreDictionary) {
       existingResource.oreDictionary = resource.oreDictionary;
     }
+    if (!existingResource.alternatives && resource.alternatives) {
+      existingResource.alternatives = resource.alternatives;
+    }
     return;
   }
 
@@ -274,6 +277,7 @@ function addResource(resource) {
     iconPath: resource.iconPath,
     tooltip: resource.tooltip,
     oreDictionary: resource.oreDictionary,
+    alternatives: resource.alternatives,
   });
 }
 
@@ -321,6 +325,7 @@ function oreDictionaryAmount(item) {
   }
 
   const primaryName = names[0] ?? alternatives[0].id;
+  const primaryAlternative = alternatives.find((entry) => entry.iconPath) ?? alternatives[0];
   const id = `oredict:${primaryName}`;
   const alternativeIds = alternatives.map((entry) => entry.id);
   for (const name of names) {
@@ -331,8 +336,9 @@ function oreDictionaryAmount(item) {
     kind: "item",
     id,
     amount: 1,
-    displayName: `Ore Dictionary: ${primaryName}`,
-    iconPath: alternatives.find((entry) => entry.iconPath)?.iconPath,
+    displayName: primaryAlternative?.displayName ?? primaryName,
+    iconPath: primaryAlternative?.iconPath,
+    alternatives: alternatives.map(resourceAlternative),
     tooltip: [
       names.length > 0 ? `Ore dictionary: ${names.join(", ")}` : undefined,
       alternatives.length > 0
@@ -343,6 +349,16 @@ function oreDictionaryAmount(item) {
         : undefined,
     ].filter(Boolean),
     oreDictionary: names.length > 0 ? names : undefined,
+  };
+}
+
+function resourceAlternative(resource) {
+  return {
+    kind: resource.kind,
+    id: resource.id,
+    displayName: resource.displayName,
+    iconPath: resource.iconPath,
+    tooltip: resource.tooltip,
   };
 }
 

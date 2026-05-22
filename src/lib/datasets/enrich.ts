@@ -152,6 +152,7 @@ function enrichResource<T extends ResourceAmount>(
       indexed.iconAtlas?.dominantColor,
     tooltip: resource.tooltip ?? indexed.tooltip,
     modId: resource.modId ?? indexed.modId,
+    alternatives: resource.alternatives ?? indexed.alternatives,
   };
 }
 

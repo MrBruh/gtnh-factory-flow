@@ -54,6 +54,20 @@ export const resourceAmountSchema = z.object({
       y: z.number().int().min(0),
     })
     .optional(),
+  alternatives: z
+    .array(
+      z.object({
+        kind: resourceKindSchema,
+        id: z.string().min(1),
+        displayName: z.string().min(1).optional(),
+        iconPath: z.string().min(1).optional(),
+        iconAtlas: resourceIconAtlasRefSchema.optional(),
+        dominantColor: dominantColorSchema,
+        modId: z.string().min(1).optional(),
+        tooltip: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
 });
 
 export const recipeInputSchema = resourceAmountSchema.extend({

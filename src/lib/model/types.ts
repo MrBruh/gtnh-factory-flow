@@ -68,7 +68,13 @@ export interface ResourceAmount {
     x: number;
     y: number;
   };
+  alternatives?: ResourceAlternative[];
 }
+
+export type ResourceAlternative = Pick<
+  ResourceAmount,
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip" | "modId"
+>;
 
 export interface RecipeInput extends ResourceAmount {
   optional?: boolean;

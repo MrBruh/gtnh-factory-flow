@@ -3,6 +3,7 @@ import {
   isRecipeInputConsumed,
   makeResourceKey,
   primaryOutput,
+  resourceMatchesInput,
   resourceLabel,
 } from "../model/resources";
 import type {
@@ -148,6 +149,7 @@ export function calculateThroughput(
 
   for (const edge of project.edges) {
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
     const sourceStorage = storagesById.get(edge.source);
     const targetStorage = storagesById.get(edge.target);
 
@@ -185,8 +187,8 @@ export function calculateThroughput(
 
       if (sourceStorage) {
         const targetResult = nodes[edge.target];
-        const targetCount = incomingEdgeCounts.get(`${edge.target}|${key}`) ?? 1;
-        const targetDemand = targetResult?.inputs[key]?.amountPerSecond ?? 0;
+        const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+        const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
         const demandPerSecond = targetDemand / targetCount;
         const transferredPerSecond = demandPerSecond;
 
@@ -198,8 +200,8 @@ export function calculateThroughput(
 
     const sourceResult = nodes[edge.source];
     const targetResult = nodes[edge.target];
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${key}`) ?? 1;
-    const targetDemand = targetResult?.inputs[key]?.amountPerSecond ?? 0;
+    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+    const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
     const demandPerSecond = targetDemand / targetCount;
     const sourceCapacity = sourceResult?.outputs[key]?.amountPerSecond ?? 0;
     const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
@@ -410,12 +412,23 @@ function countIncomingEdgesByTargetResource(project: FactoryProject): Map<string
   const counts = new Map<string, number>();
 
   for (const edge of project.edges) {
-    const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    const key = getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
     const countKey = `${edge.target}|${key}`;
     counts.set(countKey, (counts.get(countKey) ?? 0) + 1);
   }
 
   return counts;
+}
+
+function getEdgeTargetDemandKey(project: FactoryProject, edge: FactoryProject["edges"][number]) {
+  const targetNode = project.nodes.find((node) => node.id === edge.target);
+  const targetRecipe = project.recipes.find((recipe) => recipe.id === targetNode?.recipeId);
+  const edgeResource = { kind: edge.resourceKind, id: edge.resourceId };
+  const input = targetRecipe?.inputs.find(
+    (entry) => isRecipeInputConsumed(entry) && resourceMatchesInput(edgeResource, entry),
+  );
+
+  return input ? makeResourceKey(input.kind, input.id) : undefined;
 }
 
 function countIncomingEdgesToStorageResource(
@@ -458,13 +471,14 @@ function calculateStorageOutgoingDemand(
     }
 
     const key = makeResourceKey(edge.resourceKind, edge.resourceId);
+    const targetDemandKey = getEdgeTargetDemandKey(project, edge) ?? key;
     if (canReachStorageResource(feedbackGraph, storageResourceKeys, edge.target, key)) {
       continue;
     }
 
     const targetResult = nodes[edge.target];
-    const targetCount = incomingEdgeCounts.get(`${edge.target}|${key}`) ?? 1;
-    const targetDemand = targetResult?.inputs[key]?.amountPerSecond ?? 0;
+    const targetCount = incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+    const targetDemand = targetResult?.inputs[targetDemandKey]?.amountPerSecond ?? 0;
     const demandPerSecond = targetDemand / targetCount;
     demand.set(key, (demand.get(key) ?? 0) + demandPerSecond);
   }
