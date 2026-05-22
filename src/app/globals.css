@@ -165,3 +165,7 @@ textarea {
 .storage-node-tinted .storage-node-card {
   border-color: var(--storage-node-tint-border);
 }
+
+.storage-node-tinted .storage-node-card--tank {
+  border-color: #1f1f1f !important;
+}

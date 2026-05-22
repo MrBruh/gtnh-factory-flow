@@ -149,7 +149,7 @@ function FluidStorageCard({
   return (
     <div
       className={[
-        "storage-node-card w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]",
+        "storage-node-card storage-node-card--tank w-[174px] border-2 border-[#565f72] bg-[#b9c2d4] p-1 shadow-[inset_2px_2px_0_#e8edf7,inset_-2px_-2px_0_#7b8497]",
         isHighlighted ? "brightness-110" : "",
       ].join(" ")}
       style={
