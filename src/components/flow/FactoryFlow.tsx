@@ -56,7 +56,7 @@ const connectionLineStyle = {
 const DEFAULT_ITEM_EDGE_COLOR = "#8b8f98";
 const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 const RECIPE_SLOT_EDGE_OFFSET = 20;
-const STORAGE_SLOT_EDGE_OFFSET = 55;
+const STORAGE_SLOT_EDGE_OFFSET = 32;
 type ResourceEdgeData = {
   resource: Pick<
     ResourceAmount,
@@ -748,6 +748,7 @@ function ResourceEdge({
     fallbackY: sourceY,
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
     isStorageSlotEndpoint: data?.sourceStorageEndpoint,
+    preferredSide: "source",
   });
   const visualTarget = getSlotEdgeEndpoint({
     position: targetPosition,
@@ -755,6 +756,7 @@ function ResourceEdge({
     fallbackY: targetY,
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
+    preferredSide: "target",
   });
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: visualSource.x,
@@ -864,12 +866,14 @@ function getSlotEdgeEndpoint({
   fallbackY,
   isRecipeSlotEndpoint,
   isStorageSlotEndpoint,
+  preferredSide,
 }: {
   position: unknown;
   fallbackX: number;
   fallbackY: number;
   isRecipeSlotEndpoint?: boolean;
   isStorageSlotEndpoint?: boolean;
+  preferredSide: "source" | "target";
 }) {
   if (!isRecipeSlotEndpoint && !isStorageSlotEndpoint) {
     return { x: fallbackX, y: fallbackY };
@@ -877,7 +881,13 @@ function getSlotEdgeEndpoint({
 
   const offset = isStorageSlotEndpoint ? STORAGE_SLOT_EDGE_OFFSET : RECIPE_SLOT_EDGE_OFFSET;
 
-  switch (String(position)) {
+  const edgeSide = isStorageSlotEndpoint
+    ? preferredSide === "source"
+      ? "right"
+      : "left"
+    : String(position);
+
+  switch (edgeSide) {
     case "right":
       return { x: fallbackX + offset, y: fallbackY };
     case "left":

@@ -483,10 +483,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
   },
   addStorageForConnection: (resource, nodeId, side, position, handleId) => {
     set((state) => {
-      const existing = (state.project.storages ?? []).find(
-        (storage) => storage.kind === resource.kind && storage.resourceId === resource.id,
-      );
-      const storage: FactoryStorage = existing ?? {
+      const storage: FactoryStorage = {
         id: createId("storage"),
         kind: resource.kind,
         resourceId: resource.id,
@@ -496,12 +493,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         dominantColor: resource.dominantColor ?? resource.iconAtlas?.dominantColor,
         position,
       };
-      const projectWithStorage: FactoryProject = existing
-        ? state.project
-        : {
-            ...state.project,
-            storages: [...(state.project.storages ?? []), storage],
-          };
+      const projectWithStorage: FactoryProject = {
+        ...state.project,
+        storages: [...(state.project.storages ?? []), storage],
+      };
       const selectedResource = {
         kind: resource.kind,
         id: resource.id,

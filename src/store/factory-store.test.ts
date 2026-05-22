@@ -97,6 +97,36 @@ describe("factory resource links", () => {
     );
   });
 
+  it("creates a new storage card for each dropped connection instead of reusing by resource", () => {
+    const store = useFactoryStore.getState();
+    store.addStorageForConnection(
+      { kind: "item", id: "dust", displayName: "Dust" },
+      "item-source",
+      "output",
+      { x: 320, y: 20 },
+      makeResourceHandleId("output", { kind: "item", id: "dust" }, 0),
+    );
+    store.addStorageForConnection(
+      { kind: "item", id: "dust", displayName: "Dust" },
+      "item-source",
+      "output",
+      { x: 420, y: 20 },
+      makeResourceHandleId("output", { kind: "item", id: "dust" }, 0),
+    );
+
+    const dustStorages =
+      useFactoryStore
+        .getState()
+        .project.storages?.filter((storage) => storage.resourceId === "dust") ?? [];
+    const createdDustStorages = dustStorages.filter((storage) => storage.id !== "dust-drawer");
+
+    expect(createdDustStorages).toHaveLength(2);
+    expect(new Set(createdDustStorages.map((storage) => storage.id)).size).toBe(2);
+    expect(useFactoryStore.getState().project.edges.map((edge) => edge.target)).toEqual(
+      createdDustStorages.map((storage) => storage.id),
+    );
+  });
+
   it("does not connect storage to non-consumed recipe inputs", () => {
     useFactoryStore.getState().connectNodes("mold-drawer", "nc-target", {
       kind: "item",
