@@ -12,7 +12,7 @@ import {
   type RecipeDatasetQueryResult,
 } from "@/lib/datasets/browser-loader";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
-import { GT_VOLTAGE_TIERS, resourceLabel } from "@/lib/model";
+import { GT_VOLTAGE_TIERS, isOreDictionaryResource, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
@@ -77,7 +77,7 @@ export function RecipeBrowser() {
     };
   }, [browserResource]);
 
-  const historyResources = resourceHistory;
+  const historyResources = resourceHistory.filter((resource) => !isOreDictionaryResource(resource));
 
   const recipeMaps = useMemo(
     () => availableRecipeMaps.filter(Boolean).sort((a, b) => a.localeCompare(b)),

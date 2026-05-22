@@ -1,6 +1,7 @@
 "use client";
 
 import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
+import { resourceLabel, stripOreDictionaryPrefix } from "@/lib/model/resources";
 import { MinecraftTooltip } from "./MinecraftTooltip";
 
 type DisplayResourceAmount = Pick<
@@ -76,7 +77,7 @@ export function ResourceIcon({
 
       {resource && showName ? (
         <span className="absolute left-0.5 top-0.5 max-w-[calc(100%-4px)] truncate font-mono text-[8px] leading-none text-white drop-shadow-[1px_1px_0_#000]">
-          {resource.displayName ?? resource.id}
+          {resourceLabel(resource)}
         </span>
       ) : null}
     </div>
@@ -95,8 +96,8 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
   }
 
   const baseLines = resource.tooltip?.length
-    ? resource.tooltip
-    : [resource.displayName ?? resource.id].filter(Boolean);
+    ? [resourceLabel(resource), ...resource.tooltip.filter((line) => stripOreDictionaryPrefix(line))]
+    : [resourceLabel(resource)].filter(Boolean);
   const chanceLine =
     resource.chance !== undefined && Number.isFinite(resource.chance) && resource.chance < 1
       ? `Chance: ${trimAmount(resource.chance * 100)}%`
@@ -105,7 +106,7 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
   const alternativesLine = resource.alternatives?.length
     ? `Accepts: ${resource.alternatives
         .slice(0, 12)
-        .map((alternative) => alternative.displayName ?? alternative.id)
+        .map((alternative) => resourceLabel(alternative))
         .join(", ")}${resource.alternatives.length > 12 ? `, +${resource.alternatives.length - 12} more` : ""}`
     : undefined;
 
@@ -144,7 +145,7 @@ function IconImage({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={resource.iconPath}
-      alt={resource.displayName ?? resource.id}
+      alt={resourceLabel(resource)}
       className={
         iconPixelSize
           ? "max-w-none object-contain"

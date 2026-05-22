@@ -15,6 +15,10 @@ export function getResourceKey(resource: Pick<ResourceAmount, "kind" | "id">): R
   return makeResourceKey(resource.kind, resource.id);
 }
 
+export function isOreDictionaryResource(resource: Pick<ResourceAmount, "id">): boolean {
+  return resource.id.startsWith("oredict:");
+}
+
 export function parseResourceKey(key: ResourceKey): {
   kind: ResourceKind;
   resourceId: string;
@@ -27,7 +31,16 @@ export function parseResourceKey(key: ResourceKey): {
 }
 
 export function resourceLabel(resource: Pick<ResourceAmount, "id" | "displayName">): string {
-  return resource.displayName ?? resource.id;
+  const displayName = stripOreDictionaryPrefix(resource.displayName);
+  if (displayName) {
+    return displayName;
+  }
+
+  if (isOreDictionaryResource(resource)) {
+    return resource.id.slice("oredict:".length);
+  }
+
+  return resource.id;
 }
 
 export function formatRate(value: number, digits = 2): string {
@@ -52,7 +65,7 @@ export function formatResourceRate(flow: ResourceFlow | undefined): string {
   }
 
   const unit = flow.kind === "fluid" ? "L/s" : "/s";
-  return `${flow.displayName ?? flow.resourceId} ${formatRate(flow.amountPerSecond)}${unit}`;
+  return `${resourceLabel({ id: flow.resourceId, displayName: flow.displayName })} ${formatRate(flow.amountPerSecond)}${unit}`;
 }
 
 export function primaryOutput(recipe: Recipe): RecipeOutput | undefined {
@@ -79,4 +92,9 @@ export function resourceMatchesInput(
     resource.id === input.id ||
     Boolean(input.alternatives?.some((alternative) => alternative.id === resource.id))
   );
+}
+
+export function stripOreDictionaryPrefix(value: string | undefined): string | undefined {
+  const stripped = value?.replace(/^Ore Dictionary:\s*/i, "").trim();
+  return stripped || undefined;
 }

@@ -9,7 +9,7 @@ import type {
   RecipeSummary,
 } from "@/lib/datasets/types";
 import type { MachineTier, Recipe, ResourceAmount } from "@/lib/model/types";
-import { getRecipePowerTier, GT_VOLTAGE_TIERS } from "@/lib/model";
+import { getRecipePowerTier, GT_VOLTAGE_TIERS, isOreDictionaryResource } from "@/lib/model";
 
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 
@@ -122,7 +122,7 @@ export async function queryDatasetResources(
 
   for (const resourceIndex of indexes.sortedResourceIndexes) {
     const resource = catalog.resourceIndex[resourceIndex];
-    if (!resource || (!resource.iconPath && !resource.iconAtlas)) {
+    if (!resource || isOreDictionaryResource(resource) || (!resource.iconPath && !resource.iconAtlas)) {
       continue;
     }
     if (query && !resourceSearchTextMatches(indexes.searchText[resourceIndex] ?? "", query)) {
@@ -680,6 +680,10 @@ function ensureResourceIndexes(catalog: LoadedRecipeIndex): ResourceQueryIndexes
       searchText[index] = normalizeResourceSearchText(resource);
       return index;
     })
+    .filter((index) => {
+      const resource = catalog.resourceIndex[index];
+      return Boolean(resource && !isOreDictionaryResource(resource));
+    })
     .sort((leftIndex, rightIndex) => {
       const left = catalog.resourceIndex[leftIndex];
       const right = catalog.resourceIndex[rightIndex];
@@ -832,7 +836,12 @@ function getRecipeMapIconCandidates(
   resources: DatasetResourceIndexEntry[],
 ): RecipeMapIconCandidate[] {
   return resources
-    .filter((resource) => resource.kind === "item" && (resource.iconPath || resource.iconAtlas))
+    .filter(
+      (resource) =>
+        resource.kind === "item" &&
+        !isOreDictionaryResource(resource) &&
+        (resource.iconPath || resource.iconAtlas),
+    )
     .map((resource) => {
       const label = normalizeText(resource.displayName ?? resource.id);
       return {
