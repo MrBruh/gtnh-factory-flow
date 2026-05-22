@@ -15,6 +15,7 @@ export GTNH_RENDER_STACK_ICONS="${GTNH_RENDER_STACK_ICONS:-true}"
 export GTNH_ICON_EXPORT_BATCH_SIZE="${GTNH_ICON_EXPORT_BATCH_SIZE:-64}"
 export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-256}"
 export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$HOME/.cache/gtnh-factory-flow/icons/$GTNH_ATLAS_ICON_SIZE}"
+export GTNH_EXPORT_DISABLE_CLIENT_UI_MODS="${GTNH_EXPORT_DISABLE_CLIENT_UI_MODS:-false}"
 
 mkdir -p "$GTNH_DATASET_OUT_DIR" "$GTNH_RAW_EXPORT_DIR" "$GTNH_INSTANCE_DIR"
 
@@ -36,6 +37,7 @@ echo "GTNH 1.7.10 icon exporter: $GTNH_RENDER_STACK_ICONS"
 echo "Icon export batch size: $GTNH_ICON_EXPORT_BATCH_SIZE"
 echo "Atlas icon size: $GTNH_ATLAS_ICON_SIZE"
 echo "Shared icon cache: $GTNH_ICON_CACHE_DIR"
+echo "Disable client UI-only mods: $GTNH_EXPORT_DISABLE_CLIENT_UI_MODS"
 
 node tools/dataset-pipeline/scripts/download-gtnh-pack.mjs "$pack_archive"
 
@@ -81,6 +83,19 @@ mkdir -p "$GTNH_ICON_CACHE_DIR"
 
 if [[ -f "$instance_root/server.properties" ]]; then
   sed -i 's/^online-mode=.*/online-mode=false/' "$instance_root/server.properties"
+fi
+
+if [[ "$GTNH_EXPORT_DISABLE_CLIENT_UI_MODS" == "true" ]]; then
+  disabled_mod_dir="$instance_root/mods/.disabled-for-recex-export"
+  mkdir -p "$disabled_mod_dir"
+  while IFS= read -r mod_jar; do
+    echo "Disabling client UI-only mod for RecEx export: $(basename "$mod_jar")"
+    mv "$mod_jar" "$disabled_mod_dir/"
+  done < <(
+    find "$instance_root/mods" -maxdepth 1 -type f \
+      \( -iname 'NotEnoughEnergistics-*.jar' \) \
+      | sort
+  )
 fi
 
 export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Drecex.autorun=true"

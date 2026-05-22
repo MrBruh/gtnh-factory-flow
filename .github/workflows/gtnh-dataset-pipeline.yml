@@ -95,6 +95,7 @@ jobs:
           GTNH_RENDER_STACK_ICONS: "true"
           GTNH_ATLAS_ICON_SIZE: "256"
           GTNH_ATLAS_MAX_SIZE: "8192"
+          GTNH_EXPORT_DISABLE_CLIENT_UI_MODS: "true"
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           staging_root="$HOME/data/gtnh-factory-flow/staging/${GITHUB_RUN_ID}/datasets/gtnh"
@@ -123,6 +124,7 @@ jobs:
             -e GTNH_RENDER_STACK_ICONS \
             -e GTNH_ATLAS_ICON_SIZE \
             -e GTNH_ATLAS_MAX_SIZE \
+            -e GTNH_EXPORT_DISABLE_CLIENT_UI_MODS \
             -e GTNH_DATASETS_ROOT=/datasets \
             -v "$staging_root:/datasets" \
             -v "$PWD:/workspace" \
