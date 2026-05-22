@@ -82,7 +82,8 @@ const DEFAULT_ITEM_EDGE_COLOR = "#8b8f98";
 const DEFAULT_FLUID_EDGE_COLOR = "#2f89c5";
 const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
-const EDGE_BUNDLE_CLEARANCE = 14;
+const EDGE_BUNDLE_CLEARANCE = 30;
+const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -331,14 +332,14 @@ export function FactoryFlow() {
           strokeWidth: isFlowHighlighted
             ? 5
             : isStorageEdge
-            ? isStorageEdgeEmphasized
-              ? 3.5
-              : 2.6
-            : edgeResult?.isLimited
-              ? 2.2
-              : edge.resourceKind === "fluid"
-                ? 2.8
-                : 2.35,
+              ? isStorageEdgeEmphasized
+                ? 3.5
+                : 2.6
+              : edgeResult?.isLimited
+                ? 2.2
+                : edge.resourceKind === "fluid"
+                  ? 2.8
+                  : 2.35,
         },
       };
     });
@@ -1083,8 +1084,8 @@ function ResourceEdge({
     data?.bundle?.role === "member" && data.bundle.mode === "single-target";
   const showLabel = Boolean(
     data?.showLabel &&
-      !isHiddenBundleMember &&
-      (selected || data.isFlowHighlighted || zoom >= EDGE_LABEL_ZOOM),
+    !isHiddenBundleMember &&
+    (selected || data.isFlowHighlighted || zoom >= EDGE_LABEL_ZOOM),
   );
   const isHighlighted = selected || data?.isFlowHighlighted === true;
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
@@ -1096,6 +1097,7 @@ function ResourceEdge({
           sourceHandleIds: data.bundle.sourceHandleIds,
           sourcePosition,
           fallbackSource: visualSource,
+          targetNodeId: target,
           targetX: visualTarget.x,
           targetY: visualTarget.y,
           targetPosition,
@@ -1106,6 +1108,7 @@ function ResourceEdge({
             sourceHandleId: data.sourceHandleId ?? sourceHandleId ?? undefined,
             sourcePosition,
             fallbackSource: visualSource,
+            targetNodeId: target,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
             targetPosition,
@@ -1499,6 +1502,30 @@ function getDirectEdgePath({
     };
   }
 
+  const cleanStepPoints = getCleanDirectEdgePoints({
+    sourceNodeId,
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetNodeId,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  if (cleanStepPoints) {
+    const labelPoint = getPointAtPolylineRatio(cleanStepPoints, 0.5) ?? {
+      x: (sourceX + targetX) / 2,
+      y: (sourceY + targetY) / 2,
+    };
+
+    return {
+      path: pointsToSvgPath(cleanStepPoints),
+      labelX: labelPoint.x,
+      labelY: labelPoint.y,
+      points: cleanStepPoints,
+    };
+  }
+
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -1523,11 +1550,196 @@ function getDirectEdgePath({
   };
 }
 
+function getCleanDirectEdgePoints({
+  sourceNodeId,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetNodeId,
+  targetX,
+  targetY,
+  targetPosition,
+}: {
+  sourceNodeId?: string;
+  sourceX: number;
+  sourceY: number;
+  sourcePosition: Position;
+  targetNodeId?: string;
+  targetX: number;
+  targetY: number;
+  targetPosition: Position;
+}) {
+  const sourceBounds = sourceNodeId ? getMeasuredNodeBounds(sourceNodeId) : undefined;
+  const targetBounds = targetNodeId ? getMeasuredNodeBounds(targetNodeId) : undefined;
+
+  if (!sourceBounds && !targetBounds) {
+    return undefined;
+  }
+
+  const sourceExit = getNodeClearancePoint({
+    point: { x: sourceX, y: sourceY },
+    bounds: sourceBounds,
+    position: sourcePosition,
+    role: "source",
+  });
+  const targetExit = getNodeClearancePoint({
+    point: { x: targetX, y: targetY },
+    bounds: targetBounds,
+    position: targetPosition,
+    role: "target",
+  });
+
+  if (!sourceExit && !targetExit) {
+    return undefined;
+  }
+
+  const start = sourceExit ?? { x: sourceX, y: sourceY };
+  const end = targetExit ?? { x: targetX, y: targetY };
+  const sourceSide = String(sourcePosition);
+  const targetSide = String(targetPosition);
+  const points =
+    isHorizontalSide(sourceSide) || isHorizontalSide(targetSide)
+      ? getHorizontalLaneDirectPoints(
+          start,
+          end,
+          sourceSide,
+          targetSide,
+          sourceBounds,
+          targetBounds,
+        )
+      : getVerticalLaneDirectPoints(start, end, sourceSide, targetSide, sourceBounds, targetBounds);
+
+  return compactPolylinePoints([
+    { x: sourceX, y: sourceY },
+    start,
+    ...points,
+    end,
+    { x: targetX, y: targetY },
+  ]);
+}
+
+function getNodeClearancePoint({
+  point,
+  bounds,
+  position,
+  role,
+}: {
+  point: { x: number; y: number };
+  bounds?: { left: number; right: number; top: number; bottom: number };
+  position: Position;
+  role: "source" | "target";
+}) {
+  if (!bounds) {
+    return undefined;
+  }
+
+  const side = String(position);
+  switch (side) {
+    case "right":
+      return {
+        x: Math.max(point.x, bounds.right) + DIRECT_EDGE_NODE_CLEARANCE,
+        y: point.y,
+      };
+    case "left":
+      return {
+        x: Math.min(point.x, bounds.left) - DIRECT_EDGE_NODE_CLEARANCE,
+        y: point.y,
+      };
+    case "bottom":
+      return {
+        x: point.x,
+        y: Math.max(point.y, bounds.bottom) + DIRECT_EDGE_NODE_CLEARANCE,
+      };
+    case "top":
+      return {
+        x: point.x,
+        y: Math.min(point.y, bounds.top) - DIRECT_EDGE_NODE_CLEARANCE,
+      };
+    default:
+      return role === "source"
+        ? {
+            x: point.x + DIRECT_EDGE_NODE_CLEARANCE,
+            y: point.y,
+          }
+        : {
+            x: point.x - DIRECT_EDGE_NODE_CLEARANCE,
+            y: point.y,
+          };
+  }
+}
+
+function getHorizontalLaneDirectPoints(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  sourceSide: string,
+  targetSide: string,
+  sourceBounds?: { left: number; right: number; top: number; bottom: number },
+  targetBounds?: { left: number; right: number; top: number; bottom: number },
+) {
+  const goesRight = end.x >= start.x;
+  const sourceWantsRight = sourceSide === "right";
+  const targetWantsLeft = targetSide === "left";
+  const routeOutsideRight =
+    (sourceWantsRight && !targetWantsLeft) || (!sourceSide && goesRight) || sourceSide === "right";
+  const routeX = routeOutsideRight
+    ? Math.max(start.x, end.x, sourceBounds?.right ?? -Infinity, targetBounds?.right ?? -Infinity) +
+      DIRECT_EDGE_NODE_CLEARANCE
+    : Math.min(start.x, end.x, sourceBounds?.left ?? Infinity, targetBounds?.left ?? Infinity) -
+      DIRECT_EDGE_NODE_CLEARANCE;
+
+  if (
+    sourceWantsRight &&
+    targetWantsLeft &&
+    Math.abs(end.x - start.x) > DIRECT_EDGE_NODE_CLEARANCE * 3
+  ) {
+    const midX = (start.x + end.x) / 2;
+    return [
+      { x: midX, y: start.y },
+      { x: midX, y: end.y },
+    ];
+  }
+
+  return [
+    { x: routeX, y: start.y },
+    { x: routeX, y: end.y },
+  ];
+}
+
+function getVerticalLaneDirectPoints(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  sourceSide: string,
+  targetSide: string,
+  sourceBounds?: { left: number; right: number; top: number; bottom: number },
+  targetBounds?: { left: number; right: number; top: number; bottom: number },
+) {
+  const routeBelow = sourceSide === "bottom" || (targetSide !== "bottom" && end.y >= start.y);
+  const routeY = routeBelow
+    ? Math.max(
+        start.y,
+        end.y,
+        sourceBounds?.bottom ?? -Infinity,
+        targetBounds?.bottom ?? -Infinity,
+      ) + DIRECT_EDGE_NODE_CLEARANCE
+    : Math.min(start.y, end.y, sourceBounds?.top ?? Infinity, targetBounds?.top ?? Infinity) -
+      DIRECT_EDGE_NODE_CLEARANCE;
+
+  return [
+    { x: start.x, y: routeY },
+    { x: end.x, y: routeY },
+  ];
+}
+
+function isHorizontalSide(side: string) {
+  return side === "left" || side === "right";
+}
+
 function getBundledEdgePath({
   sourceNodeId,
   sourceHandleIds,
   sourcePosition,
   fallbackSource,
+  targetNodeId,
   targetX,
   targetY,
   targetPosition,
@@ -1536,6 +1748,7 @@ function getBundledEdgePath({
   sourceHandleIds: string[];
   sourcePosition: Position;
   fallbackSource: { x: number; y: number };
+  targetNodeId?: string;
   targetX: number;
   targetY: number;
   targetPosition: Position;
@@ -1553,9 +1766,11 @@ function getBundledEdgePath({
 
   if (sourcePoints.length < 2) {
     return getDirectEdgePath({
+      sourceNodeId,
       sourceX: fallbackSource.x,
       sourceY: fallbackSource.y,
       sourcePosition,
+      targetNodeId,
       targetX,
       targetY,
       targetPosition,
@@ -1572,13 +1787,22 @@ function getBundledEdgePath({
   const minY = Math.min(...sourcePoints.map((point) => point.y));
   const maxY = Math.max(...sourcePoints.map((point) => point.y));
   const trunkY = sourcePoints[Math.floor(sourcePoints.length / 2)].y;
-  const midX = (busX + targetX) / 2;
-  const trunkPoints = compactPolylinePoints([
-    { x: busX, y: trunkY },
-    { x: midX, y: trunkY },
-    { x: midX, y: targetY },
-    { x: targetX, y: targetY },
-  ]);
+  const trunkPoints =
+    getCleanDirectEdgePoints({
+      sourceX: busX,
+      sourceY: trunkY,
+      sourcePosition,
+      targetNodeId,
+      targetX,
+      targetY,
+      targetPosition,
+    }) ??
+    compactPolylinePoints([
+      { x: busX, y: trunkY },
+      { x: (busX + targetX) / 2, y: trunkY },
+      { x: (busX + targetX) / 2, y: targetY },
+      { x: targetX, y: targetY },
+    ]);
   const path = [
     ...sourcePoints.map((point) => `M ${point.x},${point.y} L ${busX},${point.y}`),
     `M ${busX},${minY} L ${busX},${maxY}`,
@@ -1602,6 +1826,7 @@ function getBundledMemberEdgePath({
   sourceHandleId,
   sourcePosition,
   fallbackSource,
+  targetNodeId,
   targetX,
   targetY,
   targetPosition,
@@ -1611,6 +1836,7 @@ function getBundledMemberEdgePath({
   sourceHandleId?: string;
   sourcePosition: Position;
   fallbackSource: { x: number; y: number };
+  targetNodeId?: string;
   targetX: number;
   targetY: number;
   targetPosition: Position;
@@ -1635,9 +1861,11 @@ function getBundledMemberEdgePath({
 
   if (allSourcePoints.length < 2 || !ownSourcePoint) {
     return getDirectEdgePath({
+      sourceNodeId,
       sourceX: fallbackSource.x,
       sourceY: fallbackSource.y,
       sourcePosition,
+      targetNodeId,
       targetX,
       targetY,
       targetPosition,
@@ -1651,14 +1879,28 @@ function getBundledMemberEdgePath({
       EDGE_BUNDLE_CLEARANCE
     : (sourceBounds?.right ?? Math.max(...allSourcePoints.map((point) => point.x))) +
       EDGE_BUNDLE_CLEARANCE;
-  const midX = (busX + targetX) / 2;
-  const points = compactPolylinePoints([
-    { x: busX, y: ownSourcePoint.y },
-    { x: midX, y: ownSourcePoint.y },
-    { x: midX, y: targetY },
-    { x: targetX, y: targetY },
-  ]);
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const points =
+    getCleanDirectEdgePoints({
+      sourceX: busX,
+      sourceY: ownSourcePoint.y,
+      sourcePosition,
+      targetNodeId,
+      targetX,
+      targetY,
+      targetPosition,
+    }) ??
+    compactPolylinePoints([
+      { x: busX, y: ownSourcePoint.y },
+      { x: (busX + targetX) / 2, y: ownSourcePoint.y },
+      { x: (busX + targetX) / 2, y: targetY },
+      { x: targetX, y: targetY },
+    ]);
+  const labelPoint = getPointAtPolylineRatio(points, 0.55) ?? {
+    x: (busX + targetX) / 2,
+    y: (ownSourcePoint.y + targetY) / 2,
+  };
+  const path = pointsToSvgPath(points);
+  const [fallbackPath, fallbackLabelX, fallbackLabelY] = getSmoothStepPath({
     sourceX: busX,
     sourceY: ownSourcePoint.y,
     sourcePosition,
@@ -1668,9 +1910,9 @@ function getBundledMemberEdgePath({
   });
 
   return {
-    path,
-    labelX,
-    labelY,
+    path: path || fallbackPath,
+    labelX: path ? labelPoint.x : fallbackLabelX,
+    labelY: path ? labelPoint.y : fallbackLabelY,
     points,
   };
 }
