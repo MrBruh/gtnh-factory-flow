@@ -83,12 +83,14 @@ function normalizeGregtechRecipes(source) {
       }
 
       const inputs = [
-        ...(rawRecipe.iI ?? []).map((item) =>
-          itemAmount(item, {
-            consumed: !isNonConsumedInput(item) && !isCircuitItem(item),
-            defaultAmount: isNonConsumedInput(item) ? 1 : undefined,
-          }),
-        ),
+        ...(rawRecipe.iI ?? []).map((item) => {
+          const nonConsumedInput =
+            isNonConsumedInput(item) || isCircuitItem(item) || isReusableToolInput(item);
+          return itemAmount(item, {
+            consumed: !nonConsumedInput,
+            defaultAmount: nonConsumedInput ? 1 : undefined,
+          });
+        }),
         ...(rawRecipe.iNC ?? []).map((item) =>
           itemAmount(item, { consumed: false, defaultAmount: 1 }),
         ),
@@ -407,6 +409,20 @@ function isCircuitItem(item) {
     label.includes("programmed circuit") ||
     label.includes("integrated circuit") ||
     label.includes("circuit configuration")
+  );
+}
+
+function isReusableToolInput(item) {
+  const label = text(item?.lN, "").toLowerCase();
+  const id = text(item?.id, "").toLowerCase();
+  return (
+    /^mold \(/.test(label) ||
+    /^extruder shape \(/.test(label) ||
+    /^shape mold \(/.test(label) ||
+    /^slicer shape \(/.test(label) ||
+    id.includes("shape_mold_") ||
+    id.includes("shape_extruder_") ||
+    id.includes("shape_slicer_")
   );
 }
 
