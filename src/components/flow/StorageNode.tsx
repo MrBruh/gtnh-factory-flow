@@ -278,16 +278,16 @@ function storageMatchesSearch(storage: FactoryStorage, query: string) {
 }
 
 function StorageStat({ label, value }: { label: string; value: string }) {
+  const valueTextStyle = getStorageStatTextStyle(value);
+
   return (
     <div className="storage-node-stat grid h-10 min-w-0 overflow-hidden border-2 border-[#707070] bg-[#bababa] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
       <div className="h-[11px] truncate text-[8px] uppercase leading-[11px] text-[#424242]">
         {label}
       </div>
       <div
-        className={[
-          "block max-w-full overflow-hidden whitespace-nowrap text-center font-medium leading-[18px] text-[#111] tabular-nums",
-          getStorageStatTextSize(value),
-        ].join(" ")}
+        className="block max-w-full overflow-hidden whitespace-nowrap text-center font-medium leading-[18px] text-[#111] tabular-nums"
+        style={valueTextStyle}
         title={value}
       >
         {value}
@@ -296,12 +296,18 @@ function StorageStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getStorageStatTextSize(value: string) {
-  if (value.length > 13) return "text-[5px]";
-  if (value.length > 11) return "text-[6px]";
-  if (value.length > 9) return "text-[7px]";
-  if (value.length > 7) return "text-[8px]";
-  return "text-[10px]";
+function getStorageStatTextStyle(value: string): CSSProperties {
+  const maxTextWidthPx = 42;
+  const maxFontSizePx = 10;
+  const minFontSizePx = 5;
+  const estimatedGlyphWidthEm = 0.72;
+  const estimatedTextWidthAtMaxSize = value.length * maxFontSizePx * estimatedGlyphWidthEm;
+  const fontSize = Math.max(
+    minFontSizePx,
+    Math.min(maxFontSizePx, (maxTextWidthPx / estimatedTextWidthAtMaxSize) * maxFontSizePx),
+  );
+
+  return { fontSize: `${fontSize.toFixed(2)}px` };
 }
 
 function formatCompact(value: number, unit: string, options?: { forceSign?: boolean }) {
