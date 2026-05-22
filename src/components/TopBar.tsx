@@ -11,10 +11,9 @@ import { useFactoryStore } from "@/store/factory-store";
 
 interface TopBarProps {
   onLoadDatasetVersion: (versionId: string) => void;
-  onNotice: (message: string) => void;
 }
 
-export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
+export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
   const projectInputRef = useRef<HTMLInputElement>(null);
   const project = useFactoryStore((state) => state.project);
   const manifest = useFactoryStore((state) => state.datasetManifest);
@@ -32,16 +31,14 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
     anchor.download = `${project.name.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "factory"}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    onNotice("Plan exported as JSON.");
   };
 
   const importProjectJson = async (file: File) => {
     try {
       const text = await file.text();
       setProject(cloneImportedProject(parseFactoryProjectJson(text)));
-      onNotice("Plan imported.");
     } catch (error) {
-      onNotice(error instanceof Error ? error.message : "Plan import failed.");
+      console.error(error instanceof Error ? error.message : "Plan import failed.");
     } finally {
       if (projectInputRef.current) {
         projectInputRef.current.value = "";
@@ -82,7 +79,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
           label="Clean board"
           onClick={() => {
             if (project.nodes.length === 0 && project.edges.length === 0) {
-              onNotice("Board is already empty.");
               return;
             }
 
@@ -91,7 +87,6 @@ export function TopBar({ onLoadDatasetVersion, onNotice }: TopBarProps) {
             }
 
             cleanBoard();
-            onNotice("Board cleaned.");
           }}
         />
         <ToolbarButton

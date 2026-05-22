@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import {
   DEFAULT_DATASET_MANIFEST_URL,
   fetchDatasetManifest,
@@ -24,7 +24,6 @@ export function FactoryPlannerApp() {
   const hydratedRef = useRef(false);
   const skipInitialSaveRef = useRef(true);
   const saveTimeoutRef = useRef<number | undefined>(undefined);
-  const [notice, setNotice] = useState<string | undefined>();
 
   const loadDatasetVersion = useCallback(
     async (versionId: string) => {
@@ -42,11 +41,9 @@ export function FactoryPlannerApp() {
         setDatasetLoading(true);
         const dataset = await initRecipeDatasetVersion(manifestUrl, version);
         setDataset(dataset);
-        setNotice(`Loaded GTNH ${dataset.gtnhVersion} recipe index.`);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Dataset load failed.";
         setDatasetError(message);
-        setNotice(message);
       }
     },
     [setDataset, setDatasetError, setDatasetLoading],
@@ -63,7 +60,7 @@ export function FactoryPlannerApp() {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Stored plan could not be loaded.";
-          window.setTimeout(() => setNotice(message), 0);
+          console.error(message);
         }
       }
       hydratedRef.current = true;
@@ -86,7 +83,6 @@ export function FactoryPlannerApp() {
         setDatasetManifest(manifest, DEFAULT_DATASET_MANIFEST_URL);
         if (!pickDefaultDatasetVersion(manifest)) {
           setDatasetLoading(false);
-          setNotice("Dataset manifest loaded, but it contains no GTNH versions yet.");
           return;
         }
 
@@ -98,7 +94,6 @@ export function FactoryPlannerApp() {
 
         const message = error instanceof Error ? error.message : "Dataset manifest load failed.";
         setDatasetError(message);
-        setNotice(message);
       }
     }
 
@@ -130,7 +125,7 @@ export function FactoryPlannerApp() {
         } catch (error) {
           const message =
             error instanceof Error ? error.message : "Plan could not be saved locally.";
-          window.setTimeout(() => setNotice(message), 0);
+          console.error(message);
         }
       }, 1200);
     }, 350);
@@ -142,23 +137,9 @@ export function FactoryPlannerApp() {
     };
   }, [project]);
 
-  useEffect(() => {
-    if (!notice) {
-      return;
-    }
-
-    const timeout = window.setTimeout(() => setNotice(undefined), 4200);
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
-
   return (
     <div className="flex h-screen min-h-[720px] flex-col bg-neutral-100 text-neutral-950">
-      <TopBar onLoadDatasetVersion={loadDatasetVersion} onNotice={setNotice} />
-      {notice ? (
-        <div className="border-b border-cyan-200 bg-cyan-50 px-4 py-2 text-sm text-cyan-900">
-          {notice}
-        </div>
-      ) : null}
+      <TopBar onLoadDatasetVersion={loadDatasetVersion} />
       <main className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[360px_minmax(0,1fr)]">
         <RecipeBrowser />
         <FactoryFlow />
