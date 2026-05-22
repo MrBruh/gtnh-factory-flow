@@ -789,7 +789,7 @@ function ResourceResultPage({
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col justify-between gap-2 overflow-hidden"
+      className="flex min-h-0 flex-1 flex-col justify-start gap-2 overflow-hidden"
       aria-label="Resource results"
       role="listbox"
     >
