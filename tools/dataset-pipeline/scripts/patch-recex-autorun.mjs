@@ -229,6 +229,7 @@ exporterSource = exporterSource.replace(
   "                // item inputs\n",
   [
     "                // item inputs",
+    "                int[] inputChances = getInputChances(rec, rec.mInputs.length);",
     "                int inputIndex = 0;",
   ].join("\n") + "\n",
 );
@@ -246,7 +247,7 @@ exporterSource = exporterSource.replace(
 exporterSource = exporterSource.replace(
   "                    gtr.iI.add(item);\n",
   [
-    "                    if (rec.getInputChance(inputIndex) <= 0) {",
+    "                    if (inputChances != null && inputIndex < inputChances.length && inputChances[inputIndex] <= 0) {",
     "                        item.nc = Boolean.TRUE;",
     "                    }",
     "                    inputIndex++;",
@@ -379,6 +380,7 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
     /\/\/ item inputs\s+for\(ItemStack stack : rec\.mInputs\)\{\s+Item item = RecipeUtil\.formatGregtechItemStack\(stack\);\s+if\(item == null\)\{\s+continue;\s+\}\s+gtr\.iI\.add\(item\);\s+\}\s+\/\/ item outputs/,
     [
       "// item inputs",
+      "int[] inputChances = getInputChances(rec, rec.mInputs.length);",
       "int inputIndex = 0;",
       "for(ItemStack stack : rec.mInputs){",
       "    Item item = RecipeUtil.formatGregtechItemStack(stack);",
@@ -386,7 +388,7 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
       "        inputIndex++;",
       "        continue;",
       "    }",
-      "    if (rec.getInputChance(inputIndex) <= 0) {",
+      "    if (inputChances != null && inputIndex < inputChances.length && inputChances[inputIndex] <= 0) {",
       "        item.nc = Boolean.TRUE;",
       "    }",
       "    inputIndex++;",
