@@ -14,6 +14,8 @@ import {
   type Edge,
   type EdgeProps,
   type EdgeTypes,
+  type FinalConnectionState,
+  type HandleType,
   type Node,
   type NodeChange,
   type NodeTypes,
@@ -457,6 +459,21 @@ export function FactoryFlow() {
     draggedResourceRef.current = undefined;
   }, []);
 
+  const handleReconnectEnd = useCallback(
+    (
+      _event: MouseEvent | TouchEvent,
+      edge: ResourceFlowEdge,
+      _handleType: HandleType,
+      connectionState: FinalConnectionState,
+    ) => {
+      reconnectingEdgeRef.current = false;
+      if (connectionState.isValid !== true) {
+        deleteEdge(edge.id);
+      }
+    },
+    [deleteEdge],
+  );
+
   const updateFlowViewportCenter = useCallback(() => {
     const instance = flowInstanceRef.current;
     const board = boardRef.current;
@@ -640,6 +657,7 @@ export function FactoryFlow() {
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
         onReconnectStart={handleReconnectStart}
+        onReconnectEnd={handleReconnectEnd}
         onInit={handleInit}
         onMoveEnd={handleMoveEnd}
         isValidConnection={isCompatibleResourceConnection}
@@ -647,6 +665,7 @@ export function FactoryFlow() {
         connectionLineStyle={connectionLineStyle}
         connectionMode={ConnectionMode.Loose}
         connectionRadius={18}
+        elevateNodesOnSelect={false}
         edgesReconnectable
         reconnectRadius={12}
         onNodeClick={handleNodeClick}
