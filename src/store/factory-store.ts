@@ -31,7 +31,7 @@ import { TICKS_PER_SECOND } from "@/lib/model/types";
 export const LOCAL_STORAGE_KEY = "gtnh-factory-flow.project.v2";
 export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.v1";
 const RESOURCE_HISTORY_LIMIT = 8;
-const CYCLIC_SMALL_BOTTLENECK_UTILIZATION = 1.05;
+const CYCLIC_SMALL_BOTTLENECK_UTILIZATION = 1.2;
 
 interface FactoryStore {
   project: FactoryProject;
