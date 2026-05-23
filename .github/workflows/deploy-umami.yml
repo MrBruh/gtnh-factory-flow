@@ -61,6 +61,7 @@ jobs:
           git -C "$umami_source" fetch --tags --force
           git -C "$umami_source" checkout --force v3.1.0
           git -C "$umami_source" clean -fdx
+          sed -i "s/pnpm install --frozen-lockfile/CYPRESS_INSTALL_BINARY=0 pnpm --allow-build='@parcel\/watcher' --allow-build='@prisma\/engines' --allow-build='@swc\/core' --allow-build='cypress' --allow-build='esbuild' --allow-build='prisma' --allow-build='sharp' install --frozen-lockfile/g" "$umami_source/Dockerfile"
           sed -i "s/--allow-build='@prisma\/engines'/--allow-build='@prisma\/engines' --allow-build='prisma'/g" "$umami_source/Dockerfile"
 
           cp tools/umami/docker-compose.yml "$compose_file"
