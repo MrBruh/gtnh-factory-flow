@@ -2535,9 +2535,14 @@ function getMeasuredSlotEndpoint({
   }
 
   const slotRect = slotElement.getBoundingClientRect();
-  const screenPoint = getSlotRectEdgePoint(slotRect, edgeSide, endpointOffset);
+  const screenPoint = getSlotRectEdgePoint(slotRect, edgeSide);
+  const flowPoint = screenToFlowPoint(screenPoint, nodeElement);
 
-  return screenToFlowPoint(screenPoint, nodeElement);
+  if (!flowPoint) {
+    return undefined;
+  }
+
+  return offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
 }
 
 function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
@@ -2563,17 +2568,33 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
   );
 }
 
-function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string, endpointOffset = 0) {
+function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string) {
   switch (edgeSide) {
     case "right":
-      return { x: rect.right, y: rect.top + rect.height / 2 + endpointOffset };
+      return { x: rect.right, y: rect.top + rect.height / 2 };
     case "top":
-      return { x: rect.left + rect.width / 2 + endpointOffset, y: rect.top };
+      return { x: rect.left + rect.width / 2, y: rect.top };
     case "bottom":
-      return { x: rect.left + rect.width / 2 + endpointOffset, y: rect.bottom };
+      return { x: rect.left + rect.width / 2, y: rect.bottom };
     case "left":
     default:
-      return { x: rect.left, y: rect.top + rect.height / 2 + endpointOffset };
+      return { x: rect.left, y: rect.top + rect.height / 2 };
+  }
+}
+
+function offsetFlowPointForEdgeSide(
+  point: { x: number; y: number },
+  edgeSide: string,
+  endpointOffset = 0,
+) {
+  switch (edgeSide) {
+    case "top":
+    case "bottom":
+      return { x: point.x + endpointOffset, y: point.y };
+    case "right":
+    case "left":
+    default:
+      return { x: point.x, y: point.y + endpointOffset };
   }
 }
 
