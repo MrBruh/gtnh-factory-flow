@@ -90,7 +90,8 @@ const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
-const EXPORT_PNG_PIXEL_RATIO = 2;
+const EXPORT_PNG_PIXEL_RATIO = 1;
+const EXPORT_PNG_MAX_PIXEL_SIDE = 4096;
 const FLOW_EDGE_LABEL_SELECT_EVENT = "gtnh-flow.edge-label-select";
 type ResourceEdgeData = {
   resource: Pick<
@@ -697,7 +698,7 @@ export function FactoryFlow() {
         const imageBlob = await toBlob(viewportElement, {
           ...options,
           filter: exportNodeFilter,
-          pixelRatio: EXPORT_PNG_PIXEL_RATIO,
+          pixelRatio: getExportPngPixelRatio(imageWidth, imageHeight),
           skipFonts: true,
         });
         if (!imageBlob) {
@@ -3099,6 +3100,15 @@ function getExportImageSize(graphSize: number) {
   }
 
   return Math.ceil(graphSize + EXPORT_IMAGE_PADDING * 2);
+}
+
+function getExportPngPixelRatio(imageWidth: number, imageHeight: number) {
+  const maxSide = Math.max(imageWidth, imageHeight);
+  if (!Number.isFinite(maxSide) || maxSide <= 0) {
+    return EXPORT_PNG_PIXEL_RATIO;
+  }
+
+  return Math.min(EXPORT_PNG_PIXEL_RATIO, EXPORT_PNG_MAX_PIXEL_SIDE / maxSide);
 }
 
 function downloadBlob(blob: Blob, fileName: string) {
