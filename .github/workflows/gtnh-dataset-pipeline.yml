@@ -1,6 +1,11 @@
 name: GTNH dataset pipeline
 
 on:
+  repository_dispatch:
+    types:
+      - gtnh-daily-published
+      - gtnh-stable-published
+      - gtnh-version-published
   workflow_dispatch:
     inputs:
       channel:
@@ -24,6 +29,7 @@ on:
         type: boolean
   schedule:
     - cron: "35 5 * * *"
+    - cron: "*/30 * * * *"
 
 permissions:
   contents: read
@@ -50,8 +56,8 @@ jobs:
       - id: detect
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          CHANNEL: ${{ inputs.channel || 'both' }}
-          FORCE_REBUILD: ${{ inputs.force_rebuild || false }}
+          CHANNEL: ${{ github.event.client_payload.channel || (github.event.action == 'gtnh-daily-published' && 'daily') || (github.event.action == 'gtnh-stable-published' && 'stable') || inputs.channel || 'both' }}
+          FORCE_REBUILD: ${{ github.event.client_payload.force_rebuild || inputs.force_rebuild || false }}
         run: GTNH_DATASETS_ROOT="$HOME/data/gtnh-factory-flow/datasets/gtnh" node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
 
       - uses: actions/upload-artifact@v4
@@ -151,7 +157,7 @@ jobs:
   publish:
     name: Publish generated datasets
     needs: build
-    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || inputs.publish == true || inputs.force_rebuild == true) }}
+    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || inputs.publish == true || inputs.force_rebuild == true) }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
       - uses: actions/checkout@v4
