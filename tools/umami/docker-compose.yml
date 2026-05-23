@@ -2,7 +2,7 @@ services:
   umami:
     image: gtnh-factory-flow-umami:local
     build:
-      context: https://github.com/umami-software/umami.git#v3.1.0
+      context: "${UMAMI_BUILD_CONTEXT:-https://github.com/umami-software/umami.git#v3.1.0}"
       args:
         BASE_PATH: "${BASE_PATH:-}"
         DATABASE_TYPE: "postgresql"
