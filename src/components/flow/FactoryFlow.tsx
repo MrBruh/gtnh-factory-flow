@@ -1061,7 +1061,6 @@ function ResourceEdge({
     handleId: data?.sourceHandleId ?? sourceHandleId,
     position: sourcePosition,
     peerX: targetX,
-    peerY: targetY,
     fallbackX: sourceX,
     fallbackY: sourceY,
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
@@ -1073,7 +1072,6 @@ function ResourceEdge({
     handleId: data?.targetHandleId ?? targetHandleId,
     position: targetPosition,
     peerX: sourceX,
-    peerY: sourceY,
     fallbackX: targetX,
     fallbackY: targetY,
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
@@ -2093,7 +2091,6 @@ function getSlotEdgeEndpoint({
   handleId,
   position,
   peerX,
-  peerY,
   fallbackX,
   fallbackY,
   isRecipeSlotEndpoint,
@@ -2104,7 +2101,6 @@ function getSlotEdgeEndpoint({
   handleId?: string | null;
   position: unknown;
   peerX: number;
-  peerY: number;
   fallbackX: number;
   fallbackY: number;
   isRecipeSlotEndpoint?: boolean;
@@ -2120,7 +2116,6 @@ function getSlotEdgeEndpoint({
     handleId,
     position,
     peerX,
-    peerY,
     preferredSide,
   });
 
@@ -2162,14 +2157,12 @@ function getAutoEndpointSide({
   handleId,
   position,
   peerX,
-  peerY,
   preferredSide,
 }: {
   nodeId: string;
   handleId?: string | null;
   position: unknown;
   peerX: number;
-  peerY: number;
   preferredSide: "source" | "target";
 }): Position {
   const fallbackSide =
@@ -2191,17 +2184,13 @@ function getAutoEndpointSide({
     y: (bounds.top + bounds.bottom) / 2,
   };
   const dx = peerX - reference.x;
-  const dy = peerY - reference.y;
+  const horizontalDeadZone = Math.max(24, (bounds.right - bounds.left) * 0.08);
 
-  if (Math.abs(dx) >= Math.abs(dy) * 1.2) {
+  if (Math.abs(dx) > horizontalDeadZone) {
     return dx >= 0 ? Position.Right : Position.Left;
   }
 
-  if (Math.abs(dy) >= Math.abs(dx) * 1.2) {
-    return dy >= 0 ? Position.Bottom : Position.Top;
-  }
-
-  return fallbackSide;
+  return preferredSide === "source" ? Position.Right : Position.Left;
 }
 
 function positionToEdgeSide(position: unknown): Position {
