@@ -62,6 +62,7 @@ jobs:
           git -C "$umami_source" checkout --force v3.1.0
           git -C "$umami_source" clean -fdx
           printf '\ndangerouslyAllowAllBuilds: true\n' >> "$umami_source/pnpm-workspace.yaml"
+          sed -i "s/COPY package.json pnpm-lock.yaml .\//COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .\//g" "$umami_source/Dockerfile"
           sed -i "s/--allow-build='@prisma\/engines'/--allow-build='@prisma\/engines' --allow-build='prisma'/g" "$umami_source/Dockerfile"
 
           cp tools/umami/docker-compose.yml "$compose_file"
