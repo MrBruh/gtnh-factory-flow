@@ -1,0 +1,50 @@
+name: Deploy Umami
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gtnh-factory-flow-umami
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy Umami analytics to exotiserver
+    runs-on: [self-hosted, Linux, X64, gtnh-export]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Umami
+        run: |
+          set -euo pipefail
+
+          umami_root="$HOME/apps/gtnh-factory-flow-umami"
+          env_file="$umami_root/.env"
+          compose_file="$umami_root/docker-compose.yml"
+          mkdir -p "$umami_root"
+
+          if [ ! -f "$env_file" ]; then
+            postgres_password="$(openssl rand -hex 24)"
+            app_secret="$(openssl rand -hex 32)"
+            {
+              printf 'POSTGRES_DB=umami\n'
+              printf 'POSTGRES_USER=umami\n'
+              printf 'POSTGRES_PASSWORD=%s\n' "$postgres_password"
+              printf 'APP_SECRET=%s\n' "$app_secret"
+              printf 'UMAMI_PORT=8582\n'
+              printf 'TRACKER_SCRIPT_NAME=gtnh-stats.js\n'
+            } > "$env_file"
+          fi
+
+          cp tools/umami/docker-compose.yml "$compose_file"
+
+          cd "$umami_root"
+          docker compose pull
+          docker compose up -d
+          docker compose ps
+
+          echo "Umami is listening on port $(grep '^UMAMI_PORT=' "$env_file" | cut -d= -f2)."
+          echo "Initial credentials are admin / umami. Change the password after first login."

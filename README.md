@@ -70,6 +70,24 @@ persistent dataset volume at `$HOME/data/gtnh-factory-flow/datasets/gtnh`. Each 
 gets `public/datasets/gtnh` as a symlink to that shared volume, so images, manifests, and
 recipe JSON are generated once and consumed by both dev and prod.
 
+## Analytics
+
+Umami is deployed through the manual `Deploy Umami` GitHub Actions workflow. It runs
+Umami and Postgres with Docker Compose on the self-hosted runner, exposed on port `8582`.
+After first login, change the default `admin` / `umami` password.
+
+The site includes the Umami script only when these build-time variables exist in
+`$HOME/apps/<deploy-name>/analytics.env` on the runner:
+
+```bash
+NEXT_PUBLIC_UMAMI_SCRIPT_URL=/_umami/gtnh-stats.js
+NEXT_PUBLIC_UMAMI_HOST_URL=/_umami
+NEXT_PUBLIC_UMAMI_WEBSITE_ID=<website-id-from-umami>
+```
+
+Use `$HOME/apps/gtnh-factory-flow/analytics.env` for prod and
+`$HOME/apps/gtnh-factory-flow-dev/analytics.env` for dev.
+
 ## Load Real Recipes
 
 On startup the app automatically fetches `/datasets/gtnh/datasets.manifest.json`. If the

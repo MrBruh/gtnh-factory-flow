@@ -255,16 +255,19 @@ jobs:
           dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           release_dir="$app_root/releases/$release_sha"
           service_file="$HOME/.config/systemd/user/gtnh-factory-flow.service"
+          analytics_env_file="$app_root/analytics.env"
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
           git archive --format=tar HEAD | tar -xf - -C "$release_dir"
+          touch "$analytics_env_file"
 
           mkdir -p "$dataset_root"
 
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             -e HOME=/tmp \
+            --env-file "$analytics_env_file" \
             -v "$release_dir:/workspace" \
             -w /workspace \
             gtnh-factory-flow-site:ci \

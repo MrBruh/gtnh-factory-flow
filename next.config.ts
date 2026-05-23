@@ -18,6 +18,14 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/_umami/:path*",
+        destination: "http://127.0.0.1:8582/:path*",
+      },
+    ];
+  },
 };
 
 export default nextConfig;
