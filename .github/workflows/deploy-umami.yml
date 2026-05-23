@@ -69,6 +69,7 @@ jobs:
           sed -i "s/npm install -g pnpm/npm install -g pnpm@10.23.0/g" "$umami_source/Dockerfile"
           sed -i "s/COPY package.json pnpm-lock.yaml .\//COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .\//g" "$umami_source/Dockerfile"
           sed -i "s/--allow-build='@prisma\/engines'/--allow-build='@prisma\/engines' --allow-build='prisma'/g" "$umami_source/Dockerfile"
+          sed -i "/COPY --from=builder --chown=nextjs:nodejs \\/app\\/.next\\/standalone .\\//a RUN pnpm --allow-build='@prisma/engines' --allow-build='prisma' add npm-run-all dotenv chalk semver prisma@\\${PRISMA_VERSION} @prisma/client@\\${PRISMA_VERSION} @prisma/adapter-pg@\\${PRISMA_VERSION}" "$umami_source/Dockerfile"
 
           cp tools/umami/docker-compose.yml "$compose_file"
 
