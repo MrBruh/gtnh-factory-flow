@@ -70,6 +70,10 @@ jobs:
           sed -i "s/COPY package.json pnpm-lock.yaml .\//COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .\//g" "$umami_source/Dockerfile"
           sed -i "s/--allow-build='@prisma\/engines'/--allow-build='@prisma\/engines' --allow-build='prisma'/g" "$umami_source/Dockerfile"
           sed -i "/COPY --from=builder --chown=nextjs:nodejs \\/app\\/.next\\/standalone .\\//a RUN pnpm --allow-build='@prisma/engines' --allow-build='prisma' add npm-run-all dotenv chalk semver prisma@7.3.0 @prisma/client@7.3.0 @prisma/adapter-pg@7.3.0" "$umami_source/Dockerfile"
+          cp src/app/favicon.ico "$umami_source/public/favicon.ico"
+          cp public/site-icon.png "$umami_source/public/favicon-16x16.png"
+          cp public/site-icon.png "$umami_source/public/favicon-32x32.png"
+          cp public/site-icon.png "$umami_source/public/apple-touch-icon.png"
 
           cp tools/umami/docker-compose.yml "$compose_file"
 
