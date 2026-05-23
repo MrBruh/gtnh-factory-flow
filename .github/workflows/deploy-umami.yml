@@ -61,7 +61,11 @@ jobs:
           git -C "$umami_source" fetch --tags --force
           git -C "$umami_source" checkout --force v3.1.0
           git -C "$umami_source" clean -fdx
-          printf '\ndangerouslyAllowAllBuilds: true\n' >> "$umami_source/pnpm-workspace.yaml"
+          {
+            printf 'packages:\n'
+            printf "  - '**'\n"
+            printf 'dangerouslyAllowAllBuilds: true\n'
+          } > "$umami_source/pnpm-workspace.yaml"
           sed -i "s/npm install -g pnpm/npm install -g pnpm@10.23.0/g" "$umami_source/Dockerfile"
           sed -i "s/COPY package.json pnpm-lock.yaml .\//COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .\//g" "$umami_source/Dockerfile"
           sed -i "s/--allow-build='@prisma\/engines'/--allow-build='@prisma\/engines' --allow-build='prisma'/g" "$umami_source/Dockerfile"
