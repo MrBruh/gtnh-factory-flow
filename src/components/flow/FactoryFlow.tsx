@@ -1064,7 +1064,6 @@ function ResourceEdge({
     fallbackY: sourceY,
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
     isStorageSlotEndpoint: data?.sourceStorageEndpoint,
-    preferredSide: "source",
   });
   const visualTarget = getSlotEdgeEndpoint({
     nodeId: target,
@@ -1074,7 +1073,6 @@ function ResourceEdge({
     fallbackY: targetY,
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
-    preferredSide: "target",
   });
   const rate = data?.bundle?.demand
     ? `${formatEdgeValue(data.bundle.demand)} ${data.unit}`
@@ -2092,7 +2090,6 @@ function getSlotEdgeEndpoint({
   fallbackY,
   isRecipeSlotEndpoint,
   isStorageSlotEndpoint,
-  preferredSide,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -2101,17 +2098,12 @@ function getSlotEdgeEndpoint({
   fallbackY: number;
   isRecipeSlotEndpoint?: boolean;
   isStorageSlotEndpoint?: boolean;
-  preferredSide: "source" | "target";
 }) {
   if (!isRecipeSlotEndpoint && !isStorageSlotEndpoint) {
     return { x: fallbackX, y: fallbackY, side: positionToEdgeSide(position) };
   }
 
-  const edgeSide = isStorageSlotEndpoint
-    ? preferredSide === "source"
-      ? Position.Right
-      : Position.Left
-    : positionToEdgeSide(position);
+  const edgeSide = positionToEdgeSide(position);
 
   const measuredEndpoint = getMeasuredSlotEndpoint({
     nodeId,
