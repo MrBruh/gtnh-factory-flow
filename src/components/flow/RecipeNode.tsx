@@ -206,7 +206,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                     event.stopPropagation();
                     updateCoilTier(-1);
                   }}
-                  className="nodrag flex h-10 w-10 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
+                  className="nodrag flex h-14 w-14 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
                   title={`${coilResource.displayName ?? coilControl.current.label}. Left click up, right click down.`}
                   aria-label={`Coil ${coilResource.displayName ?? coilControl.current.label}`}
                 >
@@ -215,8 +215,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                     bare
                     tooltip={false}
                     showAmount={false}
-                    iconPixelSize={36}
-                    className="h-9 w-9"
+                    showConsumedState={false}
+                    iconPixelSize={52}
+                    className="h-[52px] w-[52px]"
                   />
                 </button>
               ) : undefined

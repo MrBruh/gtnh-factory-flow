@@ -21,6 +21,7 @@ interface ResourceIconProps {
   className?: string;
   tooltip?: boolean;
   iconPixelSize?: number;
+  showConsumedState?: boolean;
 }
 
 const sizeClasses = {
@@ -39,6 +40,7 @@ export function ResourceIcon({
   className = "",
   tooltip = true,
   iconPixelSize,
+  showConsumedState = true,
 }: ResourceIconProps) {
   const title = buildTooltipLabel(resource);
   const icon = (
@@ -60,7 +62,7 @@ export function ResourceIcon({
       {resource && showAmount ? <AmountLabel resource={resource} /> : null}
       {resource?.chance !== undefined ? <ChanceLabel chance={resource.chance} /> : null}
 
-      {resource?.consumed === false ? (
+      {showConsumedState && resource?.consumed === false ? (
         <span
           title="Not consumed"
           className="absolute left-0 top-0 font-mono text-[8px] font-black leading-none text-[#ffff55] drop-shadow-[1px_1px_0_#000]"
