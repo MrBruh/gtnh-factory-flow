@@ -254,6 +254,7 @@ jobs:
           app_root="$HOME/apps/gtnh-factory-flow"
           dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           release_dir="$app_root/releases/$release_sha"
+          service_file="$HOME/.config/systemd/user/gtnh-factory-flow.service"
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
@@ -275,8 +276,30 @@ jobs:
 
           ln -sfn "$release_dir" "$app_root/current.next"
           mv -Tf "$app_root/current.next" "$app_root/current"
+
+          mkdir -p "$HOME/.config/systemd/user"
+          cat > "$service_file" <<EOF
+          [Unit]
+          Description=GTNH Factory Flow (main) Next.js app
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=$app_root/current
+          Environment=NODE_ENV=production
+          Environment=PORT=8580
+          ExecStart=/usr/bin/npm run start -- --hostname 0.0.0.0 --port 8580
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=default.target
+          EOF
+
           export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+          systemctl --user daemon-reload
+          systemctl --user enable --now gtnh-factory-flow.service
           systemctl --user restart gtnh-factory-flow.service
           systemctl --user --no-pager --full status gtnh-factory-flow.service
 

@@ -4,13 +4,14 @@ on:
   push:
     branches:
       - main
+      - develop
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: gtnh-factory-flow-deploy
+  group: gtnh-factory-flow-deploy-${{ github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -26,10 +27,26 @@ jobs:
       - name: Build and activate release
         run: |
           set -euo pipefail
+          case "${GITHUB_REF_NAME}" in
+            main)
+              deploy_name="gtnh-factory-flow"
+              port="8580"
+              ;;
+            develop)
+              deploy_name="gtnh-factory-flow-dev"
+              port="8581"
+              ;;
+            *)
+              echo "Unsupported deploy branch: ${GITHUB_REF_NAME}" >&2
+              exit 1
+              ;;
+          esac
+
           release_sha="$(git rev-parse --short=10 HEAD)"
-          app_root="$HOME/apps/gtnh-factory-flow"
+          app_root="$HOME/apps/$deploy_name"
           dataset_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           release_dir="$app_root/releases/$release_sha"
+          service_file="$HOME/.config/systemd/user/$deploy_name.service"
 
           rm -rf "$release_dir"
           mkdir -p "$release_dir"
@@ -55,10 +72,32 @@ jobs:
 
           ln -sfn "$release_dir" "$app_root/current.next"
           mv -Tf "$app_root/current.next" "$app_root/current"
+
+          mkdir -p "$HOME/.config/systemd/user"
+          cat > "$service_file" <<EOF
+          [Unit]
+          Description=GTNH Factory Flow (${GITHUB_REF_NAME}) Next.js app
+          After=network.target
+
+          [Service]
+          Type=simple
+          WorkingDirectory=$app_root/current
+          Environment=NODE_ENV=production
+          Environment=PORT=$port
+          ExecStart=/usr/bin/npm run start -- --hostname 0.0.0.0 --port $port
+          Restart=always
+          RestartSec=5
+
+          [Install]
+          WantedBy=default.target
+          EOF
+
           export XDG_RUNTIME_DIR="/run/user/$(id -u)"
           export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
-          systemctl --user restart gtnh-factory-flow.service
-          systemctl --user --no-pager --full status gtnh-factory-flow.service
+          systemctl --user daemon-reload
+          systemctl --user enable --now "$deploy_name.service"
+          systemctl --user restart "$deploy_name.service"
+          systemctl --user --no-pager --full status "$deploy_name.service"
 
           if [ -f "$dataset_root/datasets.manifest.json" ]; then
             for existing_release in "$app_root"/releases/*; do

@@ -56,6 +56,20 @@ npm run typecheck
 npm run build
 ```
 
+## Deployment Branches
+
+The site workflow deploys two isolated app instances from two branches:
+
+- `main` deploys the production app to port `8580` with systemd service
+  `gtnh-factory-flow.service`.
+- `develop` deploys the development app to port `8581` with systemd service
+  `gtnh-factory-flow-dev.service`.
+
+Both instances use separate release directories under `$HOME/apps/`, but share the same
+persistent dataset volume at `$HOME/data/gtnh-factory-flow/datasets/gtnh`. Each release
+gets `public/datasets/gtnh` as a symlink to that shared volume, so images, manifests, and
+recipe JSON are generated once and consumed by both dev and prod.
+
 ## Load Real Recipes
 
 On startup the app automatically fetches `/datasets/gtnh/datasets.manifest.json`. If the
@@ -78,9 +92,19 @@ To use a remote manifest, set:
 NEXT_PUBLIC_GTNH_DATASET_MANIFEST_URL=https://example.com/datasets/gtnh/datasets.manifest.json
 ```
 
+## Public Repository Notes
+
+The repository is prepared so generated GTNH datasets, local logs, archives, build output,
+and environment files stay out of git. Publishing the source should not require bundling
+the recipe dataset or rendered icons. The hosted app still needs either the server symlink
+described above or a public `NEXT_PUBLIC_GTNH_DATASET_MANIFEST_URL`.
+
+No project license is declared yet. Add a `LICENSE` file before relying on public reuse
+permissions.
+
 ## Dataset Automation
 
-The private project repository includes `.github/workflows/gtnh-dataset-pipeline.yml`.
+The repository includes `.github/workflows/gtnh-dataset-pipeline.yml`.
 It runs on a daily schedule and through `workflow_dispatch`.
 
 The workflow detects:

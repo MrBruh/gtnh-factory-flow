@@ -1,9 +1,13 @@
 .git
+.github
+.gh-artifacts-*
 .next
 .pipeline
 .tmp
 node_modules
 coverage
 *.tar
+*.log
+.env*
 dev-server*.log
 public/datasets/gtnh
