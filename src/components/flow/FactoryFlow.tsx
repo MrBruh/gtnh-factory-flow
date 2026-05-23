@@ -1102,7 +1102,6 @@ function ResourceEdge({
   const isHighlighted = selected || data?.isFlowHighlighted === true;
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
-  const laneOffset = getEdgeLaneOffset(id);
   const routedEdge =
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
@@ -1130,14 +1129,9 @@ function ResourceEdge({
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
           })
         : getDirectEdgePath({
-            laneOffset,
-            sourceNodeId: source,
-            sourceIsRecipeNode: !data?.sourceStorageEndpoint,
             sourceX: visualSource.x,
             sourceY: visualSource.y,
             sourcePosition: visualSource.side,
-            targetNodeId: target,
-            targetIsRecipeNode: !data?.targetStorageEndpoint,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
@@ -1476,7 +1470,7 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
     const sourceHandle = parseResourceHandleId(edge.sourceHandle);
     if (sourceHandle && !storagesById.has(edge.source)) {
       addEndpointOffsetGroupEntry(groups, {
-        key: `${edge.source}|${sourceHandle.side}`,
+        key: `${edge.source}|${sourceHandle.side}|${getResourceHandleSlotRow(edge.sourceHandle)}`,
         edgeId: edge.id,
         endpoint: "source",
         counterpartY: nodesById.get(edge.target)?.position.y ?? 0,
@@ -1486,7 +1480,7 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
     const targetHandle = parseResourceHandleId(edge.targetHandle);
     if (targetHandle && !storagesById.has(edge.target)) {
       addEndpointOffsetGroupEntry(groups, {
-        key: `${edge.target}|${targetHandle.side}`,
+        key: `${edge.target}|${targetHandle.side}|${getResourceHandleSlotRow(edge.targetHandle)}`,
         edgeId: edge.id,
         endpoint: "target",
         counterpartY: nodesById.get(edge.source)?.position.y ?? 0,
@@ -1506,14 +1500,27 @@ function getEdgeEndpointOffsets(project: FactoryProject) {
         left.edgeId.localeCompare(right.edgeId) ||
         left.endpoint.localeCompare(right.endpoint),
     );
-    const center = (sortedGroup.length - 1) / 2;
-
     sortedGroup.forEach((entry, index) => {
-      offsets.set(`${entry.edgeId}:${entry.endpoint}`, (index - center) * EDGE_ENDPOINT_SPACING);
+      offsets.set(`${entry.edgeId}:${entry.endpoint}`, getStackedEndpointOffset(index));
     });
   }
 
   return offsets;
+}
+
+function getStackedEndpointOffset(index: number) {
+  if (index === 0) {
+    return 0;
+  }
+
+  const step = Math.ceil(index / 2) * EDGE_ENDPOINT_SPACING;
+  return index % 2 === 1 ? step : -step;
+}
+
+function getResourceHandleSlotRow(handleId?: string | null) {
+  const rawIndex = handleId?.split(":")[3];
+  const index = rawIndex === undefined ? Number.NaN : Number(rawIndex);
+  return Number.isInteger(index) && index >= 0 ? Math.floor(index / 3) : "unknown";
 }
 
 function addEndpointOffsetGroupEntry(
@@ -1578,14 +1585,9 @@ function getRepeatedOutputHandleIds(
 }
 
 function getDirectEdgePath({
-  laneOffset = 0,
-  sourceNodeId,
-  sourceIsRecipeNode,
   sourceX,
   sourceY,
   sourcePosition,
-  targetNodeId,
-  targetIsRecipeNode,
   targetX,
   targetY,
   targetPosition,
@@ -1602,58 +1604,7 @@ function getDirectEdgePath({
   targetY: number;
   targetPosition: Position;
 }) {
-  const topLanePoints =
-    sourceIsRecipeNode && targetIsRecipeNode
-      ? getTopLaneEdgePoints({
-          sourceNodeId,
-          sourceX,
-          sourceY,
-          targetNodeId,
-          targetX,
-          targetY,
-        })
-      : undefined;
-
-  if (topLanePoints) {
-    const labelPoint = getPointAtPolylineRatio(topLanePoints, 0.5) ?? {
-      x: (sourceX + targetX) / 2,
-      y: (sourceY + targetY) / 2,
-    };
-
-    return {
-      path: pointsToSvgPath(topLanePoints),
-      labelX: labelPoint.x,
-      labelY: labelPoint.y,
-      points: topLanePoints,
-    };
-  }
-
-  const cleanStepPoints = getCleanDirectEdgePoints({
-    laneOffset,
-    sourceNodeId,
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetNodeId,
-    targetX,
-    targetY,
-    targetPosition,
-  });
-  if (cleanStepPoints) {
-    const labelPoint = getPointAtPolylineRatio(cleanStepPoints, 0.5) ?? {
-      x: (sourceX + targetX) / 2,
-      y: (sourceY + targetY) / 2,
-    };
-
-    return {
-      path: pointsToSvgPath(cleanStepPoints),
-      labelX: labelPoint.x,
-      labelY: labelPoint.y,
-      points: cleanStepPoints,
-    };
-  }
-
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const points = getSimpleOrthogonalEdgePoints({
     sourceX,
     sourceY,
     sourcePosition,
@@ -1661,20 +1612,88 @@ function getDirectEdgePath({
     targetY,
     targetPosition,
   });
-  const midX = labelX;
-  const points = compactPolylinePoints([
-    { x: sourceX, y: sourceY },
-    { x: midX, y: sourceY },
-    { x: midX, y: targetY },
-    { x: targetX, y: targetY },
-  ]);
+  const labelPoint = getPointAtPolylineRatio(points, 0.5) ?? {
+    x: (sourceX + targetX) / 2,
+    y: (sourceY + targetY) / 2,
+  };
 
   return {
-    path,
-    labelX,
-    labelY,
+    path: pointsToSvgPath(points),
+    labelX: labelPoint.x,
+    labelY: labelPoint.y,
     points,
   };
+}
+
+function getSimpleOrthogonalEdgePoints({
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+}: {
+  sourceX: number;
+  sourceY: number;
+  sourcePosition: Position;
+  targetX: number;
+  targetY: number;
+  targetPosition: Position;
+}) {
+  const source = { x: sourceX, y: sourceY };
+  const target = { x: targetX, y: targetY };
+  const sourceExit = offsetPointFromSide(source, sourcePosition, DIRECT_EDGE_NODE_CLEARANCE);
+  const targetExit = offsetPointFromSide(target, targetPosition, DIRECT_EDGE_NODE_CLEARANCE);
+  const sourceVertical = isVerticalSide(String(sourcePosition));
+  const targetVertical = isVerticalSide(String(targetPosition));
+
+  if (sourceVertical && targetVertical) {
+    const routeY = (sourceExit.y + targetExit.y) / 2;
+    return compactPolylinePoints([
+      source,
+      sourceExit,
+      { x: sourceExit.x, y: routeY },
+      { x: targetExit.x, y: routeY },
+      targetExit,
+      target,
+    ]);
+  }
+
+  if (!sourceVertical && !targetVertical) {
+    const routeX = (sourceExit.x + targetExit.x) / 2;
+    return compactPolylinePoints([
+      source,
+      sourceExit,
+      { x: routeX, y: sourceExit.y },
+      { x: routeX, y: targetExit.y },
+      targetExit,
+      target,
+    ]);
+  }
+
+  return compactPolylinePoints([
+    source,
+    sourceExit,
+    sourceVertical
+      ? { x: sourceExit.x, y: targetExit.y }
+      : { x: targetExit.x, y: sourceExit.y },
+    targetExit,
+    target,
+  ]);
+}
+
+function offsetPointFromSide(point: { x: number; y: number }, side: Position, distance: number) {
+  switch (String(side)) {
+    case "left":
+      return { x: point.x - distance, y: point.y };
+    case "top":
+      return { x: point.x, y: point.y - distance };
+    case "bottom":
+      return { x: point.x, y: point.y + distance };
+    case "right":
+    default:
+      return { x: point.x + distance, y: point.y };
+  }
 }
 
 function getCleanDirectEdgePoints({
@@ -1946,6 +1965,10 @@ function isHorizontalSide(side: string) {
   return side === "left" || side === "right";
 }
 
+function isVerticalSide(side: string) {
+  return side === "top" || side === "bottom";
+}
+
 function getEdgeLaneOffset(edgeId: string) {
   return getEdgeHash(edgeId, EDGE_LANE_BUCKETS) * EDGE_LANE_SPACING;
 }
@@ -2022,23 +2045,14 @@ function getBundledEdgePath({
   const minY = Math.min(...sourcePoints.map((point) => point.y));
   const maxY = Math.max(...sourcePoints.map((point) => point.y));
   const trunkY = sourcePoints[Math.floor(sourcePoints.length / 2)].y;
-  const trunkPoints =
-    getCleanDirectEdgePoints({
-      laneOffset: getEdgeLaneOffset(edgeId),
-      sourceX: busX,
-      sourceY: trunkY,
-      sourcePosition,
-      targetNodeId,
-      targetX,
-      targetY,
-      targetPosition,
-    }) ??
-    compactPolylinePoints([
-      { x: busX, y: trunkY },
-      { x: (busX + targetX) / 2, y: trunkY },
-      { x: (busX + targetX) / 2, y: targetY },
-      { x: targetX, y: targetY },
-    ]);
+  const trunkPoints = getSimpleOrthogonalEdgePoints({
+    sourceX: busX,
+    sourceY: trunkY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
   const path = [
     ...sourcePoints.map((point) => `M ${point.x},${point.y} L ${busX},${point.y}`),
     `M ${busX},${minY} L ${busX},${maxY}`,
@@ -2118,23 +2132,14 @@ function getBundledMemberEdgePath({
       EDGE_BUNDLE_CLEARANCE
     : (sourceBounds?.right ?? Math.max(...allSourcePoints.map((point) => point.x))) +
       EDGE_BUNDLE_CLEARANCE;
-  const points =
-    getCleanDirectEdgePoints({
-      laneOffset: getEdgeLaneOffset(edgeId),
-      sourceX: busX,
-      sourceY: ownSourcePoint.y,
-      sourcePosition,
-      targetNodeId,
-      targetX,
-      targetY,
-      targetPosition,
-    }) ??
-    compactPolylinePoints([
-      { x: busX, y: ownSourcePoint.y },
-      { x: (busX + targetX) / 2, y: ownSourcePoint.y },
-      { x: (busX + targetX) / 2, y: targetY },
-      { x: targetX, y: targetY },
-    ]);
+  const points = getSimpleOrthogonalEdgePoints({
+    sourceX: busX,
+    sourceY: ownSourcePoint.y,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
   const labelPoint = getPointAtPolylineRatio(points, 0.55) ?? {
     x: (busX + targetX) / 2,
     y: (ownSourcePoint.y + targetY) / 2,
@@ -2351,21 +2356,30 @@ function getSlotEdgeEndpoint({
     return { x: fallbackX, y: fallbackY, side: positionToEdgeSide(position) };
   }
 
+  const handle = parseResourceHandleId(handleId);
+  const logicalRecipeSide = handle?.side === "input" ? Position.Left : Position.Right;
   const edgeSide =
-    (isRecipeSlotEndpoint || isStorageSlotEndpoint) &&
-    counterpartX !== undefined &&
-    counterpartY !== undefined
-      ? getSlotEdgeSideTowardPoint({
+    isRecipeSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
+      ? getRecipeSlotEdgeSideTowardPoint({
           nodeId,
           handleId,
           fallbackX,
           fallbackY,
           counterpartX,
           counterpartY,
-          fallbackSide: positionToEdgeSide(position),
-          preferHorizontal: isRecipeSlotEndpoint,
+          logicalSide: logicalRecipeSide,
         })
-      : positionToEdgeSide(position);
+      : isStorageSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
+        ? getSlotEdgeSideTowardPoint({
+            nodeId,
+            handleId,
+            fallbackX,
+            fallbackY,
+            counterpartX,
+            counterpartY,
+            fallbackSide: positionToEdgeSide(position),
+          })
+        : positionToEdgeSide(position);
 
   const measuredEndpoint = getMeasuredSlotEndpoint({
     nodeId,
@@ -2425,7 +2439,6 @@ function getSlotEdgeSideTowardPoint({
   counterpartX,
   counterpartY,
   fallbackSide,
-  preferHorizontal,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -2434,15 +2447,10 @@ function getSlotEdgeSideTowardPoint({
   counterpartX: number;
   counterpartY: number;
   fallbackSide: Position;
-  preferHorizontal?: boolean;
 }) {
   const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
-
-  if (preferHorizontal && Math.abs(distanceX) > Math.abs(distanceY) * 0.85) {
-    return distanceX >= 0 ? Position.Right : Position.Left;
-  }
 
   if (Math.abs(distanceY) > Math.abs(distanceX) * 1.15) {
     return distanceY >= 0 ? Position.Bottom : Position.Top;
@@ -2453,6 +2461,34 @@ function getSlotEdgeSideTowardPoint({
   }
 
   return fallbackSide;
+}
+
+function getRecipeSlotEdgeSideTowardPoint({
+  nodeId,
+  handleId,
+  fallbackX,
+  fallbackY,
+  counterpartX,
+  counterpartY,
+  logicalSide,
+}: {
+  nodeId: string;
+  handleId?: string | null;
+  fallbackX: number;
+  fallbackY: number;
+  counterpartX: number;
+  counterpartY: number;
+  logicalSide: Position;
+}) {
+  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
+  const distanceX = counterpartX - center.x;
+  const distanceY = counterpartY - center.y;
+
+  if (Math.abs(distanceY) > Math.abs(distanceX) * 1.1) {
+    return distanceY >= 0 ? Position.Bottom : Position.Top;
+  }
+
+  return logicalSide;
 }
 
 function getMeasuredSlotEndpoint({
