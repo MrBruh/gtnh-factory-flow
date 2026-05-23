@@ -1205,7 +1205,12 @@ function ResourceEdge({
       ) : null}
       {!isHiddenBundleMember && showArrowHead ? (
         <polygon
-          points={getArrowHeadPoints(visualTarget.x, visualTarget.y, visualTarget.side)}
+          points={getArrowHeadPointsForRoute({
+            points: routedEdge.points,
+            fallbackTargetX: visualTarget.x,
+            fallbackTargetY: visualTarget.y,
+            fallbackTargetPosition: visualTarget.side,
+          })}
           fill={edgeColor}
           stroke="#252525"
           strokeWidth={isHighlighted ? 1.8 : 1.2}
@@ -2230,8 +2235,8 @@ function getSlotEdgeEndpoint({
   }
 
   const edgeSide =
-    counterpartX !== undefined && counterpartY !== undefined
-      ? getSlotEdgeSideTowardPoint({
+    isStorageSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
+      ? getStorageEdgeSideTowardPoint({
           nodeId,
           handleId,
           fallbackX,
@@ -2239,11 +2244,6 @@ function getSlotEdgeEndpoint({
           counterpartX,
           counterpartY,
           fallbackSide: positionToEdgeSide(position),
-          allowedSides: getAllowedSlotEdgeSides({
-            handleId,
-            isRecipeSlotEndpoint,
-            fallbackSide: positionToEdgeSide(position),
-          }),
         })
       : positionToEdgeSide(position);
 
@@ -2295,7 +2295,7 @@ function positionToEdgeSide(position: unknown): Position {
   }
 }
 
-function getSlotEdgeSideTowardPoint({
+function getStorageEdgeSideTowardPoint({
   nodeId,
   handleId,
   fallbackX,
@@ -2303,7 +2303,6 @@ function getSlotEdgeSideTowardPoint({
   counterpartX,
   counterpartY,
   fallbackSide,
-  allowedSides,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -2312,49 +2311,20 @@ function getSlotEdgeSideTowardPoint({
   counterpartX: number;
   counterpartY: number;
   fallbackSide: Position;
-  allowedSides: Position[];
 }) {
   const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
-  const candidates: Position[] =
-    Math.abs(distanceY) > Math.abs(distanceX) * 1.15
-      ? [
-          distanceY >= 0 ? Position.Bottom : Position.Top,
-          distanceX >= 0 ? Position.Right : Position.Left,
-        ]
-      : [
-          distanceX >= 0 ? Position.Right : Position.Left,
-          distanceY >= 0 ? Position.Bottom : Position.Top,
-        ];
-  const preferred = candidates.find((side) => allowedSides.includes(side));
 
-  return preferred ?? (allowedSides.includes(fallbackSide) ? fallbackSide : allowedSides[0]);
-}
-
-function getAllowedSlotEdgeSides({
-  handleId,
-  isRecipeSlotEndpoint,
-  fallbackSide,
-}: {
-  handleId?: string | null;
-  isRecipeSlotEndpoint?: boolean;
-  fallbackSide: Position;
-}) {
-  if (!isRecipeSlotEndpoint) {
-    return [Position.Left, Position.Right, Position.Top, Position.Bottom];
+  if (Math.abs(distanceY) > Math.abs(distanceX) * 1.15) {
+    return distanceY >= 0 ? Position.Bottom : Position.Top;
   }
 
-  const handle = parseResourceHandleId(handleId);
-  if (handle?.side === "input") {
-    return [Position.Left, Position.Top, Position.Bottom];
+  if (Math.abs(distanceX) > 1) {
+    return distanceX >= 0 ? Position.Right : Position.Left;
   }
 
-  if (handle?.side === "output") {
-    return [Position.Right, Position.Top, Position.Bottom];
-  }
-
-  return [fallbackSide, Position.Top, Position.Bottom];
+  return fallbackSide;
 }
 
 function getMeasuredSlotEndpoint({
@@ -2774,6 +2744,37 @@ function getArrowHeadPoints(targetX: number, targetY: number, targetPosition: un
     default:
       return `${targetX},${targetY} ${targetX - length},${targetY - width} ${targetX - length},${targetY + width}`;
   }
+}
+
+function getArrowHeadPointsForRoute({
+  points,
+  fallbackTargetX,
+  fallbackTargetY,
+  fallbackTargetPosition,
+}: {
+  points: Array<{ x: number; y: number }>;
+  fallbackTargetX: number;
+  fallbackTargetY: number;
+  fallbackTargetPosition: unknown;
+}) {
+  const target = points[points.length - 1];
+  const previous = points[points.length - 2];
+  if (!target || !previous) {
+    return getArrowHeadPoints(fallbackTargetX, fallbackTargetY, fallbackTargetPosition);
+  }
+
+  const distanceX = target.x - previous.x;
+  const distanceY = target.y - previous.y;
+  const targetPosition =
+    Math.abs(distanceY) > Math.abs(distanceX)
+      ? distanceY >= 0
+        ? Position.Bottom
+        : Position.Top
+      : distanceX >= 0
+        ? Position.Right
+        : Position.Left;
+
+  return getArrowHeadPoints(target.x, target.y, targetPosition);
 }
 
 function isCompatibleResourceConnection(connection: Connection | Edge): boolean {
