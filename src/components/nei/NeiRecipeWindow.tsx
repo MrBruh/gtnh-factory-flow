@@ -69,9 +69,9 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
         </div>
       </div>
 
-      <div className="mt-1 flex items-start justify-between gap-2 text-black">
+      <div className="relative mt-1 text-black">
         <div
-          className={["min-w-0 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
+          className={["min-w-0 pr-11 leading-tight", compact ? "text-[10px]" : "text-[16px]"].join(
             " ",
           )}
         >
@@ -81,7 +81,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
           </div>
           <div>Time: {formatRate(seconds, seconds >= 10 ? 0 : 1)} seconds</div>
         </div>
-        {statsAction ? <div className="shrink-0 self-center">{statsAction}</div> : null}
+        {statsAction ? <div className="absolute right-0 top-0">{statsAction}</div> : null}
       </div>
     </div>
   );
