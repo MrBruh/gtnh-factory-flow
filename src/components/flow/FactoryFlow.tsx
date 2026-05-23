@@ -430,31 +430,37 @@ export function FactoryFlow() {
           sourceHandle &&
           targetHandle &&
           sourceHandle.side !== targetHandle.side &&
-          sourceHandle.kind === targetHandle.kind &&
-          sourceHandle.resourceId === targetHandle.resourceId
+          sourceHandle.kind === targetHandle.kind
         ) {
-          const output =
+          const outputHandle =
             sourceHandle.side === "output"
-              ? {
-                  nodeId: connection.source,
-                  handleId: connection.sourceHandle ?? undefined,
-                  resource: sourceHandle,
-                }
-              : {
-                  nodeId: connection.target,
-                  handleId: connection.targetHandle ?? undefined,
-                  resource: targetHandle,
-                };
-          const input =
+              ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
+              : { nodeId: connection.target, handleId: connection.targetHandle ?? undefined };
+          const inputHandle =
             sourceHandle.side === "input"
               ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
               : { nodeId: connection.target, handleId: connection.targetHandle ?? undefined };
+          const outputResource = outputHandle.handleId
+            ? getResourceForHandle(project, outputHandle.nodeId, outputHandle.handleId)
+            : undefined;
+          const inputResource = inputHandle.handleId
+            ? getResourceForHandle(project, inputHandle.nodeId, inputHandle.handleId)
+            : undefined;
 
-          connectResourceEdges(output.nodeId, input.nodeId, {
-            kind: output.resource.kind,
-            id: output.resource.resourceId,
-            sourceHandle: output.handleId,
-            targetHandle: input.handleId,
+          if (
+            !outputResource ||
+            !inputResource ||
+            !resourceMatchesInput(outputResource, inputResource)
+          ) {
+            return;
+          }
+
+          connectResourceEdges(outputHandle.nodeId, inputHandle.nodeId, {
+            kind: outputResource.kind,
+            id: outputResource.id,
+            displayName: outputResource.displayName,
+            sourceHandle: outputHandle.handleId,
+            targetHandle: inputHandle.handleId,
           });
           return;
         }
@@ -466,7 +472,12 @@ export function FactoryFlow() {
         connectResourceEdges(connection.source, connection.target);
       }
     },
-    [connectResourceEdges],
+    [connectResourceEdges, project],
+  );
+
+  const isValidResourceConnection = useCallback(
+    (connection: Connection | Edge) => isCompatibleResourceConnection(project, connection),
+    [project],
   );
 
   const handleConnectStart = useCallback(
@@ -905,7 +916,7 @@ export function FactoryFlow() {
         onConnectEnd={handleConnectEnd}
         onInit={handleInit}
         onMoveEnd={handleMoveEnd}
-        isValidConnection={isCompatibleResourceConnection}
+        isValidConnection={isValidResourceConnection}
         connectionLineComponent={ResourceConnectionLine}
         connectionLineStyle={connectionLineStyle}
         connectionMode={ConnectionMode.Loose}
@@ -2948,17 +2959,36 @@ function getArrowHeadPointsForRoute({
   return getArrowHeadPoints(routeTarget.x, routeTarget.y, targetPosition);
 }
 
-function isCompatibleResourceConnection(connection: Connection | Edge): boolean {
+function isCompatibleResourceConnection(
+  project: FactoryProject,
+  connection: Connection | Edge,
+): boolean {
   const sourceHandle = parseResourceHandleId(connection.sourceHandle);
   const targetHandle = parseResourceHandleId(connection.targetHandle);
   if (!sourceHandle || !targetHandle) {
     return false;
   }
 
+  const sourceResource =
+    connection.source && connection.sourceHandle
+      ? getResourceForHandle(project, connection.source, connection.sourceHandle)
+      : undefined;
+  const targetResource =
+    connection.target && connection.targetHandle
+      ? getResourceForHandle(project, connection.target, connection.targetHandle)
+      : undefined;
+
+  if (!sourceResource || !targetResource) {
+    return false;
+  }
+
+  const output = sourceHandle.side === "output" ? sourceResource : targetResource;
+  const input = sourceHandle.side === "input" ? sourceResource : targetResource;
+
   return (
     sourceHandle.side !== targetHandle.side &&
     sourceHandle.kind === targetHandle.kind &&
-    sourceHandle.resourceId === targetHandle.resourceId
+    resourceMatchesInput(output, input)
   );
 }
 

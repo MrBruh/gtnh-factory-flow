@@ -48,6 +48,34 @@ describe("factory resource links", () => {
     );
   });
 
+  it("connects tool outputs to matching ore dictionary tool inputs", () => {
+    useFactoryStore.getState().connectNodes("screwdriver-source", "screwdriver-oredict-target", {
+      kind: "item",
+      id: "gregtech:screwdriver.lv@0",
+      sourceHandle: makeResourceHandleId(
+        "output",
+        { kind: "item", id: "gregtech:screwdriver.lv@0" },
+        0,
+      ),
+      targetHandle: makeResourceHandleId(
+        "input",
+        { kind: "item", id: "oredict:craftingToolScrewdriver" },
+        0,
+      ),
+    });
+
+    expect(useFactoryStore.getState().project.edges[0]).toEqual(
+      expect.objectContaining({
+        source: "screwdriver-source",
+        target: "screwdriver-oredict-target",
+        sourceHandle: "output:item:gregtech%3Ascrewdriver.lv%400:0",
+        targetHandle: "input:item:oredict%3AcraftingToolScrewdriver:0",
+        resourceKind: "item",
+        resourceId: "gregtech:screwdriver.lv@0",
+      }),
+    );
+  });
+
   it("connects concrete item drawers to ore dictionary inputs", () => {
     useFactoryStore.getState().connectNodes("stick-drawer", "stick-oredict-target", {
       kind: "item",
@@ -549,6 +577,52 @@ function createLinkTestProject(): FactoryProject {
         ],
         outputs: [{ kind: "item", id: "crafted", amount: 1 }],
       },
+      {
+        id: "screwdriver-source-recipe",
+        name: "Screwdriver source",
+        machineType: "Source",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [
+          {
+            kind: "item",
+            id: "gregtech:screwdriver.lv@0",
+            amount: 1,
+            displayName: "Screwdriver (LV)",
+          },
+        ],
+      },
+      {
+        id: "screwdriver-oredict-target-recipe",
+        name: "Ore dictionary tool target",
+        machineType: "Crafting",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [
+          {
+            kind: "item",
+            id: "oredict:craftingToolScrewdriver",
+            amount: 1,
+            displayName: "Screwdriver",
+            alternatives: [
+              {
+                kind: "item",
+                id: "gregtech:screwdriver.lv@0",
+                displayName: "Screwdriver (LV)",
+              },
+              {
+                kind: "item",
+                id: "gregtech:screwdriver.mv@0",
+                displayName: "Screwdriver (MV)",
+              },
+            ],
+          },
+        ],
+        outputs: [{ kind: "item", id: "tool-crafted", amount: 1 }],
+      },
     ],
     nodes: [
       makeNode("item-source", "item-source-recipe", 0),
@@ -558,6 +632,8 @@ function createLinkTestProject(): FactoryProject {
       makeNode("nc-target", "nc-target-recipe", 200, 280),
       makeNode("stick-source", "stick-source-recipe", 0, 420),
       makeNode("stick-oredict-target", "stick-oredict-target-recipe", 200, 420),
+      makeNode("screwdriver-source", "screwdriver-source-recipe", 0, 560),
+      makeNode("screwdriver-oredict-target", "screwdriver-oredict-target-recipe", 200, 560),
     ],
     storages: [
       {
