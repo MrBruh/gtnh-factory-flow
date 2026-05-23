@@ -88,6 +88,10 @@ NEXT_PUBLIC_UMAMI_WEBSITE_ID=<website-id-from-umami>
 Use `$HOME/apps/gtnh-factory-flow/analytics.env` for prod and
 `$HOME/apps/gtnh-factory-flow-dev/analytics.env` for dev.
 
+The deployment workflow writes the production env file with a stable website id for
+`gtnh.samiracle.fr`. Re-run the site deploy after first deploying Umami so Next.js includes
+the tracking script in the production build.
+
 ## Load Real Recipes
 
 On startup the app automatically fetches `/datasets/gtnh/datasets.manifest.json`. If the

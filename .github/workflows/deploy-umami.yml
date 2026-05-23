@@ -46,5 +46,42 @@ jobs:
           docker compose up -d
           docker compose ps
 
-          echo "Umami is listening on port $(grep '^UMAMI_PORT=' "$env_file" | cut -d= -f2)."
+          umami_port="$(grep '^UMAMI_PORT=' "$env_file" | cut -d= -f2)"
+          umami_url="http://127.0.0.1:${umami_port}"
+          website_id="9c3d7d5b-462b-40f0-9738-f4566f771f49"
+          prod_analytics_env="$HOME/apps/gtnh-factory-flow/analytics.env"
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS "$umami_url" >/dev/null; then
+              break
+            fi
+            sleep 2
+          done
+
+          mkdir -p "$(dirname "$prod_analytics_env")"
+          {
+            printf 'NEXT_PUBLIC_UMAMI_SCRIPT_URL=/_umami/gtnh-stats.js\n'
+            printf 'NEXT_PUBLIC_UMAMI_HOST_URL=/_umami\n'
+            printf 'NEXT_PUBLIC_UMAMI_WEBSITE_ID=%s\n' "$website_id"
+          } > "$prod_analytics_env"
+
+          login_response="$(
+            curl -fsS -X POST "$umami_url/api/auth/login" \
+              -H 'Content-Type: application/json' \
+              --data '{"username":"admin","password":"umami"}' || true
+          )"
+          token="$(printf '%s' "$login_response" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+
+          if [ -n "$token" ]; then
+            curl -fsS -X POST "$umami_url/api/websites" \
+              -H "Authorization: Bearer $token" \
+              -H 'Content-Type: application/json' \
+              --data "{\"id\":\"$website_id\",\"name\":\"GTNH Planner\",\"domain\":\"gtnh.samiracle.fr\"}" \
+              >/dev/null || true
+          else
+            echo "Could not log in with the initial admin credentials; assuming the website exists or will be created manually."
+          fi
+
+          echo "Umami is listening on port ${umami_port}."
+          echo "Prod analytics env written to $prod_analytics_env."
           echo "Initial credentials are admin / umami. Change the password after first login."
