@@ -78,12 +78,19 @@ jobs:
           website_id="9c3d7d5b-462b-40f0-9738-f4566f771f49"
           prod_analytics_env="$HOME/apps/gtnh-factory-flow/analytics.env"
 
+          ready=0
           for attempt in $(seq 1 30); do
             if curl -fsS "$umami_url/umami" >/dev/null; then
+              ready=1
               break
             fi
             sleep 2
           done
+          if [ "$ready" -ne 1 ]; then
+            docker compose ps
+            docker compose logs --tail=200 umami
+            exit 1
+          fi
 
           mkdir -p "$(dirname "$prod_analytics_env")"
           {
