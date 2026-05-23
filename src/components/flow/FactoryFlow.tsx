@@ -84,6 +84,8 @@ const RECIPE_SLOT_EDGE_OFFSET = 20;
 const STORAGE_SLOT_EDGE_OFFSET = 55;
 const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
+const EDGE_LANE_SPACING = 8;
+const EDGE_LANE_BUCKETS = 4;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -1092,9 +1094,11 @@ function ResourceEdge({
   const isHighlighted = selected || data?.isFlowHighlighted === true;
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
+  const laneOffset = getEdgeLaneOffset(id);
   const routedEdge =
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
+          edgeId: id,
           sourceNodeId: source,
           sourceHandleIds: data.bundle.sourceHandleIds,
           sourcePosition: visualSource.side,
@@ -1106,6 +1110,7 @@ function ResourceEdge({
         })
       : data?.bundle?.mode === "multi-target"
         ? getBundledMemberEdgePath({
+            edgeId: id,
             sourceNodeId: source,
             sourceHandleId: data.sourceHandleId ?? sourceHandleId ?? undefined,
             sourcePosition: visualSource.side,
@@ -1117,6 +1122,7 @@ function ResourceEdge({
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
           })
         : getDirectEdgePath({
+            laneOffset,
             sourceNodeId: source,
             sourceIsRecipeNode: !data?.sourceStorageEndpoint,
             sourceX: visualSource.x,
@@ -1456,6 +1462,7 @@ function getRepeatedOutputHandleIds(
 }
 
 function getDirectEdgePath({
+  laneOffset = 0,
   sourceNodeId,
   sourceIsRecipeNode,
   sourceX,
@@ -1467,6 +1474,7 @@ function getDirectEdgePath({
   targetY,
   targetPosition,
 }: {
+  laneOffset?: number;
   sourceNodeId?: string;
   sourceIsRecipeNode?: boolean;
   sourceX: number;
@@ -1505,6 +1513,7 @@ function getDirectEdgePath({
   }
 
   const cleanStepPoints = getCleanDirectEdgePoints({
+    laneOffset,
     sourceNodeId,
     sourceX,
     sourceY,
@@ -1553,6 +1562,7 @@ function getDirectEdgePath({
 }
 
 function getCleanDirectEdgePoints({
+  laneOffset = 0,
   sourceNodeId,
   sourceX,
   sourceY,
@@ -1562,6 +1572,7 @@ function getCleanDirectEdgePoints({
   targetY,
   targetPosition,
 }: {
+  laneOffset?: number;
   sourceNodeId?: string;
   sourceX: number;
   sourceY: number;
@@ -1599,6 +1610,16 @@ function getCleanDirectEdgePoints({
   const end = targetExit ?? { x: targetX, y: targetY };
   const sourceSide = String(sourcePosition);
   const targetSide = String(targetPosition);
+  if (sourceNodeId && sourceNodeId === targetNodeId && sourceBounds) {
+    return compactPolylinePoints([
+      { x: sourceX, y: sourceY },
+      start,
+      ...getSelfNodeEdgePoints(start, end, sourceSide, targetSide, sourceBounds, laneOffset),
+      end,
+      { x: targetX, y: targetY },
+    ]);
+  }
+
   const points =
     isHorizontalSide(sourceSide) || isHorizontalSide(targetSide)
       ? getHorizontalLaneDirectPoints(
@@ -1608,8 +1629,17 @@ function getCleanDirectEdgePoints({
           targetSide,
           sourceBounds,
           targetBounds,
+          laneOffset,
         )
-      : getVerticalLaneDirectPoints(start, end, sourceSide, targetSide, sourceBounds, targetBounds);
+      : getVerticalLaneDirectPoints(
+          start,
+          end,
+          sourceSide,
+          targetSide,
+          sourceBounds,
+          targetBounds,
+          laneOffset,
+        );
 
   return compactPolylinePoints([
     { x: sourceX, y: sourceY },
@@ -1677,6 +1707,7 @@ function getHorizontalLaneDirectPoints(
   targetSide: string,
   sourceBounds?: { left: number; right: number; top: number; bottom: number },
   targetBounds?: { left: number; right: number; top: number; bottom: number },
+  laneOffset = 0,
 ) {
   const goesRight = end.x >= start.x;
   const sourceWantsRight = sourceSide === "right";
@@ -1685,12 +1716,17 @@ function getHorizontalLaneDirectPoints(
   const hasVerticalGap =
     sourceBounds && targetBounds ? !boundsOverlapVertically(sourceBounds, targetBounds) : false;
 
-  if (hasVerticalGap && targetBounds && (targetWantsLeft || targetWantsRight)) {
+  if (hasVerticalGap && sourceBounds && targetBounds && (targetWantsLeft || targetWantsRight)) {
+    const sourceLaneY =
+      end.y >= start.y
+        ? sourceBounds.bottom + DIRECT_EDGE_NODE_CLEARANCE + laneOffset
+        : sourceBounds.top - DIRECT_EDGE_NODE_CLEARANCE - laneOffset;
     const targetLaneX = targetWantsLeft
-      ? Math.min(end.x, targetBounds.left - DIRECT_EDGE_NODE_CLEARANCE)
-      : Math.max(end.x, targetBounds.right + DIRECT_EDGE_NODE_CLEARANCE);
+      ? Math.min(end.x, targetBounds.left - DIRECT_EDGE_NODE_CLEARANCE - laneOffset)
+      : Math.max(end.x, targetBounds.right + DIRECT_EDGE_NODE_CLEARANCE + laneOffset);
     return [
-      { x: targetLaneX, y: start.y },
+      { x: start.x, y: sourceLaneY },
+      { x: targetLaneX, y: sourceLaneY },
       { x: targetLaneX, y: end.y },
     ];
   }
@@ -1699,9 +1735,11 @@ function getHorizontalLaneDirectPoints(
     (sourceWantsRight && !targetWantsLeft) || (!sourceSide && goesRight) || sourceSide === "right";
   const routeX = routeOutsideRight
     ? Math.max(start.x, end.x, sourceBounds?.right ?? -Infinity, targetBounds?.right ?? -Infinity) +
-      DIRECT_EDGE_NODE_CLEARANCE
+      DIRECT_EDGE_NODE_CLEARANCE +
+      laneOffset
     : Math.min(start.x, end.x, sourceBounds?.left ?? Infinity, targetBounds?.left ?? Infinity) -
-      DIRECT_EDGE_NODE_CLEARANCE;
+      DIRECT_EDGE_NODE_CLEARANCE -
+      laneOffset;
 
   if (
     sourceWantsRight &&
@@ -1728,6 +1766,7 @@ function getVerticalLaneDirectPoints(
   targetSide: string,
   sourceBounds?: { left: number; right: number; top: number; bottom: number },
   targetBounds?: { left: number; right: number; top: number; bottom: number },
+  laneOffset = 0,
 ) {
   const routeBelow = sourceSide === "bottom" || (targetSide !== "bottom" && end.y >= start.y);
   const routeY = routeBelow
@@ -1736,9 +1775,50 @@ function getVerticalLaneDirectPoints(
         end.y,
         sourceBounds?.bottom ?? -Infinity,
         targetBounds?.bottom ?? -Infinity,
-      ) + DIRECT_EDGE_NODE_CLEARANCE
+      ) +
+      DIRECT_EDGE_NODE_CLEARANCE +
+      laneOffset
     : Math.min(start.y, end.y, sourceBounds?.top ?? Infinity, targetBounds?.top ?? Infinity) -
-      DIRECT_EDGE_NODE_CLEARANCE;
+      DIRECT_EDGE_NODE_CLEARANCE -
+      laneOffset;
+
+  return [
+    { x: start.x, y: routeY },
+    { x: end.x, y: routeY },
+  ];
+}
+
+function getSelfNodeEdgePoints(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  sourceSide: string,
+  targetSide: string,
+  bounds: { left: number; right: number; top: number; bottom: number },
+  laneOffset = 0,
+) {
+  if (isHorizontalSide(sourceSide) || isHorizontalSide(targetSide)) {
+    const useLeftLane =
+      targetSide === "left" ||
+      (sourceSide !== "right" && Math.abs(end.x - bounds.left) < Math.abs(end.x - bounds.right));
+    const routeX = useLeftLane
+      ? bounds.left - DIRECT_EDGE_NODE_CLEARANCE - laneOffset
+      : bounds.right + DIRECT_EDGE_NODE_CLEARANCE + laneOffset;
+    const routeAbove = end.y < start.y;
+    const routeY = routeAbove
+      ? bounds.top - DIRECT_EDGE_NODE_CLEARANCE - laneOffset
+      : bounds.bottom + DIRECT_EDGE_NODE_CLEARANCE + laneOffset;
+
+    return [
+      { x: start.x, y: routeY },
+      { x: routeX, y: routeY },
+      { x: routeX, y: end.y },
+    ];
+  }
+
+  const routeBelow = targetSide === "bottom" || end.y >= start.y;
+  const routeY = routeBelow
+    ? bounds.bottom + DIRECT_EDGE_NODE_CLEARANCE + laneOffset
+    : bounds.top - DIRECT_EDGE_NODE_CLEARANCE - laneOffset;
 
   return [
     { x: start.x, y: routeY },
@@ -1750,6 +1830,15 @@ function isHorizontalSide(side: string) {
   return side === "left" || side === "right";
 }
 
+function getEdgeLaneOffset(edgeId: string) {
+  let hash = 0;
+  for (let index = 0; index < edgeId.length; index += 1) {
+    hash = (hash * 31 + edgeId.charCodeAt(index)) | 0;
+  }
+
+  return Math.abs(hash % EDGE_LANE_BUCKETS) * EDGE_LANE_SPACING;
+}
+
 function boundsOverlapVertically(
   left: { top: number; bottom: number },
   right: { top: number; bottom: number },
@@ -1758,6 +1847,7 @@ function boundsOverlapVertically(
 }
 
 function getBundledEdgePath({
+  edgeId,
   sourceNodeId,
   sourceHandleIds,
   sourcePosition,
@@ -1767,6 +1857,7 @@ function getBundledEdgePath({
   targetY,
   targetPosition,
 }: {
+  edgeId: string;
   sourceNodeId: string;
   sourceHandleIds: string[];
   sourcePosition: Position;
@@ -1797,6 +1888,7 @@ function getBundledEdgePath({
       targetX,
       targetY,
       targetPosition,
+      laneOffset: getEdgeLaneOffset(edgeId),
     });
   }
 
@@ -1812,6 +1904,7 @@ function getBundledEdgePath({
   const trunkY = sourcePoints[Math.floor(sourcePoints.length / 2)].y;
   const trunkPoints =
     getCleanDirectEdgePoints({
+      laneOffset: getEdgeLaneOffset(edgeId),
       sourceX: busX,
       sourceY: trunkY,
       sourcePosition,
@@ -1845,6 +1938,7 @@ function getBundledEdgePath({
 }
 
 function getBundledMemberEdgePath({
+  edgeId,
   sourceNodeId,
   sourceHandleId,
   sourcePosition,
@@ -1855,6 +1949,7 @@ function getBundledMemberEdgePath({
   targetPosition,
   bundleSourceHandleIds,
 }: {
+  edgeId: string;
   sourceNodeId: string;
   sourceHandleId?: string;
   sourcePosition: Position;
@@ -1892,6 +1987,7 @@ function getBundledMemberEdgePath({
       targetX,
       targetY,
       targetPosition,
+      laneOffset: getEdgeLaneOffset(edgeId),
     });
   }
 
@@ -1904,6 +2000,7 @@ function getBundledMemberEdgePath({
       EDGE_BUNDLE_CLEARANCE;
   const points =
     getCleanDirectEdgePoints({
+      laneOffset: getEdgeLaneOffset(edgeId),
       sourceX: busX,
       sourceY: ownSourcePoint.y,
       sourcePosition,
@@ -2255,13 +2352,7 @@ function getMeasuredSlotEndpoint({
   return screenToFlowPoint(screenPoint, nodeElement);
 }
 
-function getMeasuredSlotCenter({
-  nodeId,
-  handleId,
-}: {
-  nodeId: string;
-  handleId?: string | null;
-}) {
+function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
