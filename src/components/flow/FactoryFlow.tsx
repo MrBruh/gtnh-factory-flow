@@ -88,6 +88,8 @@ const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
 const EDGE_ARROW_SPACING = 5;
 const EDGE_ARROW_BUCKETS = 5;
+const EDGE_PATH_SPREAD_SPACING = 3;
+const EDGE_PATH_SPREAD_BUCKETS = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -1097,10 +1099,10 @@ function ResourceEdge({
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const laneOffset = getEdgeLaneOffset(id);
-  const arrowOffset = getEdgeArrowOffset(
-    `${id}|${data?.sourceHandleId ?? sourceHandleId ?? ""}|${data?.targetHandleId ?? targetHandleId ?? ""}|${data?.resource?.kind ?? ""}:${data?.resource?.id ?? ""}`,
-  );
-  const routedEdge =
+  const edgeSpreadKey = `${id}|${data?.sourceHandleId ?? sourceHandleId ?? ""}|${data?.targetHandleId ?? targetHandleId ?? ""}|${data?.resource?.kind ?? ""}:${data?.resource?.id ?? ""}`;
+  const arrowOffset = getEdgeArrowOffset(edgeSpreadKey);
+  const pathSpreadOffset = getEdgePathSpreadOffset(edgeSpreadKey);
+  const rawRoutedEdge =
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
           edgeId: id,
@@ -1139,6 +1141,7 @@ function ResourceEdge({
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
           });
+  const routedEdge = spreadRoutedEdge(rawRoutedEdge, pathSpreadOffset);
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
 
@@ -1872,6 +1875,13 @@ function getEdgeArrowOffset(edgeKey: string) {
   return getEdgeHash(edgeKey, EDGE_ARROW_BUCKETS) * EDGE_ARROW_SPACING;
 }
 
+function getEdgePathSpreadOffset(edgeKey: string) {
+  return (
+    (getEdgeHash(edgeKey, EDGE_PATH_SPREAD_BUCKETS) - (EDGE_PATH_SPREAD_BUCKETS - 1) / 2) *
+    EDGE_PATH_SPREAD_SPACING
+  );
+}
+
 function getEdgeHash(edgeId: string, buckets: number) {
   let hash = 0;
   for (let index = 0; index < edgeId.length; index += 1) {
@@ -1879,6 +1889,39 @@ function getEdgeHash(edgeId: string, buckets: number) {
   }
 
   return Math.abs(hash % buckets);
+}
+
+function spreadRoutedEdge<
+  T extends {
+    path: string;
+    labelX: number;
+    labelY: number;
+    points: Array<{ x: number; y: number }>;
+  },
+>(routedEdge: T, offset: number): T {
+  if (Math.abs(offset) < 0.5 || routedEdge.points.length < 3) {
+    return routedEdge;
+  }
+
+  const first = routedEdge.points[0];
+  const last = routedEdge.points[routedEdge.points.length - 1];
+  const spreadVector =
+    Math.abs(last.y - first.y) > Math.abs(last.x - first.x)
+      ? { x: offset, y: 0 }
+      : { x: 0, y: offset };
+  const points = routedEdge.points.map((point, index) =>
+    index === 0 || index === routedEdge.points.length - 1
+      ? point
+      : { x: point.x + spreadVector.x, y: point.y + spreadVector.y },
+  );
+
+  return {
+    ...routedEdge,
+    path: pointsToSvgPath(points),
+    labelX: routedEdge.labelX + spreadVector.x,
+    labelY: routedEdge.labelY + spreadVector.y,
+    points,
+  };
 }
 
 function boundsOverlapVertically(
