@@ -2483,12 +2483,17 @@ function getRecipeSlotEdgeSideTowardPoint({
   const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
+  const horizontalSide = distanceX >= 0 ? Position.Right : Position.Left;
 
   if (Math.abs(distanceY) > Math.abs(distanceX) * 1.1) {
     return distanceY >= 0 ? Position.Bottom : Position.Top;
   }
 
-  return logicalSide;
+  if (horizontalSide === logicalSide) {
+    return logicalSide;
+  }
+
+  return distanceY >= 0 ? Position.Bottom : Position.Top;
 }
 
 function getMeasuredSlotEndpoint({
