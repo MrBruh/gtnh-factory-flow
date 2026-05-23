@@ -459,6 +459,30 @@ describe("factory machine count optimization", () => {
     ).toEqual(firstCounts);
   });
 
+  it("ignores placeholder machine counts during global optimization", () => {
+    const project = createAcyclicStorageBusProject();
+    const placeholderProject = {
+      ...project,
+      nodes: project.nodes.map((node) => ({
+        ...node,
+        machineCount: node.id === "bus-source" ? 999 : 37,
+      })),
+    };
+
+    useFactoryStore.getState().setProject(project);
+    useFactoryStore.getState().optimizeMachineCounts();
+    const baselineCounts = useFactoryStore
+      .getState()
+      .project.nodes.map((node) => [node.id, node.machineCount]);
+
+    useFactoryStore.getState().setProject(placeholderProject);
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(
+      useFactoryStore.getState().project.nodes.map((node) => [node.id, node.machineCount]),
+    ).toEqual(baselineCounts);
+  });
+
   it("keeps single-node optimization idempotent across repeated clicks", () => {
     useFactoryStore.getState().setProject(createStorageBusCycleProject());
 

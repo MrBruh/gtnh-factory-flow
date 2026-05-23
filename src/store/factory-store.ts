@@ -922,10 +922,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         return state;
       }
 
-      let project = state.project;
-      let result = state.lastResult;
+      let project = resetRecipeMachineCounts(state.project);
+      let result = calculateThroughput(project);
       const cyclicNodeIds = getCyclicRecipeNodeIds(project);
-      let changed = false;
       const maxPasses = Math.max(1, project.nodes.length + 1);
 
       for (let pass = 0; pass < maxPasses; pass += 1) {
@@ -961,7 +960,6 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           break;
         }
 
-        changed = true;
         project = {
           ...project,
           nodes,
@@ -969,7 +967,7 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         result = calculateThroughput(project);
       }
 
-      if (!changed) {
+      if (haveSameMachineCounts(state.project, project)) {
         return state;
       }
 
@@ -1523,6 +1521,22 @@ function getOptimizedMachineCount(theoreticalMachinesRequired: number, current: 
   }
 
   return Math.max(1, Math.ceil(theoreticalMachinesRequired));
+}
+
+function resetRecipeMachineCounts(project: FactoryProject): FactoryProject {
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => ({ ...node, machineCount: 1 })),
+  };
+}
+
+function haveSameMachineCounts(left: FactoryProject, right: FactoryProject): boolean {
+  if (left.nodes.length !== right.nodes.length) {
+    return false;
+  }
+
+  const rightCounts = new Map(right.nodes.map((node) => [node.id, node.machineCount]));
+  return left.nodes.every((node) => rightCounts.get(node.id) === node.machineCount);
 }
 
 function getUntargetedCyclicMachineCounts(
