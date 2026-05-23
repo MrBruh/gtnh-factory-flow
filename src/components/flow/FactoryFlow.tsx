@@ -1138,7 +1138,7 @@ function ResourceEdge({
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
           });
-  const routedEdge = spreadRoutedEdge(rawRoutedEdge, pathSpreadOffset);
+  const routedEdge = doglegRoutedEdge(rawRoutedEdge, pathSpreadOffset);
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
 
@@ -1882,7 +1882,7 @@ function getEdgeHash(edgeId: string, buckets: number) {
   return Math.abs(hash % buckets);
 }
 
-function spreadRoutedEdge<
+function doglegRoutedEdge<
   T extends {
     path: string;
     labelX: number;
@@ -1894,25 +1894,69 @@ function spreadRoutedEdge<
     return routedEdge;
   }
 
-  const first = routedEdge.points[0];
-  const last = routedEdge.points[routedEdge.points.length - 1];
-  const spreadVector =
-    Math.abs(last.y - first.y) > Math.abs(last.x - first.x)
-      ? { x: offset, y: 0 }
-      : { x: 0, y: offset };
-  const points = routedEdge.points.map((point, index) =>
-    index === 0 || index === routedEdge.points.length - 1
-      ? point
-      : { x: point.x + spreadVector.x, y: point.y + spreadVector.y },
-  );
+  const points = [...routedEdge.points];
+  const target = points[points.length - 1];
+  const previous = points[points.length - 2];
+  const distanceX = target.x - previous.x;
+  const distanceY = target.y - previous.y;
+  const horizontal = Math.abs(distanceX) >= Math.abs(distanceY);
+  const finalLength = horizontal ? Math.abs(distanceX) : Math.abs(distanceY);
+
+  if (finalLength < 14) {
+    return routedEdge;
+  }
+
+  const doglegLength = Math.min(Math.max(finalLength * 0.4, 12), 28);
+  const replacement = horizontal
+    ? getHorizontalDoglegPoints(previous, target, distanceX, doglegLength, offset)
+    : getVerticalDoglegPoints(previous, target, distanceY, doglegLength, offset);
+  const nextPoints = compactPolylinePoints([...points.slice(0, -2), ...replacement]);
 
   return {
     ...routedEdge,
-    path: pointsToSvgPath(points),
-    labelX: routedEdge.labelX + spreadVector.x,
-    labelY: routedEdge.labelY + spreadVector.y,
-    points,
+    path: pointsToSvgPath(nextPoints),
+    points: nextPoints,
   };
+}
+
+function getHorizontalDoglegPoints(
+  previous: { x: number; y: number },
+  target: { x: number; y: number },
+  distanceX: number,
+  doglegLength: number,
+  offset: number,
+) {
+  const direction = distanceX >= 0 ? 1 : -1;
+  const turnX = target.x - direction * doglegLength;
+  const laneY = target.y + offset;
+
+  return [
+    previous,
+    { x: turnX, y: previous.y },
+    { x: turnX, y: laneY },
+    { x: target.x, y: laneY },
+    target,
+  ];
+}
+
+function getVerticalDoglegPoints(
+  previous: { x: number; y: number },
+  target: { x: number; y: number },
+  distanceY: number,
+  doglegLength: number,
+  offset: number,
+) {
+  const direction = distanceY >= 0 ? 1 : -1;
+  const turnY = target.y - direction * doglegLength;
+  const laneX = target.x + offset;
+
+  return [
+    previous,
+    { x: previous.x, y: turnY },
+    { x: laneX, y: turnY },
+    { x: laneX, y: target.y },
+    target,
+  ];
 }
 
 function boundsOverlapVertically(
