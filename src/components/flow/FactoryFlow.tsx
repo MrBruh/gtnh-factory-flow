@@ -86,8 +86,8 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
-const EDGE_ARROW_SPACING = 4;
-const EDGE_ARROW_BUCKETS = 7;
+const EDGE_ARROW_SPACING = 5;
+const EDGE_ARROW_BUCKETS = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -1869,9 +1869,7 @@ function getEdgeLaneOffset(edgeId: string) {
 }
 
 function getEdgeArrowOffset(edgeKey: string) {
-  return (
-    (getEdgeHash(edgeKey, EDGE_ARROW_BUCKETS) - (EDGE_ARROW_BUCKETS - 1) / 2) * EDGE_ARROW_SPACING
-  );
+  return getEdgeHash(edgeKey, EDGE_ARROW_BUCKETS) * EDGE_ARROW_SPACING;
 }
 
 function getEdgeHash(edgeId: string, buckets: number) {
@@ -2807,9 +2805,13 @@ function getArrowHeadPointsForRoute({
   const distanceX = routeTarget.x - routePrevious.x;
   const distanceY = routeTarget.y - routePrevious.y;
   const isVertical = Math.abs(distanceY) > Math.abs(distanceX);
-  const target = isVertical
-    ? { x: routeTarget.x + arrowOffset, y: routeTarget.y }
-    : { x: routeTarget.x, y: routeTarget.y + arrowOffset };
+  const length = Math.hypot(distanceX, distanceY);
+  const retreatX = length > 0 ? (distanceX / length) * arrowOffset : 0;
+  const retreatY = length > 0 ? (distanceY / length) * arrowOffset : 0;
+  const target = {
+    x: routeTarget.x - retreatX,
+    y: routeTarget.y - retreatY,
+  };
   const targetPosition = isVertical
     ? distanceY >= 0
       ? Position.Top
