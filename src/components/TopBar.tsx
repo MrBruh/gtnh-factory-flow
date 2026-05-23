@@ -79,10 +79,12 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
     }, 450);
   };
 
-  const exportImage = (format: "svg" | "png") => {
+  const exportImage = async (format: "svg" | "png") => {
     const requestId = crypto.randomUUID();
     setExportMenuOpen(false);
     setPendingExport({ format, requestId });
+    await nextPaint();
+
     window.dispatchEvent(
       new CustomEvent(FLOW_IMAGE_EXPORT_EVENT, {
         detail: {
@@ -255,12 +257,16 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
               <ExportMenuItem
                 icon={FileImage}
                 label="Export plan SVG"
-                onClick={() => exportImage("svg")}
+                onClick={() => {
+                  void exportImage("svg");
+                }}
               />
               <ExportMenuItem
                 icon={ImageDown}
                 label="Export plan PNG"
-                onClick={() => exportImage("png")}
+                onClick={() => {
+                  void exportImage("png");
+                }}
               />
             </div>
           ) : null}
@@ -285,6 +291,14 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
 
 function nextAnimationFrame(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve());
+    });
+  });
 }
 
 async function readProjectFile(file: File): Promise<string> {
