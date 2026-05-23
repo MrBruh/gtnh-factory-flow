@@ -86,6 +86,8 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
+const EDGE_ARROW_SPACING = 4;
+const EDGE_ARROW_BUCKETS = 7;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -1095,6 +1097,9 @@ function ResourceEdge({
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const laneOffset = getEdgeLaneOffset(id);
+  const arrowOffset = getEdgeArrowOffset(
+    `${id}|${data?.sourceHandleId ?? sourceHandleId ?? ""}|${data?.targetHandleId ?? targetHandleId ?? ""}|${data?.resource?.kind ?? ""}:${data?.resource?.id ?? ""}`,
+  );
   const routedEdge =
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
@@ -1204,19 +1209,42 @@ function ResourceEdge({
         </>
       ) : null}
       {!isHiddenBundleMember && showArrowHead ? (
-        <polygon
+        <polyline
           points={getArrowHeadPointsForRoute({
             points: routedEdge.points,
             fallbackTargetX: visualTarget.x,
             fallbackTargetY: visualTarget.y,
             fallbackTargetPosition: visualTarget.side,
-            arrowOffset: getEdgeArrowOffset(id),
+            arrowOffset,
           })}
-          fill={edgeColor}
           stroke="#252525"
-          strokeWidth={isHighlighted ? 1.8 : 1.2}
+          strokeWidth={isHighlighted ? 4 : 3.2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
           style={{
             opacity: data?.isLimited ? 0.72 : 0.95,
+            filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
+            pointerEvents: "none",
+          }}
+        />
+      ) : null}
+      {!isHiddenBundleMember && showArrowHead ? (
+        <polyline
+          points={getArrowHeadPointsForRoute({
+            points: routedEdge.points,
+            fallbackTargetX: visualTarget.x,
+            fallbackTargetY: visualTarget.y,
+            fallbackTargetPosition: visualTarget.side,
+            arrowOffset,
+          })}
+          stroke={edgeColor}
+          strokeWidth={isHighlighted ? 2.2 : 1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+          style={{
+            opacity: data?.isLimited ? 0.78 : 1,
             filter: isHighlighted ? "drop-shadow(0 0 4px rgba(34,211,238,0.9))" : undefined,
             pointerEvents: "none",
           }}
@@ -1837,20 +1865,22 @@ function isHorizontalSide(side: string) {
 }
 
 function getEdgeLaneOffset(edgeId: string) {
-  return getEdgeHash(edgeId) * EDGE_LANE_SPACING;
+  return getEdgeHash(edgeId, EDGE_LANE_BUCKETS) * EDGE_LANE_SPACING;
 }
 
-function getEdgeArrowOffset(edgeId: string) {
-  return (getEdgeHash(edgeId) - (EDGE_LANE_BUCKETS - 1) / 2) * 3;
+function getEdgeArrowOffset(edgeKey: string) {
+  return (
+    (getEdgeHash(edgeKey, EDGE_ARROW_BUCKETS) - (EDGE_ARROW_BUCKETS - 1) / 2) * EDGE_ARROW_SPACING
+  );
 }
 
-function getEdgeHash(edgeId: string) {
+function getEdgeHash(edgeId: string, buckets: number) {
   let hash = 0;
   for (let index = 0; index < edgeId.length; index += 1) {
     hash = (hash * 31 + edgeId.charCodeAt(index)) | 0;
   }
 
-  return Math.abs(hash % EDGE_LANE_BUCKETS);
+  return Math.abs(hash % buckets);
 }
 
 function boundsOverlapVertically(
@@ -2744,14 +2774,14 @@ function getArrowHeadPoints(targetX: number, targetY: number, targetPosition: un
 
   switch (String(targetPosition)) {
     case "right":
-      return `${targetX},${targetY} ${targetX + length},${targetY - width} ${targetX + length},${targetY + width}`;
+      return `${targetX + length},${targetY - width} ${targetX},${targetY} ${targetX + length},${targetY + width}`;
     case "top":
-      return `${targetX},${targetY} ${targetX - width},${targetY - length} ${targetX + width},${targetY - length}`;
+      return `${targetX - width},${targetY - length} ${targetX},${targetY} ${targetX + width},${targetY - length}`;
     case "bottom":
-      return `${targetX},${targetY} ${targetX - width},${targetY + length} ${targetX + width},${targetY + length}`;
+      return `${targetX - width},${targetY + length} ${targetX},${targetY} ${targetX + width},${targetY + length}`;
     case "left":
     default:
-      return `${targetX},${targetY} ${targetX - length},${targetY - width} ${targetX - length},${targetY + width}`;
+      return `${targetX - length},${targetY - width} ${targetX},${targetY} ${targetX - length},${targetY + width}`;
   }
 }
 
