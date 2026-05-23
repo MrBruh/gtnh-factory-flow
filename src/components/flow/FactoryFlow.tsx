@@ -86,8 +86,6 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
-const EDGE_PATH_SPREAD_SPACING = 3;
-const EDGE_PATH_SPREAD_BUCKETS = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -1097,9 +1095,7 @@ function ResourceEdge({
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const laneOffset = getEdgeLaneOffset(id);
-  const edgeSpreadKey = `${id}|${data?.sourceHandleId ?? sourceHandleId ?? ""}|${data?.targetHandleId ?? targetHandleId ?? ""}|${data?.resource?.kind ?? ""}:${data?.resource?.id ?? ""}`;
-  const pathSpreadOffset = getEdgePathSpreadOffset(edgeSpreadKey);
-  const rawRoutedEdge =
+  const routedEdge =
     data?.bundle?.role === "primary"
       ? getBundledEdgePath({
           edgeId: id,
@@ -1138,7 +1134,6 @@ function ResourceEdge({
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
           });
-  const routedEdge = doglegRoutedEdge(rawRoutedEdge, pathSpreadOffset);
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
 
@@ -1866,13 +1861,6 @@ function getEdgeLaneOffset(edgeId: string) {
   return getEdgeHash(edgeId, EDGE_LANE_BUCKETS) * EDGE_LANE_SPACING;
 }
 
-function getEdgePathSpreadOffset(edgeKey: string) {
-  return (
-    (getEdgeHash(edgeKey, EDGE_PATH_SPREAD_BUCKETS) - (EDGE_PATH_SPREAD_BUCKETS - 1) / 2) *
-    EDGE_PATH_SPREAD_SPACING
-  );
-}
-
 function getEdgeHash(edgeId: string, buckets: number) {
   let hash = 0;
   for (let index = 0; index < edgeId.length; index += 1) {
@@ -1880,83 +1868,6 @@ function getEdgeHash(edgeId: string, buckets: number) {
   }
 
   return Math.abs(hash % buckets);
-}
-
-function doglegRoutedEdge<
-  T extends {
-    path: string;
-    labelX: number;
-    labelY: number;
-    points: Array<{ x: number; y: number }>;
-  },
->(routedEdge: T, offset: number): T {
-  if (Math.abs(offset) < 0.5 || routedEdge.points.length < 3) {
-    return routedEdge;
-  }
-
-  const points = [...routedEdge.points];
-  const target = points[points.length - 1];
-  const previous = points[points.length - 2];
-  const distanceX = target.x - previous.x;
-  const distanceY = target.y - previous.y;
-  const horizontal = Math.abs(distanceX) >= Math.abs(distanceY);
-  const finalLength = horizontal ? Math.abs(distanceX) : Math.abs(distanceY);
-
-  if (finalLength < 14) {
-    return routedEdge;
-  }
-
-  const doglegLength = Math.min(Math.max(finalLength * 0.4, 12), 28);
-  const replacement = horizontal
-    ? getHorizontalDoglegPoints(previous, target, distanceX, doglegLength, offset)
-    : getVerticalDoglegPoints(previous, target, distanceY, doglegLength, offset);
-  const nextPoints = compactPolylinePoints([...points.slice(0, -2), ...replacement]);
-
-  return {
-    ...routedEdge,
-    path: pointsToSvgPath(nextPoints),
-    points: nextPoints,
-  };
-}
-
-function getHorizontalDoglegPoints(
-  previous: { x: number; y: number },
-  target: { x: number; y: number },
-  distanceX: number,
-  doglegLength: number,
-  offset: number,
-) {
-  const direction = distanceX >= 0 ? 1 : -1;
-  const turnX = target.x - direction * doglegLength;
-  const laneY = target.y + offset;
-
-  return [
-    previous,
-    { x: turnX, y: previous.y },
-    { x: turnX, y: laneY },
-    { x: target.x, y: laneY },
-    target,
-  ];
-}
-
-function getVerticalDoglegPoints(
-  previous: { x: number; y: number },
-  target: { x: number; y: number },
-  distanceY: number,
-  doglegLength: number,
-  offset: number,
-) {
-  const direction = distanceY >= 0 ? 1 : -1;
-  const turnY = target.y - direction * doglegLength;
-  const laneX = target.x + offset;
-
-  return [
-    previous,
-    { x: previous.x, y: turnY },
-    { x: laneX, y: turnY },
-    { x: laneX, y: target.y },
-    target,
-  ];
 }
 
 function boundsOverlapVertically(
