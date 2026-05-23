@@ -86,6 +86,7 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
+const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
 const EXPORT_IMAGE_PADDING = 80;
@@ -110,6 +111,8 @@ type ResourceEdgeData = {
   targetSlotEndpoint: boolean;
   sourceStorageEndpoint: boolean;
   targetStorageEndpoint: boolean;
+  sourceEndpointOffset?: number;
+  targetEndpointOffset?: number;
   bundle?: {
     role: "primary" | "member";
     mode: "single-target" | "multi-target";
@@ -267,6 +270,7 @@ export function FactoryFlow() {
 
   const edges = useMemo<ResourceFlowEdge[]>(() => {
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
+    const endpointOffsets = getEdgeEndpointOffsets(project);
 
     return project.edges.map((edge) => {
       const edgeResult = result.edges[edge.id];
@@ -318,6 +322,8 @@ export function FactoryFlow() {
           targetSlotEndpoint: Boolean(targetHandle && !targetStorage),
           sourceStorageEndpoint: Boolean(sourceHandle && sourceStorage),
           targetStorageEndpoint: Boolean(targetHandle && targetStorage),
+          sourceEndpointOffset: endpointOffsets.get(`${edge.id}:source`),
+          targetEndpointOffset: endpointOffsets.get(`${edge.id}:target`),
           bundle: edgeBundles.get(edge.id),
           isFlowHighlighted,
         },
@@ -1064,6 +1070,7 @@ function ResourceEdge({
     position: sourcePosition,
     fallbackX: sourceX,
     fallbackY: sourceY,
+    endpointOffset: data?.sourceEndpointOffset,
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
     isStorageSlotEndpoint: data?.sourceStorageEndpoint,
     counterpartX: targetX,
@@ -1075,6 +1082,7 @@ function ResourceEdge({
     position: targetPosition,
     fallbackX: targetX,
     fallbackY: targetY,
+    endpointOffset: data?.targetEndpointOffset,
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
     counterpartX: sourceX,
@@ -1450,6 +1458,87 @@ function getEdgeBundles(
   }
 
   return bundles;
+}
+
+function getEdgeEndpointOffsets(project: FactoryProject) {
+  const storagesById = new Set((project.storages ?? []).map((storage) => storage.id));
+  const nodesById = new Map(project.nodes.map((node) => [node.id, node] as const));
+  const groups = new Map<
+    string,
+    Array<{
+      edgeId: string;
+      endpoint: "source" | "target";
+      counterpartY: number;
+    }>
+  >();
+
+  for (const edge of project.edges) {
+    const sourceHandle = parseResourceHandleId(edge.sourceHandle);
+    if (sourceHandle && !storagesById.has(edge.source)) {
+      addEndpointOffsetGroupEntry(groups, {
+        key: `${edge.source}|${sourceHandle.side}`,
+        edgeId: edge.id,
+        endpoint: "source",
+        counterpartY: nodesById.get(edge.target)?.position.y ?? 0,
+      });
+    }
+
+    const targetHandle = parseResourceHandleId(edge.targetHandle);
+    if (targetHandle && !storagesById.has(edge.target)) {
+      addEndpointOffsetGroupEntry(groups, {
+        key: `${edge.target}|${targetHandle.side}`,
+        edgeId: edge.id,
+        endpoint: "target",
+        counterpartY: nodesById.get(edge.source)?.position.y ?? 0,
+      });
+    }
+  }
+
+  const offsets = new Map<string, number>();
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+
+    const sortedGroup = [...group].sort(
+      (left, right) =>
+        left.counterpartY - right.counterpartY ||
+        left.edgeId.localeCompare(right.edgeId) ||
+        left.endpoint.localeCompare(right.endpoint),
+    );
+    const center = (sortedGroup.length - 1) / 2;
+
+    sortedGroup.forEach((entry, index) => {
+      offsets.set(`${entry.edgeId}:${entry.endpoint}`, (index - center) * EDGE_ENDPOINT_SPACING);
+    });
+  }
+
+  return offsets;
+}
+
+function addEndpointOffsetGroupEntry(
+  groups: Map<
+    string,
+    Array<{
+      edgeId: string;
+      endpoint: "source" | "target";
+      counterpartY: number;
+    }>
+  >,
+  entry: {
+    key: string;
+    edgeId: string;
+    endpoint: "source" | "target";
+    counterpartY: number;
+  },
+) {
+  const group = groups.get(entry.key);
+  if (group) {
+    group.push(entry);
+    return;
+  }
+
+  groups.set(entry.key, [entry]);
 }
 
 function inferRepeatedOutputHandleIds(project: FactoryProject, edge: FactoryEdge | undefined) {
@@ -2241,6 +2330,7 @@ function getSlotEdgeEndpoint({
   position,
   fallbackX,
   fallbackY,
+  endpointOffset,
   isRecipeSlotEndpoint,
   isStorageSlotEndpoint,
   counterpartX,
@@ -2251,6 +2341,7 @@ function getSlotEdgeEndpoint({
   position: unknown;
   fallbackX: number;
   fallbackY: number;
+  endpointOffset?: number;
   isRecipeSlotEndpoint?: boolean;
   isStorageSlotEndpoint?: boolean;
   counterpartX?: number;
@@ -2280,30 +2371,32 @@ function getSlotEdgeEndpoint({
     nodeId,
     handleId,
     edgeSide,
+    endpointOffset,
   });
   if (measuredEndpoint) {
     return { ...measuredEndpoint, side: edgeSide };
   }
 
   const offset = isStorageSlotEndpoint ? STORAGE_SLOT_EDGE_OFFSET : RECIPE_SLOT_EDGE_OFFSET;
+  const endpointLaneOffset = endpointOffset ?? 0;
 
   switch (edgeSide) {
     case "right":
       return {
         x: fallbackX + (isStorageSlotEndpoint ? -offset : offset),
-        y: fallbackY,
+        y: fallbackY + endpointLaneOffset,
         side: edgeSide,
       };
     case "left":
       return {
         x: fallbackX + (isStorageSlotEndpoint ? offset : -offset),
-        y: fallbackY,
+        y: fallbackY + endpointLaneOffset,
         side: edgeSide,
       };
     case "top":
-      return { x: fallbackX, y: fallbackY - offset, side: edgeSide };
+      return { x: fallbackX + endpointLaneOffset, y: fallbackY - offset, side: edgeSide };
     case "bottom":
-      return { x: fallbackX, y: fallbackY + offset, side: edgeSide };
+      return { x: fallbackX + endpointLaneOffset, y: fallbackY + offset, side: edgeSide };
     default:
       return { x: fallbackX, y: fallbackY, side: edgeSide };
   }
@@ -2347,7 +2440,7 @@ function getSlotEdgeSideTowardPoint({
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
 
-  if (preferHorizontal && Math.abs(distanceX) > 1) {
+  if (preferHorizontal && Math.abs(distanceX) > Math.abs(distanceY) * 0.85) {
     return distanceX >= 0 ? Position.Right : Position.Left;
   }
 
@@ -2366,10 +2459,12 @@ function getMeasuredSlotEndpoint({
   nodeId,
   handleId,
   edgeSide,
+  endpointOffset = 0,
 }: {
   nodeId: string;
   handleId?: string | null;
   edgeSide: string;
+  endpointOffset?: number;
 }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
@@ -2387,7 +2482,7 @@ function getMeasuredSlotEndpoint({
   }
 
   const slotRect = slotElement.getBoundingClientRect();
-  const screenPoint = getSlotRectEdgePoint(slotRect, edgeSide);
+  const screenPoint = getSlotRectEdgePoint(slotRect, edgeSide, endpointOffset);
 
   return screenToFlowPoint(screenPoint, nodeElement);
 }
@@ -2415,17 +2510,17 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
   );
 }
 
-function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string) {
+function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string, endpointOffset = 0) {
   switch (edgeSide) {
     case "right":
-      return { x: rect.right, y: rect.top + rect.height / 2 };
+      return { x: rect.right, y: rect.top + rect.height / 2 + endpointOffset };
     case "top":
-      return { x: rect.left + rect.width / 2, y: rect.top };
+      return { x: rect.left + rect.width / 2 + endpointOffset, y: rect.top };
     case "bottom":
-      return { x: rect.left + rect.width / 2, y: rect.bottom };
+      return { x: rect.left + rect.width / 2 + endpointOffset, y: rect.bottom };
     case "left":
     default:
-      return { x: rect.left, y: rect.top + rect.height / 2 };
+      return { x: rect.left, y: rect.top + rect.height / 2 + endpointOffset };
   }
 }
 
