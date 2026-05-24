@@ -234,6 +234,12 @@ exporterSource = exporterSource.replace(
     "import gregtech.api.recipe.RecipeMap;",
   ].join("\n"),
 );
+if (!exporterSource.includes("neiCatalystsLoaded")) {
+  exporterSource = exporterSource.replace(
+    "    private static RecipeExporter instance;\n",
+    "    private static RecipeExporter instance;\n    private static boolean neiCatalystsLoaded = false;\n",
+  );
+}
 
 exporterSource = exporterSource.replace(
   "        out.mInputChances = recipe.mInputChances;\n",
@@ -591,6 +597,7 @@ exporterSource = exporterSource.replace(
     "        if (transferRectId == null || transferRectId.isEmpty()) {",
     "            return catalysts;",
     "        }",
+    "        ensureNeiCatalystsLoaded();",
     "",
     "        try {",
     "            for (PositionedStack positionedStack : RecipeCatalysts.getRecipeCatalysts(transferRectId)) {",
@@ -613,6 +620,18 @@ exporterSource = exporterSource.replace(
     "        }",
     "",
     "        return catalysts;",
+    "    }",
+    "",
+    "    private static void ensureNeiCatalystsLoaded() {",
+    "        if (neiCatalystsLoaded) {",
+    "            return;",
+    "        }",
+    "        neiCatalystsLoaded = true;",
+    "        try {",
+    "            RecipeCatalysts.loadCatalystInfo();",
+    "        } catch (Throwable ignored) {",
+    "            // Some packs/runtimes initialize this earlier or disable the catalyst CSV.",
+    "        }",
     "    }",
     "",
     "    private static void addCatalyst(List<Item> catalysts, PositionedStack positionedStack) {",
