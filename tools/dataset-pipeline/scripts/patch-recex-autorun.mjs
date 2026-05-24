@@ -66,6 +66,10 @@ source = source.replace(
 
     @Mod.EventHandler
     public void serverStarted(FMLServerStartedEvent e) {
+        if (FMLCommonHandler.instance().getSide().isClient() && !Boolean.getBoolean("recex.renderIcons")) {
+            return;
+        }
+
         runAutorunExport("server-started");
     }
 
