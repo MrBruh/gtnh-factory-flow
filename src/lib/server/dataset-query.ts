@@ -257,9 +257,7 @@ export async function queryDatasetRecipes(
   const effectiveMap =
     request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
       ? request.recipeMap
-      : request.resource
-        ? sortedRecipeMaps[0]
-        : undefined;
+      : undefined;
   const scopedCandidates =
     request.resource && effectiveMap
       ? getResourceIndexes(
@@ -347,10 +345,12 @@ async function queryDatasetRecipesFromLookup(
   const effectiveMap =
     request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
       ? request.recipeMap
-      : sortedRecipeMaps[0];
+      : undefined;
   const effectiveMapId = effectiveMap ? lookup.recipeMapIds.get(effectiveMap) : undefined;
   const scopedCandidates =
-    effectiveMapId !== undefined ? (recipesByMap.get(effectiveMapId) ?? []) : [];
+    effectiveMapId !== undefined
+      ? (recipesByMap.get(effectiveMapId) ?? [])
+      : [...new Set([...recipesByMap.values()].flat())];
   const matchingRecipeIndexes: number[] = [];
 
   for (const recipeIndex of scopedCandidates) {
