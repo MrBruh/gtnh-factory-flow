@@ -220,6 +220,7 @@ function toRecipeSummary(recipe, index) {
     durationTicks: recipe.durationTicks,
     eut: recipe.eut,
     programmedCircuit: recipe.programmedCircuit,
+    machineHandlers: recipe.machineHandlers,
     inputs: (recipe.inputs ?? []).map(toCompactResource),
     outputs: (recipe.outputs ?? []).map(toCompactResource),
     source: recipe.source?.recipeMap ? { recipeMap: recipe.source.recipeMap } : undefined,

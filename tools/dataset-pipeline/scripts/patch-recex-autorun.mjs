@@ -212,13 +212,17 @@ const exporterPath = path.join(
 );
 let exporterSource = await fs.readFile(exporterPath, "utf8");
 
-exporterSource = exporterSource.replace(
-  "import java.util.ArrayList;",
-  ["import java.lang.reflect.Field;", "import java.lang.reflect.Method;", "import java.util.ArrayList;"].join("\n"),
-);
+if (!exporterSource.includes("import java.lang.reflect.Method;")) {
+  exporterSource = exporterSource.replace(
+    "import java.lang.reflect.Field;\n",
+    "import java.lang.reflect.Field;\nimport java.lang.reflect.Method;\n",
+  );
+}
 exporterSource = exporterSource.replace(
   "import gregtech.api.recipe.RecipeMap;",
   [
+    "import codechicken.nei.PositionedStack;",
+    "import codechicken.nei.recipe.RecipeCatalysts;",
     "import com.gtnewhorizons.modularui.api.math.Pos2d;",
     "import gregtech.api.recipe.BasicUIProperties;",
     "import gregtech.api.recipe.RecipeMap;",
@@ -255,6 +259,29 @@ exporterSource = exporterSource.replace(
 exporterSource = exporterSource.replace(
   "                .map(RecipeExporter::cloneAndSort)\n                .sorted(COMPARE_RECIPE)",
   "                .sorted(COMPARE_RECIPE)",
+);
+
+exporterSource = exporterSource.replace(
+  '            RecipeExporterMod.log.info("Processing recipe map " + mach.n);\n',
+  [
+    "            mach.nei = map.getFrontend().getUIProperties().neiTransferRectId;",
+    "            mach.cat = getNeiCatalysts(mach.nei);",
+    "",
+    '            RecipeExporterMod.log.info("Processing recipe map " + mach.n);',
+  ].join("\n") + "\n",
+);
+
+exporterSource = exporterSource.replace(
+  '        temp.put("type", "shaped");\n        temp.put("recipes", shapedRecies);',
+  '        temp.put("type", "shaped");\n        temp.put("recipes", shapedRecies);\n        temp.put("catalysts", getNeiCatalysts("crafting"));',
+);
+exporterSource = exporterSource.replace(
+  '        temp.put("type", "shapeless");\n        temp.put("recipes", shapelessRecipes);',
+  '        temp.put("type", "shapeless");\n        temp.put("recipes", shapelessRecipes);\n        temp.put("catalysts", getNeiCatalysts("crafting"));',
+);
+exporterSource = exporterSource.replace(
+  '        temp.put("type", "shapedOreDict");\n        temp.put("recipes", oredictShapedRecipes);',
+  '        temp.put("type", "shapedOreDict");\n        temp.put("recipes", oredictShapedRecipes);\n        temp.put("catalysts", getNeiCatalysts("crafting"));',
 );
 
 exporterSource = exporterSource.replace(
@@ -550,6 +577,28 @@ exporterSource = exporterSource.replace(
     "        }",
     "",
     "        return false;",
+    "    }",
+    "",
+    "    private static List<Item> getNeiCatalysts(String transferRectId) {",
+    "        List<Item> catalysts = new ArrayList<Item>();",
+    "        if (transferRectId == null || transferRectId.isEmpty()) {",
+    "            return catalysts;",
+    "        }",
+    "",
+    "        try {",
+    "            for (PositionedStack positionedStack : RecipeCatalysts.getRecipeCatalysts(transferRectId)) {",
+    "                if (positionedStack == null || positionedStack.item == null) {",
+    "                    continue;",
+    "                }",
+    "                Item item = RecipeUtil.formatRegularItemStack(positionedStack.item);",
+    "                if (item != null) {",
+    "                    catalysts.add(item);",
+    "                }",
+    "            }",
+    "        } catch (Throwable ignored) {",
+    "            // Keep RecEx compatible with runtimes where NEI did not expose this registry yet.",
+    "        }",
+    "        return catalysts;",
     "    }",
     "",
     "    private static void addNeiSlots(GregtechRecipe recipe, RecipeMap<RecipeMapBackend> map, GTRecipe rawRecipe) {",
@@ -877,6 +926,34 @@ gregtechRecipeSource = gregtechRecipeSource.replace(
   "        fO = new ArrayList<Fluid>();\n        sl = new ArrayList<Slot>();\n        pb = new ArrayList<ProgressBar>();\n",
 );
 await fs.writeFile(gregtechRecipePath, gregtechRecipeSource);
+
+const gregtechMachinePath = path.join(
+  repoDir,
+  "src/main/java/com/bigbass/recex/recipes/gregtech/GregtechMachine.java",
+);
+let gregtechMachineSource = await fs.readFile(gregtechMachinePath, "utf8");
+if (!gregtechMachineSource.includes("public List<Item> cat;")) {
+  gregtechMachineSource = gregtechMachineSource.replace(
+    "import java.util.List;\n",
+    "import java.util.List;\n\nimport com.bigbass.recex.recipes.ingredients.Item;\n",
+  );
+  gregtechMachineSource = gregtechMachineSource.replace(
+    "    /** recipes */\n    public List<GregtechRecipe> recs;\n",
+    [
+      "    /** NEI transfer rect id */",
+      "    public String nei;",
+      "    /** NEI catalysts */",
+      "    public List<Item> cat;",
+      "    /** recipes */",
+      "    public List<GregtechRecipe> recs;",
+    ].join("\n") + "\n",
+  );
+  gregtechMachineSource = gregtechMachineSource.replace(
+    "        recs = new ArrayList<GregtechRecipe>();\n",
+    "        cat = new ArrayList<Item>();\n        recs = new ArrayList<GregtechRecipe>();\n",
+  );
+  await fs.writeFile(gregtechMachinePath, gregtechMachineSource);
+}
 
 const itemPath = path.join(
   repoDir,

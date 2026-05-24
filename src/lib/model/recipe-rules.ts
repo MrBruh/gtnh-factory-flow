@@ -1,101 +1,5 @@
 import type { FactoryNode, MachineHandler, Recipe, RecipeInput } from "./types";
 
-const SHARED_MACHINE_HANDLERS = [
-  {
-    recipeMap: "centrifuge",
-    handlers: [
-      {
-        id: "multiblock-centrifuge",
-        label: "Multiblock Centrifuge",
-        machineType: "Multiblock Centrifuge",
-        kind: "multiblock",
-      },
-    ],
-  },
-  {
-    recipeMap: "electrolyzer",
-    handlers: [
-      {
-        id: "multiblock-electrolyzer",
-        label: "Multiblock Electrolyzer",
-        machineType: "Multiblock Electrolyzer",
-        kind: "multiblock",
-      },
-    ],
-  },
-  {
-    recipeMap: "mixer",
-    handlers: [
-      {
-        id: "multiblock-mixer",
-        label: "Multiblock Mixer",
-        machineType: "Multiblock Mixer",
-        kind: "multiblock",
-      },
-    ],
-  },
-  {
-    recipeMap: "dehydrator",
-    handlers: [
-      {
-        id: "multiblock-dehydrator",
-        label: "Multiblock Dehydrator",
-        machineType: "Multiblock Dehydrator",
-        kind: "multiblock",
-      },
-    ],
-  },
-  {
-    recipeMap: "fluid extractor",
-    handlers: [
-      {
-        id: "multiblock-fluid-extractor",
-        label: "Multiblock Fluid Extractor",
-        machineType: "Multiblock Fluid Extractor",
-        kind: "multiblock",
-      },
-    ],
-  },
-  {
-    recipeMap: "shaped crafting",
-    handlers: [
-      {
-        id: "crafting-table",
-        label: "Crafting Table",
-        machineType: "Shaped Crafting",
-        minimumTier: "NONE",
-        kind: "crafting",
-      },
-      {
-        id: "autoworkbench",
-        label: "Autoworkbench",
-        machineType: "Autoworkbench",
-        minimumTier: "LV",
-        kind: "automation",
-      },
-    ],
-  },
-  {
-    recipeMap: "shapeless crafting",
-    handlers: [
-      {
-        id: "crafting-table",
-        label: "Crafting Table",
-        machineType: "Shapeless Crafting",
-        minimumTier: "NONE",
-        kind: "crafting",
-      },
-      {
-        id: "autoworkbench",
-        label: "Autoworkbench",
-        machineType: "Autoworkbench",
-        minimumTier: "LV",
-        kind: "automation",
-      },
-    ],
-  },
-] as const;
-
 const EBF_COIL_REQUIREMENTS = [
   {
     heat: 1801,
@@ -159,17 +63,7 @@ export function getRecipeMachineHandlers(
     minimumTier: recipe.minimumTier,
     kind: "single",
   };
-  const normalizedMap = normalizeRecipeMapName(recipeMapName(recipe));
-  const ruleHandlers =
-    SHARED_MACHINE_HANDLERS.find((entry) => normalizedMap === entry.recipeMap)?.handlers ?? [];
-  const handlers = [
-    ...(recipe.machineHandlers ?? []),
-    baseHandler,
-    ...ruleHandlers.map((handler) => ({
-      minimumTier: recipe.minimumTier,
-      ...handler,
-    })),
-  ];
+  const handlers = [baseHandler, ...(recipe.machineHandlers ?? [])];
 
   return [...new Map(handlers.map((handler) => [handler.id, handler])).values()];
 }

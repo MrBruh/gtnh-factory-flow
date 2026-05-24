@@ -76,6 +76,10 @@ console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
 function normalizeGregtechRecipes(source) {
   for (const machine of source.machines) {
     const machineType = text(machine.n, "unknown-machine");
+    const machineHandlers = machineHandlersFromCatalysts(machine.cat, {
+      baseMachineType: machineType,
+      fallbackMinimumTier: "UNKNOWN",
+    });
     recipeMaps.push(machineType);
 
     for (const [index, rawRecipe] of (machine.recs ?? []).entries()) {
@@ -137,6 +141,7 @@ function normalizeGregtechRecipes(source) {
         name: `${machineType}: ${outputs[0].displayName ?? outputs[0].id}`,
         machineType,
         minimumTier: "UNKNOWN",
+        machineHandlers: machineHandlers.length > 0 ? machineHandlers : undefined,
         durationTicks: rawRecipe.dur,
         eut: rawRecipe.eut ?? 0,
         inputs,
@@ -166,6 +171,10 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
     return;
   }
 
+  const machineHandlers = machineHandlersFromCatalysts(source.catalysts, {
+    baseMachineType: machineType,
+    fallbackMinimumTier: "NONE",
+  });
   recipeMaps.push(machineType);
 
   for (const [index, rawRecipe] of source.recipes.entries()) {
@@ -183,6 +192,7 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
       name: `${machineType}: ${output.displayName ?? output.id}`,
       machineType,
       minimumTier: "NONE",
+      machineHandlers: machineHandlers.length > 0 ? machineHandlers : undefined,
       durationTicks: 20,
       eut: 0,
       inputs,
@@ -253,6 +263,89 @@ function addRecipe(recipe) {
     addResource(resource);
   }
   recipes.push(recipe);
+}
+
+function machineHandlersFromCatalysts(catalysts, { baseMachineType, fallbackMinimumTier }) {
+  const handlers = [];
+  const seen = new Set([slug(baseMachineType)]);
+
+  for (const catalyst of catalysts ?? []) {
+    const resource = itemAmount(catalyst, { defaultAmount: 1 });
+    if (!resource) {
+      continue;
+    }
+
+    const label = resource.displayName ?? resource.id;
+    const id = `nei-catalyst-${slug(resource.id)}`;
+    if (seen.has(id) || normalizeLabel(label) === normalizeLabel(baseMachineType)) {
+      continue;
+    }
+    seen.add(id);
+
+    handlers.push({
+      id,
+      label,
+      machineType: label,
+      minimumTier: inferCatalystMinimumTier(label, fallbackMinimumTier),
+      kind: inferCatalystKind(label, fallbackMinimumTier),
+    });
+  }
+
+  return handlers;
+}
+
+function inferCatalystMinimumTier(label, fallback) {
+  const normalized = normalizeLabel(label);
+  if (normalized === "crafting table") {
+    return "NONE";
+  }
+
+  const tier = [
+    "ULV",
+    "LV",
+    "MV",
+    "HV",
+    "EV",
+    "IV",
+    "LuV",
+    "ZPM",
+    "UV",
+    "UHV",
+    "UEV",
+    "UIV",
+    "UXV",
+    "OpV",
+    "MAX",
+  ].find((entry) => new RegExp(`(^|\\b)${escapeRegExp(entry)}(\\b|$)`, "i").test(label));
+  return tier ?? fallback;
+}
+
+function inferCatalystKind(label, fallbackMinimumTier) {
+  const normalized = normalizeLabel(label);
+  if (normalized === "crafting table") {
+    return "crafting";
+  }
+  if (normalized.includes("workbench") || normalized.includes("assembler machine")) {
+    return "automation";
+  }
+  if (normalized.includes("multiblock") || normalized.includes("controller")) {
+    return "multiblock";
+  }
+  if (fallbackMinimumTier === "NONE") {
+    return "crafting";
+  }
+  return "single";
+}
+
+function normalizeLabel(value) {
+  return text(value, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function recipeSignature(recipe) {

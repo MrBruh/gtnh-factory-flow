@@ -7,8 +7,19 @@ import {
 import type { Recipe } from "./types";
 
 describe("recipe machine handlers", () => {
-  it("adds multiblock handlers for shared NEI recipe maps", () => {
-    const recipe = testRecipe("Fluid Extractor");
+  it("uses machine handlers exported in the dataset", () => {
+    const recipe = {
+      ...testRecipe("Fluid Extractor"),
+      machineHandlers: [
+        {
+          id: "nei-catalyst-multiblock-fluid-extractor",
+          label: "Multiblock Fluid Extractor",
+          machineType: "Multiblock Fluid Extractor",
+          minimumTier: "LV",
+          kind: "multiblock" as const,
+        },
+      ],
+    };
 
     expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
       "Fluid Extractor",
@@ -17,7 +28,18 @@ describe("recipe machine handlers", () => {
   });
 
   it("applies the selected handler to the effective recipe", () => {
-    const recipe = testRecipe("Shaped Crafting", "NONE");
+    const recipe = {
+      ...testRecipe("Shaped Crafting", "NONE"),
+      machineHandlers: [
+        {
+          id: "autoworkbench",
+          label: "Autoworkbench",
+          machineType: "Autoworkbench",
+          minimumTier: "LV",
+          kind: "automation" as const,
+        },
+      ],
+    };
     const effective = applyMachineHandlerToRecipe(recipe, {
       machineHandlerId: "autoworkbench",
     });

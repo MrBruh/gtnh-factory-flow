@@ -84,10 +84,14 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...effectiveRecipe,
     ...getOverclockedRecipeStats(recipe, projectNode),
   };
-  const tierColor = GT_TIER_COLORS[tierControl.current];
+  const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
   const exceedsMaxTier =
-    maxTierFilter !== "all" && isVoltageTierAbove(recipePowerTier, maxTierFilter);
+    tierControl !== undefined && maxTierFilter !== "all" && isVoltageTierAbove(recipePowerTier, maxTierFilter);
   const updateTier = (direction: -1 | 1) => {
+    if (!tierControl) {
+      return;
+    }
+
     const nextTier = getAdjacentTier(tierControl.current, tierControl.minimum, direction);
     if (nextTier !== tierControl.current) {
       updateNode(projectNode.id, { overclockTier: nextTier });
@@ -153,9 +157,13 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         <div
           className={[
             "mb-1 grid min-w-0 items-center",
-            machineHandlers.length > 1
+            machineHandlers.length > 1 && tierControl
               ? "grid-cols-[24px_minmax(0,1fr)_50px_24px]"
-              : "grid-cols-[24px_minmax(0,1fr)_50px]",
+              : machineHandlers.length > 1
+                ? "grid-cols-[24px_minmax(0,1fr)_24px]"
+                : tierControl
+                  ? "grid-cols-[24px_minmax(0,1fr)_50px]"
+                  : "grid-cols-[24px_minmax(0,1fr)]",
           ].join(" ")}
         >
           <button
@@ -176,29 +184,31 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           >
             {selectedMachineHandler.label}
           </div>
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              updateTier(1);
-            }}
-            onContextMenu={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              updateTier(-1);
-            }}
-            className="nodrag h-6 w-[50px] border-2 px-1 text-[11px] font-bold leading-[18px] shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
-            style={{
-              backgroundColor: tierColor.background,
-              borderColor: tierColor.border,
-              color: tierColor.text,
-              textShadow: `1px 1px 0 ${tierColor.shadow}`,
-            }}
-            title={`Tier ${tierControl.current}. Left click up, right click down.`}
-            aria-label={`Tier ${tierControl.current}`}
-          >
-            {tierControl.current}
-          </button>
+          {tierControl && tierColor ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                updateTier(1);
+              }}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                updateTier(-1);
+              }}
+              className="nodrag h-6 w-[50px] border-2 px-1 text-[11px] font-bold leading-[18px] shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.45)] hover:brightness-110"
+              style={{
+                backgroundColor: tierColor.background,
+                borderColor: tierColor.border,
+                color: tierColor.text,
+                textShadow: `1px 1px 0 ${tierColor.shadow}`,
+              }}
+              title={`Tier ${tierControl.current}. Left click up, right click down.`}
+              aria-label={`Tier ${tierControl.current}`}
+            >
+              {tierControl.current}
+            </button>
+          ) : null}
           {machineHandlers.length > 1 ? (
             <div className="relative">
               <button
@@ -419,6 +429,11 @@ function normalizeSearch(value: string) {
 type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
+  const hasVoltageTier = GT_VOLTAGE_TIERS.some((entry) => entry.tier === recipe.minimumTier);
+  if (recipe.durationTicks <= 0 || (recipe.eut === 0 && !hasVoltageTier)) {
+    return undefined;
+  }
+
   const minimum = getOverclockedRecipeStats(recipe, node).minimumTier;
   const current = clampTier(resolveVoltageTier(node.overclockTier, minimum), minimum);
   return { minimum, current };
