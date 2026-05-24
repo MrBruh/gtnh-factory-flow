@@ -258,7 +258,9 @@ export async function queryDatasetRecipes(
   const effectiveMap =
     request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
       ? request.recipeMap
-      : undefined;
+      : request.resource
+        ? sortedRecipeMaps[0]
+        : undefined;
   const scopedCandidates =
     request.resource && effectiveMap
       ? getResourceIndexes(
@@ -346,7 +348,7 @@ async function queryDatasetRecipesFromLookup(
   const effectiveMap =
     request.recipeMap && sortedRecipeMaps.includes(request.recipeMap)
       ? request.recipeMap
-      : undefined;
+      : sortedRecipeMaps[0];
   const effectiveMapId = effectiveMap ? lookup.recipeMapIds.get(effectiveMap) : undefined;
   const scopedCandidates =
     effectiveMapId !== undefined

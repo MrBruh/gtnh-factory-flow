@@ -374,6 +374,9 @@ export function RecipeBrowser() {
           setFilteredRecipes(result.recipes);
           setAvailableRecipeMaps(result.recipeMaps);
           setRecipeMapIcons(result.recipeMapIcons ?? {});
+          if (activeResource && !activeRecipeMap && result.recipeMaps[0]) {
+            setSelectedRecipeMap(result.recipeMaps[0]);
+          }
           setRecipeQueryLoading(false);
         })
         .catch((error) => {
