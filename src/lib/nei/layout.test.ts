@@ -28,6 +28,46 @@ describe("NEI layout", () => {
     ]);
   });
 
+  it("uses exported NEI slot frames when the dataset provides them", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Coke Oven",
+        inputs: [
+          { kind: "item", id: "spruce_log", amount: 15, neiSlot: { x: 48, y: 24 } },
+          { kind: "fluid", id: "water", amount: 1000, neiSlot: { x: 52, y: 62 } },
+        ],
+        outputs: [
+          { kind: "item", id: "charcoal", amount: 20, neiSlot: { x: 106, y: 24 } },
+          { kind: "fluid", id: "creosote", amount: 4000, neiSlot: { x: 124, y: 62 } },
+        ],
+        nei: {
+          slots: [
+            { side: "input", kind: "item", slotIndex: 0, x: 48, y: 24 },
+            { side: "input", kind: "item", slotIndex: 1, x: 66, y: 24 },
+            { side: "output", kind: "item", slotIndex: 0, x: 106, y: 24 },
+            { side: "input", kind: "fluid", slotIndex: 0, x: 52, y: 62 },
+            { side: "output", kind: "fluid", slotIndex: 0, x: 124, y: 62 },
+          ],
+        },
+      }),
+    );
+
+    const itemInputFrames = layout.frames.filter(
+      (frame) => frame.side === "input" && frame.kind === "item",
+    );
+    expect(itemInputFrames).toHaveLength(2);
+    expect(itemInputFrames[1]?.resource).toBeUndefined();
+    expect(
+      layout.slots.map((slot) => [slot.kind, slot.side, slot.resource.id, slot.x, slot.y]),
+    ).toEqual([
+      ["item", "input", "spruce_log", 48, 24],
+      ["item", "output", "charcoal", 106, 24],
+      ["fluid", "input", "water", 52, 62],
+      ["fluid", "output", "creosote", 124, 62],
+    ]);
+    expect(layout.overflowGroups).toEqual([]);
+  });
+
   it("uses vanilla NEI crafting table positions for shaped crafting", () => {
     const layout = getNeiRecipeLayout(
       recipe({

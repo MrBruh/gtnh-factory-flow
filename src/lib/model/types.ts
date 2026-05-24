@@ -132,6 +132,13 @@ export interface Recipe {
       maxFluidInputs?: number;
       maxFluidOutputs?: number;
     };
+    slots?: Array<{
+      side: "input" | "output";
+      kind: ResourceKind;
+      slotIndex: number;
+      x: number;
+      y: number;
+    }>;
     additionalInfo?: string[];
     requiresCleanroom?: boolean;
     requiresLowGravity?: boolean;

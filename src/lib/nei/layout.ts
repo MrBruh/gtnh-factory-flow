@@ -191,7 +191,13 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   const itemOutputs = withResourceIndexes(recipe.outputs, "item");
   const fluidOutputs = withResourceIndexes(recipe.outputs, "fluid");
 
-  const frames: NeiSlotFrame[] = [
+  const explicitFrames = getExplicitSlotFrames(recipe, {
+    itemInputs,
+    fluidInputs,
+    itemOutputs,
+    fluidOutputs,
+  });
+  const frames: NeiSlotFrame[] = explicitFrames ?? [
     ...positionFrames(
       itemInputs,
       "input",
@@ -239,15 +245,59 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
     slotSize: SLOT_SIZE,
     frames,
     slots,
-    overflowGroups: buildOverflowGroups(definition, recipe, {
-      itemInputs: itemInputs.length,
-      itemOutputs: itemOutputs.length,
-      fluidInputs: fluidInputs.length,
-      fluidOutputs: fluidOutputs.length,
-    }),
+    overflowGroups: explicitFrames
+      ? []
+      : buildOverflowGroups(definition, recipe, {
+          itemInputs: itemInputs.length,
+          itemOutputs: itemOutputs.length,
+          fluidInputs: fluidInputs.length,
+          fluidOutputs: fluidOutputs.length,
+        }),
     progressBars: getProgressBarsForRecipeMap(recipeMap, definition.progressBars),
     logo: definition.logo ?? { x: 152, y: 63 },
   };
+}
+
+function getExplicitSlotFrames(
+  recipe: Recipe,
+  resources: {
+    itemInputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+    fluidInputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+    itemOutputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+    fluidOutputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+  },
+): NeiSlotFrame[] | undefined {
+  const slots = recipe.nei?.slots;
+  if (!slots?.length) {
+    return undefined;
+  }
+
+  const pools = {
+    "input:item": [...resources.itemInputs],
+    "input:fluid": [...resources.fluidInputs],
+    "output:item": [...resources.itemOutputs],
+    "output:fluid": [...resources.fluidOutputs],
+  };
+
+  return slots
+    .filter((slot) => slot.kind === "item" || slot.kind === "fluid")
+    .map((slot) => {
+      const poolKey = `${slot.side}:${slot.kind}` as keyof typeof pools;
+      const pool = pools[poolKey];
+      const resourceIndex = pool.findIndex(
+        (entry) => entry.resource.neiSlot?.x === slot.x && entry.resource.neiSlot?.y === slot.y,
+      );
+      const [entry] = resourceIndex >= 0 ? pool.splice(resourceIndex, 1) : [undefined];
+      return {
+        side: slot.side,
+        kind: slot.kind,
+        resource: entry?.resource,
+        resourceIndex: entry?.resourceIndex,
+        slotIndex: slot.slotIndex,
+        x: slot.x,
+        y: slot.y,
+      };
+    });
 }
 
 function getProgressBarsForRecipeMap(

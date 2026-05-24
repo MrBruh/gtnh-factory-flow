@@ -83,13 +83,15 @@ function normalizeGregtechRecipes(source) {
         continue;
       }
 
+      const slotFrames = normalizeNeiSlotFrames(rawRecipe.sl);
       const inputs = [
-        ...(rawRecipe.iI ?? []).map((item) => {
+        ...(rawRecipe.iI ?? []).map((item, itemIndex) => {
           const nonConsumedInput =
             isNonConsumedInput(item) || isCircuitItem(item) || isReusableToolInput(item);
           return itemAmount(item, {
             consumed: !nonConsumedInput,
             defaultAmount: nonConsumedInput ? 1 : undefined,
+            neiSlot: findNeiSlot(slotFrames, "input", "item", item.sl ?? itemIndex),
           });
         }),
         ...(rawRecipe.iNC ?? []).map((item) =>
@@ -101,11 +103,24 @@ function normalizeGregtechRecipes(source) {
         ...(rawRecipe.ncI ?? []).map((item) =>
           itemAmount(item, { consumed: false, defaultAmount: 1 }),
         ),
-        ...(rawRecipe.fI ?? []).map(fluidAmount),
+        ...(rawRecipe.fI ?? []).map((fluid, fluidIndex) =>
+          fluidAmount(fluid, {
+            neiSlot: findNeiSlot(slotFrames, "input", "fluid", fluid.sl ?? fluidIndex),
+          }),
+        ),
       ].filter(Boolean);
       const outputs = [
-        ...(rawRecipe.iO ?? []).map((item) => itemAmount(item, { chance: outputChance(item) })),
-        ...(rawRecipe.fO ?? []).map(fluidAmount),
+        ...(rawRecipe.iO ?? []).map((item, itemIndex) =>
+          itemAmount(item, {
+            chance: outputChance(item),
+            neiSlot: findNeiSlot(slotFrames, "output", "item", item.sl ?? itemIndex),
+          }),
+        ),
+        ...(rawRecipe.fO ?? []).map((fluid, fluidIndex) =>
+          fluidAmount(fluid, {
+            neiSlot: findNeiSlot(slotFrames, "output", "fluid", fluid.sl ?? fluidIndex),
+          }),
+        ),
       ].filter(Boolean);
 
       if (outputs.length === 0) {
@@ -131,6 +146,8 @@ function normalizeGregtechRecipes(source) {
           rawRecipeId: `${machineType}:${index}`,
         },
         nei: {
+          slots: slotFrames.length > 0 ? slotFrames : undefined,
+          slotCapacity: slotCapacityFromFrames(slotFrames),
           additionalInfo: [`Special value: ${rawRecipe.sp ?? 0}`],
         },
       });
@@ -343,6 +360,9 @@ function itemAmount(item, options = {}) {
   if (options.chance !== undefined) {
     resource.chance = options.chance;
   }
+  if (options.neiSlot) {
+    resource.neiSlot = options.neiSlot;
+  }
   return resource;
 }
 
@@ -504,18 +524,70 @@ function circuitConfiguration(resource) {
   return /configuration\s*[:=]\s*(\d+)/i.exec(resource.displayName ?? "")?.[1];
 }
 
-function fluidAmount(fluid) {
+function fluidAmount(fluid, options = {}) {
   if (!fluid?.id || !Number.isFinite(fluid.a) || fluid.a <= 0) {
     return undefined;
   }
 
-  return {
+  const resource = {
     kind: "fluid",
     id: fluid.id,
     amount: fluid.a,
     displayName: text(fluid.lN, fluid.id),
     iconPath: renderedIconPath(fluid.ic),
   };
+  if (options.neiSlot) {
+    resource.neiSlot = options.neiSlot;
+  }
+  return resource;
+}
+
+function normalizeNeiSlotFrames(slots) {
+  return (slots ?? [])
+    .map((slot) => {
+      const side = slot?.s === "output" ? "output" : slot?.s === "input" ? "input" : undefined;
+      const kind = slot?.k === "fluid" ? "fluid" : slot?.k === "item" ? "item" : undefined;
+      if (!side || !kind || !Number.isInteger(slot?.i) || !Number.isInteger(slot?.x) || !Number.isInteger(slot?.y)) {
+        return undefined;
+      }
+      return {
+        side,
+        kind,
+        slotIndex: slot.i,
+        x: slot.x,
+        y: slot.y,
+      };
+    })
+    .filter(Boolean);
+}
+
+function findNeiSlot(slots, side, kind, slotIndex) {
+  const slot = slots.find(
+    (candidate) =>
+      candidate.side === side && candidate.kind === kind && candidate.slotIndex === slotIndex,
+  );
+  return slot ? { x: slot.x, y: slot.y } : undefined;
+}
+
+function slotCapacityFromFrames(slots) {
+  if (slots.length === 0) {
+    return undefined;
+  }
+
+  return removeUndefined({
+    maxItemInputs: countSlots(slots, "input", "item"),
+    maxItemOutputs: countSlots(slots, "output", "item"),
+    maxFluidInputs: countSlots(slots, "input", "fluid"),
+    maxFluidOutputs: countSlots(slots, "output", "fluid"),
+  });
+}
+
+function countSlots(slots, side, kind) {
+  return slots.filter((slot) => slot.side === side && slot.kind === kind).length;
+}
+
+function removeUndefined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
 function hashRecipe(machineType, index, recipe) {

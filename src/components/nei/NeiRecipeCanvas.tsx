@@ -82,7 +82,7 @@ export function NeiRecipeCanvas({
 
       {renderLayout.frames.map((frame) => (
         <div
-          key={`${frame.side}-${frame.kind}-${frame.slotIndex}-${frame.action ?? "slot"}`}
+          key={`${frame.side}-${frame.kind}-${frame.slotIndex}-${frame.x}-${frame.y}-${frame.action ?? "slot"}`}
           className="nodrag absolute"
           style={{
             left: frame.x * renderScale,

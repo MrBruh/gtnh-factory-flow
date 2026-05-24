@@ -216,6 +216,14 @@ exporterSource = exporterSource.replace(
   "import java.util.ArrayList;",
   ["import java.lang.reflect.Field;", "import java.lang.reflect.Method;", "import java.util.ArrayList;"].join("\n"),
 );
+exporterSource = exporterSource.replace(
+  "import gregtech.api.recipe.RecipeMap;",
+  [
+    "import com.gtnewhorizons.modularui.api.math.Pos2d;",
+    "import gregtech.api.recipe.BasicUIProperties;",
+    "import gregtech.api.recipe.RecipeMap;",
+  ].join("\n"),
+);
 
 exporterSource = exporterSource.replace(
   "        out.mInputChances = recipe.mInputChances;\n",
@@ -231,6 +239,22 @@ exporterSource = exporterSource.replace(
     "        out.mOutputs = cleanPreserveOrder(recipe.mOutputs);",
     "        setOutputChances(out, compactOutputChances(recipe, recipe.mOutputs));",
   ].join("\n") + "\n",
+);
+exporterSource = exporterSource.replace(
+  "        out.mInputs = clean(recipe.mInputs);\n",
+  "        out.mInputs = cleanPreserveOrder(recipe.mInputs);\n",
+);
+exporterSource = exporterSource.replace(
+  "        out.mFluidInputs = clean(recipe.mFluidInputs);\n",
+  "        out.mFluidInputs = cleanPreserveOrder(recipe.mFluidInputs);\n",
+);
+exporterSource = exporterSource.replace(
+  "        out.mFluidOutputs = clean(recipe.mFluidOutputs);\n",
+  "        out.mFluidOutputs = cleanPreserveOrder(recipe.mFluidOutputs);\n",
+);
+exporterSource = exporterSource.replace(
+  "                .map(RecipeExporter::cloneAndSort)\n                .sorted(COMPARE_RECIPE)",
+  "                .sorted(COMPARE_RECIPE)",
 );
 
 exporterSource = exporterSource.replace(
@@ -249,6 +273,27 @@ exporterSource = exporterSource.replace(
     "",
     "        for (int i = 0; i < stacks.length; i++) {",
     "            ItemStack x = stacks[i];",
+    "",
+    "            if (x != null) {",
+    "                out[next++] = x.copy();",
+    "            }",
+    "        }",
+    "",
+    "        return out;",
+    "    }",
+    "",
+    "    private static FluidStack[] cleanPreserveOrder(FluidStack[] stacks) {",
+    "        int len = 0;",
+    "",
+    "        for (int i = 0; i < stacks.length; i++) {",
+    "            if (stacks[i] != null) len++;",
+    "        }",
+    "",
+    "        FluidStack[] out = new FluidStack[len];",
+    "        int next = 0;",
+    "",
+    "        for (int i = 0; i < stacks.length; i++) {",
+    "            FluidStack x = stacks[i];",
     "",
     "            if (x != null) {",
     "                out[next++] = x.copy();",
@@ -289,6 +334,7 @@ exporterSource = exporterSource.replace(
     "                    }",
     "                    inputIndex++;",
     "",
+    "                    item.sl = Integer.valueOf(inputIndex - 1);",
     "                    gtr.iI.add(item);",
   ].join("\n") + "\n",
 );
@@ -330,7 +376,48 @@ exporterSource = exporterSource.replace(
     "                    }",
     "                    outputIndex++;",
     "",
+    "                    item.sl = Integer.valueOf(outputIndex - 1);",
     "                    gtr.iO.add(item);",
+  ].join("\n") + "\n",
+);
+
+exporterSource = exporterSource.replace(
+  "                if (rec.mSpecialValue != 0) gtr.sp = rec.mSpecialValue;\n",
+  "                if (rec.mSpecialValue != 0) gtr.sp = rec.mSpecialValue;\n                addNeiSlots(gtr, map, rec);\n",
+);
+
+exporterSource = exporterSource.replace(
+  "                // fluid inputs\n                for (FluidStack stack : rec.mFluidInputs) {\n",
+  "                // fluid inputs\n                int fluidInputIndex = 0;\n                for (FluidStack stack : rec.mFluidInputs) {\n",
+);
+exporterSource = exporterSource.replace(
+  "                    if (fluid == null) {\n                        continue;\n                    }\n\n                    gtr.fI.add(fluid);\n",
+  [
+    "                    if (fluid == null) {",
+    "                        fluidInputIndex++;",
+    "                        continue;",
+    "                    }",
+    "",
+    "                    fluid.sl = Integer.valueOf(fluidInputIndex);",
+    "                    fluidInputIndex++;",
+    "                    gtr.fI.add(fluid);",
+  ].join("\n") + "\n",
+);
+exporterSource = exporterSource.replace(
+  "                // fluid outputs\n                for (FluidStack stack : rec.mFluidOutputs) {\n",
+  "                // fluid outputs\n                int fluidOutputIndex = 0;\n                for (FluidStack stack : rec.mFluidOutputs) {\n",
+);
+exporterSource = exporterSource.replace(
+  "                    if (fluid == null) {\n                        continue;\n                    }\n\n                    gtr.fO.add(fluid);\n",
+  [
+    "                    if (fluid == null) {",
+    "                        fluidOutputIndex++;",
+    "                        continue;",
+    "                    }",
+    "",
+    "                    fluid.sl = Integer.valueOf(fluidOutputIndex);",
+    "                    fluidOutputIndex++;",
+    "                    gtr.fO.add(fluid);",
   ].join("\n") + "\n",
 );
 
@@ -456,6 +543,29 @@ exporterSource = exporterSource.replace(
     "        return false;",
     "    }",
     "",
+    "    private static void addNeiSlots(GregtechRecipe recipe, RecipeMap<RecipeMapBackend> map, GTRecipe rawRecipe) {",
+    "        try {",
+    "            BasicUIProperties ui = map.getFrontend().getUIProperties();",
+    "            addNeiSlotFrames(recipe, \"input\", \"item\", ui.itemInputPositionsGetter.apply(Math.max(ui.maxItemInputs, rawRecipe.mInputs.length)));",
+    "            addNeiSlotFrames(recipe, \"output\", \"item\", ui.itemOutputPositionsGetter.apply(Math.max(ui.maxItemOutputs, rawRecipe.mOutputs.length)));",
+    "            addNeiSlotFrames(recipe, \"input\", \"fluid\", ui.fluidInputPositionsGetter.apply(Math.max(ui.maxFluidInputs, rawRecipe.mFluidInputs.length)));",
+    "            addNeiSlotFrames(recipe, \"output\", \"fluid\", ui.fluidOutputPositionsGetter.apply(Math.max(ui.maxFluidOutputs, rawRecipe.mFluidOutputs.length)));",
+    "            if (ui.useSpecialSlot) {",
+    "                Pos2d position = ui.specialItemPositionGetter.get();",
+    "                recipe.sl.add(new GregtechRecipe.Slot(\"input\", \"item\", 0, position.x, position.y));",
+    "            }",
+    "        } catch (Throwable ignored) {",
+    "            // Keep RecEx compatible with GTNH builds whose frontend API differs.",
+    "        }",
+    "    }",
+    "",
+    "    private static void addNeiSlotFrames(GregtechRecipe recipe, String side, String kind, List<Pos2d> positions) {",
+    "        for (int index = 0; index < positions.size(); index++) {",
+    "            Pos2d position = positions.get(index);",
+    "            recipe.sl.add(new GregtechRecipe.Slot(side, kind, index, position.x, position.y));",
+    "        }",
+    "    }",
+    "",
     "    private static int[] callChanceGetter(Object target, String methodName, int count) {",
     "        if (target == null || count <= 0) {",
     "            return null;",
@@ -502,6 +612,7 @@ if (!exporterSource.includes("item.nc = Boolean.TRUE;")) {
       "        item.nc = Boolean.TRUE;",
       "    }",
       "    inputIndex++;",
+      "    item.sl = Integer.valueOf(inputIndex - 1);",
       "    gtr.iI.add(item);",
       "}",
       "// item outputs",
@@ -547,6 +658,7 @@ if (!exporterSource.includes("item.ch = Integer.valueOf(outputChance);")) {
       "        item.ch = Integer.valueOf(outputChance);",
       "    }",
       "    outputIndex++;",
+      "    item.sl = Integer.valueOf(outputIndex - 1);",
       "    gtr.iO.add(item);",
       "}",
       "// fluid inputs",
@@ -694,6 +806,35 @@ gregtechRecipeSource = gregtechRecipeSource.replace(
   "        iO = new ArrayList<Item>();\n",
   "        iNC = new ArrayList<Item>();\n        iO = new ArrayList<Item>();\n",
 );
+gregtechRecipeSource = gregtechRecipeSource.replace(
+  "    /** fluidOutputs */\n    public List<Fluid> fO;\n",
+  [
+    "    /** fluidOutputs */",
+    "    public List<Fluid> fO;",
+    "    /** NEI slot frames */",
+    "    public List<Slot> sl;",
+    "",
+    "    public static class Slot {",
+    "        public String s;",
+    "        public String k;",
+    "        public int i;",
+    "        public int x;",
+    "        public int y;",
+    "",
+    "        public Slot(String side, String kind, int index, int x, int y) {",
+    "            this.s = side;",
+    "            this.k = kind;",
+    "            this.i = index;",
+    "            this.x = x;",
+    "            this.y = y;",
+    "        }",
+    "    }",
+  ].join("\n") + "\n",
+);
+gregtechRecipeSource = gregtechRecipeSource.replace(
+  "        fO = new ArrayList<Fluid>();\n",
+  "        fO = new ArrayList<Fluid>();\n        sl = new ArrayList<Slot>();\n",
+);
 await fs.writeFile(gregtechRecipePath, gregtechRecipeSource);
 
 const itemPath = path.join(
@@ -716,6 +857,9 @@ itemSource = itemSource.replace(
     "    /** rendered item stack icon filename */",
     "    public String ic;",
     "",
+    "    /** native NEI slot index */",
+    "    public Integer sl;",
+    "",
   ].join("\n"),
 );
 if (!itemSource.includes("public Integer ch;")) {
@@ -737,6 +881,9 @@ if (!itemSource.includes("public Integer ch;")) {
       "/** rendered item stack icon filename */",
       "public String ic;",
       "",
+      "/** native NEI slot index */",
+      "public Integer sl;",
+      "",
     ].join("\n"),
     "RecEx item metadata fields",
   );
@@ -753,6 +900,20 @@ if (!itemSource.includes("public Boolean nc;")) {
       "",
     ].join("\n"),
     "RecEx item non-consumed field",
+  );
+}
+if (!itemSource.includes("public Integer sl;")) {
+  itemSource = replaceRequired(
+    itemSource,
+    /public String ic;\s*/,
+    [
+      "public String ic;",
+      "",
+      "/** native NEI slot index */",
+      "public Integer sl;",
+      "",
+    ].join("\n"),
+    "RecEx item NEI slot field",
   );
 }
 await fs.writeFile(itemPath, itemSource);
@@ -839,6 +1000,9 @@ fluidSource = fluidSource.replace(
     "    /** rendered fluid icon filename */",
     "    public String ic;",
     "",
+    "    /** native NEI slot index */",
+    "    public Integer sl;",
+    "",
   ].join("\n"),
 );
 if (!fluidSource.includes("public String ic;")) {
@@ -851,8 +1015,25 @@ if (!fluidSource.includes("public String ic;")) {
       "/** rendered fluid icon filename */",
       "public String ic;",
       "",
+      "/** native NEI slot index */",
+      "public Integer sl;",
+      "",
     ].join("\n"),
     "RecEx fluid icon field",
+  );
+}
+if (!fluidSource.includes("public Integer sl;")) {
+  fluidSource = replaceRequired(
+    fluidSource,
+    /public String ic;\s*/,
+    [
+      "public String ic;",
+      "",
+      "/** native NEI slot index */",
+      "public Integer sl;",
+      "",
+    ].join("\n"),
+    "RecEx fluid NEI slot field",
   );
 }
 await fs.writeFile(fluidPath, fluidSource);

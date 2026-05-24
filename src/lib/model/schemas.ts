@@ -131,6 +131,17 @@ export const recipeSchema = z.object({
           maxFluidOutputs: z.number().int().min(0).optional(),
         })
         .optional(),
+      slots: z
+        .array(
+          z.object({
+            side: z.enum(["input", "output"]),
+            kind: resourceKindSchema,
+            slotIndex: z.number().int().min(0),
+            x: z.number().int().min(0),
+            y: z.number().int().min(0),
+          }),
+        )
+        .optional(),
       additionalInfo: z.array(z.string()).optional(),
       requiresCleanroom: z.boolean().optional(),
       requiresLowGravity: z.boolean().optional(),
