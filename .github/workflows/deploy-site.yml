@@ -103,6 +103,19 @@ jobs:
           systemctl --user --no-pager --full status "$deploy_name.service"
 
           if [ -f "$dataset_root/datasets.manifest.json" ]; then
+            manifest_url="http://127.0.0.1:$port/datasets/gtnh/datasets.manifest.json"
+            manifest="$(curl -fsS --retry 20 --retry-delay 1 "$manifest_url")"
+            stable_version="$(printf '%s' "$manifest" | grep -o '"latestStableVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestStableVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
+            daily_version="$(printf '%s' "$manifest" | grep -o '"latestDailyVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestDailyVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
+            for dataset_version in "$stable_version" "$daily_version"; do
+              [ -n "$dataset_version" ] || continue
+              echo "Prewarming dataset $dataset_version on $deploy_name"
+              curl -fsS --max-time 120 --retry 2 --retry-delay 1 \
+                "http://127.0.0.1:$port/api/datasets/$dataset_version/catalog" >/dev/null
+            done
+          fi
+
+          if [ -f "$dataset_root/datasets.manifest.json" ]; then
             for existing_release in "$app_root"/releases/*; do
               [ -d "$existing_release" ] || continue
               mkdir -p "$existing_release/public/datasets"
