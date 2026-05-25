@@ -520,6 +520,57 @@ describe("project recipe refresh", () => {
     );
   });
 
+  it("keeps the shared recipe generic when adding a concrete uses node", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "add-context-test",
+      name: "Add context test",
+      fuelProfiles: [],
+      recipes: [],
+      nodes: [],
+      edges: [],
+    });
+
+    useFactoryStore.getState().addNodeForRecipeObject(
+      {
+        id: "coke-oven-log",
+        name: "Coke Oven: Charcoal",
+        machineType: "Coke Oven",
+        minimumTier: "MV",
+        durationTicks: 256,
+        eut: 96,
+        inputs: [
+          {
+            kind: "item",
+            id: "oredict:logWood",
+            amount: 16,
+            displayName: "Ore Dictionary: logWood",
+            alternatives: [
+              { kind: "item", id: "minecraft:log@0", displayName: "Oak Log" },
+              { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" },
+            ],
+          },
+        ],
+        outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20 }],
+      },
+      { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log", mode: "uses" },
+    );
+
+    expect(useFactoryStore.getState().project.recipes[0]?.inputs[0]).toEqual(
+      expect.objectContaining({
+        id: "oredict:logWood",
+        displayName: "Ore Dictionary: logWood",
+      }),
+    );
+    expect(useFactoryStore.getState().project.nodes[0]?.recipeInputOverrides?.["0"]).toEqual(
+      expect.objectContaining({
+        id: "minecraft:log@1",
+        displayName: "Spruce Log",
+        alternatives: undefined,
+      }),
+    );
+  });
+
   it("stores concrete uses inputs on connected recipe nodes", () => {
     useFactoryStore.getState().setProject({
       schemaVersion: PROJECT_SCHEMA_VERSION,

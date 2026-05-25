@@ -12,12 +12,7 @@ import {
   type RecipeDatasetQueryResult,
 } from "@/lib/datasets/browser-loader";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
-import {
-  GT_VOLTAGE_TIERS,
-  isVirtualChoiceResource,
-  resourceLabel,
-  resourceMatchesInput,
-} from "@/lib/model";
+import { GT_VOLTAGE_TIERS, isVirtualChoiceResource, resourceLabel } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
@@ -182,9 +177,9 @@ export function RecipeBrowser() {
   );
 
   const getFullRecipe = useCallback(
-    async (recipeId: string): Promise<Recipe> => {
+    async (recipeId: string, preferDataset = false): Promise<Recipe> => {
       const projectRecipe = projectRecipes.find((recipe) => recipe.id === recipeId);
-      if (projectRecipe && recipeHasRenderableIcons(projectRecipe)) {
+      if (!preferDataset && projectRecipe && recipeHasRenderableIcons(projectRecipe)) {
         return projectRecipe;
       }
       if (!selectedDatasetVersion) {
@@ -202,25 +197,21 @@ export function RecipeBrowser() {
 
   const handleAddRecipe = useCallback(
     async (recipeId: string) => {
-      const contextRecipe = filteredRecipes.find((recipe) => recipe.id === recipeId);
+      const recipe = await getFullRecipe(recipeId, Boolean(activeResource));
       addNodeForRecipe(
-        contextualizeRecipeForSelectedResource(
-          await getFullRecipe(recipeId),
-          activeResource,
-          browserMode,
-          contextRecipe,
-        ),
+        recipe,
+        activeResource
+          ? {
+              kind: activeResource.kind,
+              id: activeResource.id,
+              displayName: activeResource.displayName,
+              mode: browserMode,
+            }
+          : undefined,
       );
       clearResourceBrowser();
     },
-    [
-      activeResource,
-      addNodeForRecipe,
-      browserMode,
-      clearResourceBrowser,
-      filteredRecipes,
-      getFullRecipe,
-    ],
+    [activeResource, addNodeForRecipe, browserMode, clearResourceBrowser, getFullRecipe],
   );
 
   useEffect(() => {
@@ -1274,78 +1265,6 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     source: summary.source,
     nei: summary.nei,
   };
-}
-
-function contextualizeRecipeForSelectedResource(
-  recipe: Recipe,
-  resource: IndexedResource | undefined,
-  mode: "recipes" | "uses",
-  contextRecipe?: RecipeSummary,
-): Recipe {
-  if (!resource) {
-    return recipe;
-  }
-
-  if (mode === "uses") {
-    let changed = false;
-    const inputs = recipe.inputs.map((input, index) => {
-      if (
-        !resourceMatchesInput(resource, input) &&
-        !contextInputUsesResource(contextRecipe?.inputs[index], input, resource)
-      ) {
-        return input;
-      }
-      changed = true;
-      return {
-        ...input,
-        id: resource.id,
-        displayName: resource.displayName ?? input.displayName,
-        iconPath: resource.iconPath ?? input.iconPath,
-        iconAtlas: resource.iconAtlas ?? input.iconAtlas,
-        dominantColor: resource.dominantColor ?? input.dominantColor,
-        tooltip: resource.tooltip,
-        alternatives: undefined,
-      };
-    });
-
-    return changed ? { ...recipe, inputs } : recipe;
-  }
-
-  let changed = false;
-  const outputs = recipe.outputs.map((output) => {
-    if (output.kind !== resource.kind || output.id !== resource.id) {
-      return output;
-    }
-    changed = true;
-    return {
-      ...output,
-      displayName: resource.displayName ?? output.displayName,
-      iconPath: resource.iconPath ?? output.iconPath,
-      iconAtlas: resource.iconAtlas ?? output.iconAtlas,
-      dominantColor: resource.dominantColor ?? output.dominantColor,
-    };
-  });
-
-  return changed ? { ...recipe, outputs } : recipe;
-}
-
-function contextInputUsesResource(
-  contextInput: RecipeSummary["inputs"][number] | undefined,
-  fullInput: Recipe["inputs"][number],
-  resource: IndexedResource,
-) {
-  if (!contextInput || contextInput.kind !== resource.kind || contextInput.id !== resource.id) {
-    return false;
-  }
-
-  if (contextInput.neiSlot && fullInput.neiSlot) {
-    return (
-      contextInput.neiSlot.x === fullInput.neiSlot.x &&
-      contextInput.neiSlot.y === fullInput.neiSlot.y
-    );
-  }
-
-  return contextInput.kind === fullInput.kind;
 }
 
 function recipeHasRenderableIcons(recipe: Recipe) {

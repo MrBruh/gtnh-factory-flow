@@ -96,7 +96,12 @@ interface FactoryStore {
   selectNode: (nodeId?: string) => void;
   selectRecipe: (recipeId?: string) => void;
   addNodeForRecipe: (recipeId: string) => void;
-  addNodeForRecipeObject: (recipe: Recipe) => void;
+  addNodeForRecipeObject: (
+    recipe: Recipe,
+    resource?: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+      mode: RecipeBrowserMode;
+    },
+  ) => void;
   addConnectedNodeForRecipe: (
     recipeId: string,
     anchorNodeId: string,
@@ -320,13 +325,14 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
           const validMachineHandlerIds = new Set(
             (refreshedRecipe.machineHandlers ?? []).map((handler) => handler.id),
           );
-          const nextNode: FactoryNode = Object.keys(contextualInputOverrides).length
+          const nextRecipeInputOverrides = {
+            ...contextualInputOverrides,
+            ...node.recipeInputOverrides,
+          };
+          const nextNode: FactoryNode = Object.keys(nextRecipeInputOverrides).length
             ? {
                 ...node,
-                recipeInputOverrides: {
-                  ...contextualInputOverrides,
-                  ...node.recipeInputOverrides,
-                },
+                recipeInputOverrides: nextRecipeInputOverrides,
               }
             : node;
           return nextNode.machineHandlerId && !validMachineHandlerIds.has(nextNode.machineHandlerId)
@@ -539,8 +545,8 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       return addRecipeNodeToState(state, recipe);
     });
   },
-  addNodeForRecipeObject: (recipe) => {
-    set((state) => addRecipeNodeToState(state, recipe));
+  addNodeForRecipeObject: (recipe, resource) => {
+    set((state) => addRecipeNodeToState(state, recipe, resource));
   },
   addConnectedNodeForRecipe: (recipeId, anchorNodeId, resource) => {
     set((state) => {
@@ -1186,7 +1192,13 @@ function findRecipeForPlanning(state: FactoryStore, recipeId: string): Recipe | 
   );
 }
 
-function addRecipeNodeToState(state: FactoryStore, recipe: Recipe): Partial<FactoryStore> {
+function addRecipeNodeToState(
+  state: FactoryStore,
+  recipe: Recipe,
+  resource?: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+    mode: RecipeBrowserMode;
+  },
+): Partial<FactoryStore> {
   const index = state.project.nodes.length;
   const viewportPosition = state.flowViewportCenter
     ? {
@@ -1200,6 +1212,7 @@ function addRecipeNodeToState(state: FactoryStore, recipe: Recipe): Partial<Fact
     machineCount: 1,
     parallel: 1,
     overclockTier: recipe.minimumTier,
+    recipeInputOverrides: resource ? buildRecipeInputOverrides(recipe, resource) : undefined,
     enabled: true,
     position: viewportPosition ?? {
       x: 100 + index * 90,
