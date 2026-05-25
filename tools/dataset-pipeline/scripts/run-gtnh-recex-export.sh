@@ -177,5 +177,8 @@ if [[ -z "$raw_recex_json" ]]; then
 fi
 
 cp "$raw_recex_json" "$GTNH_RAW_EXPORT_DIR/recex-export.json"
+echo "Normalizing RecEx export into dataset recipes.json"
 node tools/dataset-pipeline/scripts/normalize-recex-export.mjs "$raw_recex_json" "$GTNH_DATASET_OUT_DIR/recipes.json"
+echo "Applying texture icons to normalized dataset"
 node tools/dataset-pipeline/scripts/apply-texture-icons.mjs "$instance_root" "$GTNH_DATASET_OUT_DIR/recipes.json" "$GTNH_DATASET_OUT_DIR"
+echo "RecEx export post-processing completed"

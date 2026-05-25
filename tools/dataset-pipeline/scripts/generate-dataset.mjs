@@ -62,6 +62,7 @@ const exitCode = await new Promise((resolve) => {
 if (exitCode !== 0) {
   throw new Error(`Exporter command failed with exit code ${exitCode}.`);
 }
+console.log(`Exporter finished for ${versionId}.`);
 
 const recipeDatasetPath = path.join(outDir, "recipes.json");
 if (!existsSync(recipeDatasetPath)) {
@@ -70,6 +71,7 @@ if (!existsSync(recipeDatasetPath)) {
   );
 }
 
+console.log(`Validating dataset for ${versionId}.`);
 const datasetStats = await readDatasetStatsAndValidate(recipeDatasetPath);
 const postProcessMaxDatasetBytes = positiveIntEnv(
   "GTNH_ICON_POST_PROCESS_MAX_DATASET_BYTES",
@@ -77,21 +79,27 @@ const postProcessMaxDatasetBytes = positiveIntEnv(
 );
 const recipeDatasetSizeBytes = (await fs.stat(recipeDatasetPath)).size;
 if (recipeDatasetSizeBytes <= postProcessMaxDatasetBytes) {
+  console.log(`Pruning rendered icons for ${versionId}.`);
   await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
+  console.log(`Finalizing rendered icons for ${versionId}.`);
   await finalizeRenderedIcons(recipeDatasetPath, outDir);
 } else {
   console.log(
     `Skipping rendered icon cleanup/finalization for ${versionId}: dataset is ${recipeDatasetSizeBytes} bytes.`,
   );
 }
+console.log(`Building resource index for ${versionId}.`);
 await buildResourceIndex(recipeDatasetPath);
+console.log(`Building recipe index for ${versionId}.`);
 await buildRecipeIndex(recipeDatasetPath, outDir);
 
 const compressedRecipeDatasetPath = `${recipeDatasetPath}.gz`;
 const uncompressedSizeBytes = (await fs.stat(recipeDatasetPath)).size;
+console.log(`Compressing dataset for ${versionId}.`);
 await gzipFile(recipeDatasetPath, compressedRecipeDatasetPath);
 await fs.rm(recipeDatasetPath, { force: true });
 
+console.log(`Writing pipeline record for ${versionId}.`);
 await writePipelineRecord({
   ...pipelineRecord,
   status: "generated",

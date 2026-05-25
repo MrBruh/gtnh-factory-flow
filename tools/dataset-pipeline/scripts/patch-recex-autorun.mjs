@@ -1350,16 +1350,6 @@ const recipeUtilPath = path.join(
   "src/main/java/com/bigbass/recex/recipes/gregtech/RecipeUtil.java",
 );
 let recipeUtilSource = await fs.readFile(recipeUtilPath, "utf8");
-if (!recipeUtilSource.includes("import net.minecraft.client.Minecraft;")) {
-  recipeUtilSource = recipeUtilSource.replace(
-    "import net.minecraft.item.ItemStack;\n",
-    [
-      "import net.minecraft.client.Minecraft;",
-      "import net.minecraft.item.ItemStack;",
-      "import net.minecraft.util.EnumChatFormatting;",
-    ].join("\n") + "\n",
-  );
-}
 recipeUtilSource = recipeUtilSource.replace(
   "import com.bigbass.recex.recipes.ingredients.Fluid;",
   [
@@ -1370,11 +1360,11 @@ recipeUtilSource = recipeUtilSource.replace(
 );
 recipeUtilSource = recipeUtilSource.replaceAll(
   "\n        return item;\n    }\n\n    public static Item format",
-  "\n        item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n        item.tt = cleanedTooltip(stack);\n        return item;\n    }\n\n    public static Item format",
+  "\n        item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n        return item;\n    }\n\n    public static Item format",
 );
 recipeUtilSource = recipeUtilSource.replace(
   "\n        return item;\n    }\n\n    /**\n     * Might return null!",
-  "\n        item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n        item.tt = cleanedTooltip(stack);\n        return item;\n    }\n\n    /**\n     * Might return null!",
+  "\n        item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n        return item;\n    }\n\n    /**\n     * Might return null!",
 );
 recipeUtilSource = recipeUtilSource.replace(
   "\n        return fluid;\n    }\n\n    /**\n     * Retrieves all items",
@@ -1394,46 +1384,8 @@ if (!recipeUtilSource.includes("ItemStackIconExporter.captureIcon(iconStack(stac
       }
 
       itemCaptureInsertions += 1;
-      return `\n${indent}item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n${indent}item.tt = cleanedTooltip(stack);\n${indent}return item;\n${braceIndent}}`;
+      return `\n${indent}item.ic = ItemStackIconExporter.captureIcon(iconStack(stack));\n${indent}return item;\n${braceIndent}}`;
     },
-  );
-}
-if (!recipeUtilSource.includes("private static List<String> cleanedTooltip(")) {
-  recipeUtilSource = replaceRequired(
-    recipeUtilSource,
-    /\n\s*\/\*\*\s*\n\s*\* Might return null!/,
-    [
-      "",
-      "\tprivate static List<String> cleanedTooltip(ItemStack stack){",
-      "\t\ttry{",
-      "\t\t\tMinecraft minecraft = Minecraft.getMinecraft();",
-      "\t\t\tif(stack == null || minecraft == null || minecraft.thePlayer == null){",
-      "\t\t\t\treturn null;",
-      "\t\t\t}",
-      "\t\t\tList<?> raw = stack.getTooltip(minecraft.thePlayer, false);",
-      "\t\t\tif(raw == null || raw.isEmpty()){",
-      "\t\t\t\treturn null;",
-      "\t\t\t}",
-      "\t\t\tList<String> tooltip = new ArrayList<String>();",
-      "\t\t\tfor(Object line : raw){",
-      "\t\t\t\tif(line == null){",
-      "\t\t\t\t\tcontinue;",
-      "\t\t\t\t}",
-      "\t\t\t\tString cleaned = EnumChatFormatting.getTextWithoutFormattingCodes(String.valueOf(line)).trim();",
-      "\t\t\t\tif(!cleaned.isEmpty()){",
-      "\t\t\t\t\ttooltip.add(cleaned);",
-      "\t\t\t\t}",
-      "\t\t\t}",
-      "\t\t\treturn tooltip.isEmpty() ? null : tooltip;",
-      "\t\t}catch(Throwable ignored){",
-      "\t\t\treturn null;",
-      "\t\t}",
-      "\t}",
-      "",
-      "\t/**",
-      "\t * Might return null!",
-    ].join("\n"),
-    "RecEx item tooltip helper",
   );
 }
 if (!recipeUtilSource.includes("private static ItemStack iconStack(")) {
