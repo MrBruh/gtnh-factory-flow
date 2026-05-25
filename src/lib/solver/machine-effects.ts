@@ -58,6 +58,10 @@ function getTreeGrowthSimulatorToolMultiplier(
     .find((entry) => getTreeGrowthSimulatorToolCategory(entry.current.key) === normalizedCategory);
   const categoryControl = controls.find((entry) => entry.id === `tgs${category}Tool`);
 
+  if (controls.some((entry) => /^tgsToolSlot\d+$/.test(entry.id))) {
+    return slotControl?.current.outputMultiplier ?? 0;
+  }
+
   return slotControl?.current.outputMultiplier ?? categoryControl?.current.outputMultiplier ?? 1;
 }
 
