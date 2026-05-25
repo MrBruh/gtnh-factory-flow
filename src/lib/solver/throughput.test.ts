@@ -684,6 +684,88 @@ describe("calculateThroughput", () => {
     expect(result.storages["dust-drawer"].netPerSecond).toBeCloseTo(0);
   });
 
+  it("does not mark consumed-input storage output as limited by unused capacity", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "consumed-input-storage-output-limited-project",
+      name: "Consumed input storage output limited test",
+      recipes: [
+        {
+          id: "extractor-recipe",
+          name: "Large Fluid Extractor",
+          machineType: "Large Fluid Extractor",
+          minimumTier: "EV",
+          durationTicks: 20,
+          eut: 739,
+          inputs: [{ kind: "item", id: "charcoal", amount: 1 }],
+          outputs: [{ kind: "fluid", id: "woodtar", amount: 4_000 }],
+        },
+        {
+          id: "distillation-recipe",
+          name: "Distillation Tower",
+          machineType: "Distillation Tower",
+          minimumTier: "EV",
+          durationTicks: 20,
+          eut: 1024,
+          inputs: [{ kind: "fluid", id: "woodtar", amount: 1_000 }],
+          outputs: [{ kind: "fluid", id: "benzene", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "extractor",
+          recipeId: "extractor-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "EV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "distillation",
+          recipeId: "distillation-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "EV",
+          enabled: true,
+          position: { x: 300, y: 0 },
+        },
+      ],
+      storages: [
+        {
+          id: "woodtar-tank",
+          kind: "fluid",
+          resourceId: "woodtar",
+          position: { x: 160, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "extractor-to-tank",
+          source: "extractor",
+          target: "woodtar-tank",
+          resourceKind: "fluid",
+          resourceId: "woodtar",
+        },
+        {
+          id: "tank-to-distillation",
+          source: "woodtar-tank",
+          target: "distillation",
+          resourceKind: "fluid",
+          resourceId: "woodtar",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.extractor.utilization).toBeCloseTo(0.25);
+    expect(result.edges["extractor-to-tank"].demandPerSecond).toBeCloseTo(1_000);
+    expect(result.edges["extractor-to-tank"].transferredPerSecond).toBeCloseTo(1_000);
+    expect(result.edges["extractor-to-tank"].isLimited).toBe(false);
+  });
+
   it("fills storage from surplus when producer inputs are not consumed", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
