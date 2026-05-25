@@ -12,7 +12,12 @@ import {
   type RecipeDatasetQueryResult,
 } from "@/lib/datasets/browser-loader";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
-import { GT_VOLTAGE_TIERS, isVirtualChoiceResource, resourceLabel } from "@/lib/model";
+import {
+  GT_VOLTAGE_TIERS,
+  isVirtualChoiceResource,
+  resourceLabel,
+  resourceMatchesInput,
+} from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
@@ -179,7 +184,7 @@ export function RecipeBrowser() {
   const getFullRecipe = useCallback(
     async (recipeId: string): Promise<Recipe> => {
       const projectRecipe = projectRecipes.find((recipe) => recipe.id === recipeId);
-      if (projectRecipe) {
+      if (projectRecipe && recipeHasRenderableIcons(projectRecipe)) {
         return projectRecipe;
       }
       if (!selectedDatasetVersion) {
@@ -197,10 +202,16 @@ export function RecipeBrowser() {
 
   const handleAddRecipe = useCallback(
     async (recipeId: string) => {
-      addNodeForRecipe(await getFullRecipe(recipeId));
+      addNodeForRecipe(
+        contextualizeRecipeForSelectedResource(
+          await getFullRecipe(recipeId),
+          activeResource,
+          browserMode,
+        ),
+      );
       clearResourceBrowser();
     },
-    [addNodeForRecipe, clearResourceBrowser, getFullRecipe],
+    [activeResource, addNodeForRecipe, browserMode, clearResourceBrowser, getFullRecipe],
   );
 
   useEffect(() => {
@@ -1252,6 +1263,60 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     source: summary.source,
     nei: summary.nei,
   };
+}
+
+function contextualizeRecipeForSelectedResource(
+  recipe: Recipe,
+  resource: IndexedResource | undefined,
+  mode: "recipes" | "uses",
+): Recipe {
+  if (!resource) {
+    return recipe;
+  }
+
+  if (mode === "uses") {
+    let changed = false;
+    const inputs = recipe.inputs.map((input) => {
+      if (!resourceMatchesInput(resource, input)) {
+        return input;
+      }
+      changed = true;
+      return {
+        ...input,
+        id: resource.id,
+        displayName: resource.displayName ?? input.displayName,
+        iconPath: resource.iconPath ?? input.iconPath,
+        iconAtlas: resource.iconAtlas ?? input.iconAtlas,
+        dominantColor: resource.dominantColor ?? input.dominantColor,
+        alternatives: input.alternatives,
+      };
+    });
+
+    return changed ? { ...recipe, inputs } : recipe;
+  }
+
+  let changed = false;
+  const outputs = recipe.outputs.map((output) => {
+    if (output.kind !== resource.kind || output.id !== resource.id) {
+      return output;
+    }
+    changed = true;
+    return {
+      ...output,
+      displayName: resource.displayName ?? output.displayName,
+      iconPath: resource.iconPath ?? output.iconPath,
+      iconAtlas: resource.iconAtlas ?? output.iconAtlas,
+      dominantColor: resource.dominantColor ?? output.dominantColor,
+    };
+  });
+
+  return changed ? { ...recipe, outputs } : recipe;
+}
+
+function recipeHasRenderableIcons(recipe: Recipe) {
+  return [...recipe.inputs, ...recipe.outputs]
+    .filter((resource) => resource.kind === "item")
+    .every((resource) => Boolean(resource.iconPath || resource.iconAtlas));
 }
 
 function filterRecipesByIngredientName(recipes: RecipeSummary[], query: string) {

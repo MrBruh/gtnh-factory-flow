@@ -1155,7 +1155,11 @@ function addRecipeNodeToState(state: FactoryStore, recipe: Recipe): Partial<Fact
   const recipeAlreadyInProject = state.project.recipes.some((entry) => entry.id === recipe.id);
   const project = touchProject({
     ...state.project,
-    recipes: recipeAlreadyInProject ? state.project.recipes : [...state.project.recipes, recipe],
+    recipes: recipeAlreadyInProject
+      ? state.project.recipes.map((entry) =>
+          entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+        )
+      : [...state.project.recipes, recipe],
     nodes: [...state.project.nodes, node],
   });
 
@@ -1198,7 +1202,11 @@ function addConnectedRecipeNodeToState(
 
   const projectWithNode: FactoryProject = {
     ...state.project,
-    recipes: recipeAlreadyInProject ? state.project.recipes : [...state.project.recipes, recipe],
+    recipes: recipeAlreadyInProject
+      ? state.project.recipes.map((entry) =>
+          entry.id === recipe.id ? mergeRecipe(entry, recipe) : entry,
+        )
+      : [...state.project.recipes, recipe],
     nodes: [...state.project.nodes, nextNode],
   };
 
@@ -1210,6 +1218,17 @@ function addConnectedRecipeNodeToState(
     selectedRecipeId: recipe.id,
     lastResult: calculateThroughput(project),
   });
+}
+
+function mergeRecipe(existing: Recipe, incoming: Recipe): Recipe {
+  return {
+    ...existing,
+    ...incoming,
+    inputs: incoming.inputs.length > 0 ? incoming.inputs : existing.inputs,
+    outputs: incoming.outputs.length > 0 ? incoming.outputs : existing.outputs,
+    nei: incoming.nei ?? existing.nei,
+    machineHandlers: incoming.machineHandlers ?? existing.machineHandlers,
+  };
 }
 
 function pruneOrphanStorages(project: FactoryProject): FactoryProject {

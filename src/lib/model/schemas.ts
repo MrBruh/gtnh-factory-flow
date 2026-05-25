@@ -177,6 +177,7 @@ export const factoryNodeSchema = z.object({
   overclockTier: z.string().min(1),
   machineHandlerId: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
+  machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
   targetOutput: targetRateSchema.optional(),
   enabled: z.boolean(),
   position: z.object({

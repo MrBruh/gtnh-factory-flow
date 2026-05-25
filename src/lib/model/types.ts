@@ -169,6 +169,7 @@ export interface FactoryNode {
   overclockTier: MachineTier | string;
   machineHandlerId?: string;
   coilTier?: string;
+  machineConfigTiers?: Record<string, string>;
   targetOutput?: TargetRate;
   enabled: boolean;
   position: {

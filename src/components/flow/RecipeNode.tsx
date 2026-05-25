@@ -15,8 +15,10 @@ import {
   formatRate,
   applyMachineHandlerToRecipe,
   getAdjacentCoilTier,
+  getAdjacentMachineConfigTier,
   GT_VOLTAGE_TIERS,
   getRecipeMachineHandlers,
+  getRecipeMachineConfigTierControls,
   getRecipeCoilTierControl,
   getRecipePowerTier,
   getSelectedMachineHandler,
@@ -78,15 +80,24 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
   const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
   const coilResource = coilControl
-    ? resolveDatasetCoilResource(heatingCoilTierResource(coilControl.current), dataset)
+    ? resolveDatasetMachineConfigResource(heatingCoilTierResource(coilControl.current), dataset)
     : undefined;
+  const machineConfigControls = getRecipeMachineConfigTierControls(
+    effectiveRecipe,
+    projectNode,
+  ).map((control) => ({
+    ...control,
+    resource: resolveDatasetMachineConfigResource(control.resource, dataset),
+  }));
   const overclockedRecipe = {
     ...effectiveRecipe,
     ...getOverclockedRecipeStats(recipe, projectNode),
   };
   const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
   const exceedsMaxTier =
-    tierControl !== undefined && maxTierFilter !== "all" && isVoltageTierAbove(recipePowerTier, maxTierFilter);
+    tierControl !== undefined &&
+    maxTierFilter !== "all" &&
+    isVoltageTierAbove(recipePowerTier, maxTierFilter);
   const updateTier = (direction: -1 | 1) => {
     if (!tierControl) {
       return;
@@ -110,6 +121,14 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     if (nextTier !== coilControl.current.key) {
       updateNode(projectNode.id, { coilTier: nextTier });
     }
+  };
+  const updateMachineConfigTier = (controlId: string, nextTier: string) => {
+    updateNode(projectNode.id, {
+      machineConfigTiers: {
+        ...(projectNode.machineConfigTiers ?? {}),
+        [controlId]: nextTier,
+      },
+    });
   };
   const updateMachineHandler = (machineHandlerId: string) => {
     if (machineHandlers.length <= 1) {
@@ -269,31 +288,45 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
             canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}
             statsAction={
               coilControl && coilResource ? (
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    updateCoilTier(1);
-                  }}
-                  onContextMenu={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    updateCoilTier(-1);
-                  }}
-                  className="nodrag flex h-10 w-10 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
-                  title={`${coilResource.displayName ?? coilControl.current.label}. Left click up, right click down.`}
-                  aria-label={`Coil ${coilResource.displayName ?? coilControl.current.label}`}
-                >
-                  <ResourceIcon
+                <div className="flex gap-1">
+                  <MachineConfigButton
                     resource={coilResource}
-                    bare
-                    tooltip={false}
-                    showAmount={false}
-                    showConsumedState={false}
-                    iconPixelSize={46}
-                    className="h-10 w-10 !overflow-visible"
+                    title={`${coilResource.displayName ?? coilControl.current.label}. Left click up, right click down.`}
+                    ariaLabel={`Coil ${coilResource.displayName ?? coilControl.current.label}`}
+                    onStep={updateCoilTier}
                   />
-                </button>
+                  {machineConfigControls.map((control) => (
+                    <MachineConfigButton
+                      key={control.id}
+                      resource={control.resource}
+                      title={`${control.resource.displayName ?? control.current.label}. Left click up, right click down.`}
+                      ariaLabel={`${control.label} ${control.resource.displayName ?? control.current.label}`}
+                      onStep={(direction) =>
+                        updateMachineConfigTier(
+                          control.id,
+                          getAdjacentMachineConfigTier(control, direction),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              ) : machineConfigControls.length > 0 ? (
+                <div className="flex gap-1">
+                  {machineConfigControls.map((control) => (
+                    <MachineConfigButton
+                      key={control.id}
+                      resource={control.resource}
+                      title={`${control.resource.displayName ?? control.current.label}. Left click up, right click down.`}
+                      ariaLabel={`${control.label} ${control.resource.displayName ?? control.current.label}`}
+                      onStep={(direction) =>
+                        updateMachineConfigTier(
+                          control.id,
+                          getAdjacentMachineConfigTier(control, direction),
+                        )
+                      }
+                    />
+                  ))}
+                </div>
               ) : undefined
             }
             getSlotConnectionAttributes={(slot) => {
@@ -458,7 +491,7 @@ function resolveVoltageTier(value: string, fallback: VoltageTier): VoltageTier {
   return tier ?? fallback;
 }
 
-function resolveDatasetCoilResource(
+function resolveDatasetMachineConfigResource(
   fallback: ResourceAmount,
   dataset: ReturnType<typeof useFactoryStore.getState>["dataset"],
 ): ResourceAmount {
@@ -482,6 +515,46 @@ function resolveDatasetCoilResource(
     iconAtlas: indexed.iconAtlas ?? fallback.iconAtlas,
     dominantColor: indexed.dominantColor ?? fallback.dominantColor,
   };
+}
+
+function MachineConfigButton({
+  resource,
+  title,
+  ariaLabel,
+  onStep,
+}: {
+  resource: ResourceAmount;
+  title: string;
+  ariaLabel: string;
+  onStep: (direction: -1 | 1) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        onStep(1);
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onStep(-1);
+      }}
+      className="nodrag flex h-10 w-10 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
+      title={title}
+      aria-label={ariaLabel}
+    >
+      <ResourceIcon
+        resource={resource}
+        bare
+        tooltip={false}
+        showAmount={false}
+        showConsumedState={false}
+        iconPixelSize={46}
+        className="h-10 w-10 !overflow-visible"
+      />
+    </button>
+  );
 }
 
 function getSuggestedMachineCount(result: NodeThroughputResult | undefined, current: number) {
