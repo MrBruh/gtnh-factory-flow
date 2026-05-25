@@ -11,6 +11,7 @@ import type {
   ResourceAmount,
 } from "@/lib/model/types";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
+import { applyMachineOutputMultipliers } from "@/lib/solver/machine-effects";
 import {
   formatRate,
   applyMachineHandlerToRecipe,
@@ -87,9 +88,16 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...control,
     resource: resolveDatasetMachineConfigResource(control.resource, dataset),
   }));
+  const overclockedStats = getOverclockedRecipeStats(recipe, projectNode);
+  const adjustedRecipe = applyMachineOutputMultipliers(
+    effectiveRecipe,
+    projectNode,
+    overclockedStats.tier,
+  );
   const overclockedRecipe = {
     ...effectiveRecipe,
-    ...getOverclockedRecipeStats(recipe, projectNode),
+    ...adjustedRecipe,
+    ...overclockedStats,
   };
   const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
   const exceedsMaxTier =
@@ -457,13 +465,21 @@ type VoltageTier = Exclude<MachineTier, "DEMO">;
 
 function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
   const hasVoltageTier = GT_VOLTAGE_TIERS.some((entry) => entry.tier === recipe.minimumTier);
-  if (recipe.durationTicks <= 0 || (recipe.eut === 0 && !hasVoltageTier)) {
+  if (
+    recipe.durationTicks <= 0 ||
+    (recipe.eut === 0 && !hasVoltageTier && !isTierDrivenOutputRecipe(recipe))
+  ) {
     return undefined;
   }
 
   const minimum = getOverclockedRecipeStats(recipe, node).minimumTier;
   const current = clampTier(resolveVoltageTier(node.overclockTier, minimum), minimum);
   return { minimum, current };
+}
+
+function isTierDrivenOutputRecipe(recipe: Recipe) {
+  const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  return normalizeSearch(recipeMap) === "tree growth simulator";
 }
 
 function getAdjacentTier(current: VoltageTier, minimum: VoltageTier, direction: -1 | 1) {

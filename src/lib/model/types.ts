@@ -104,6 +104,8 @@ export interface MachineConfigTierOption {
   key: string;
   label: string;
   heat?: number;
+  outputMultiplier?: number;
+  parallelMultiplier?: number;
   resource: ResourceAmount;
 }
 

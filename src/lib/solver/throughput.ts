@@ -24,6 +24,8 @@ import type {
   ThroughputResult,
 } from "../model/types";
 import { TICKS_PER_SECOND } from "../model/types";
+import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
+import { getMachineOutputMultiplier, getMachineParallelMultiplier } from "./machine-effects";
 import { getOverclockedRecipeStats } from "./overclock";
 
 const EPSILON = 0.000001;
@@ -96,9 +98,12 @@ export function calculateThroughput(
       continue;
     }
 
+    const effectiveRecipe = applyMachineHandlerToRecipe(recipe, node);
     const overclockedRecipe = getOverclockedRecipeStats(recipe, node);
+    const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, node);
     const operationRatePerSecond =
-      (node.machineCount * node.parallel * TICKS_PER_SECOND) / overclockedRecipe.durationTicks;
+      (node.machineCount * node.parallel * machineParallelMultiplier * TICKS_PER_SECOND) /
+      overclockedRecipe.durationTicks;
     const inputs: FlowRecord = {};
     const outputs: FlowRecord = {};
 
@@ -111,12 +116,17 @@ export function calculateThroughput(
       addFlow(inputs, input, amountPerSecond);
     }
 
-    for (const output of recipe.outputs) {
-      const amountPerSecond = output.amount * getChanceMultiplier(output) * operationRatePerSecond;
+    for (const output of effectiveRecipe.outputs) {
+      const amountPerSecond =
+        output.amount *
+        getChanceMultiplier(output) *
+        getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier) *
+        operationRatePerSecond;
       addFlow(outputs, output, amountPerSecond);
     }
 
-    const euT = overclockedRecipe.eut * node.machineCount * node.parallel;
+    const euT =
+      overclockedRecipe.eut * node.machineCount * node.parallel * machineParallelMultiplier;
     totalEuT += euT;
 
     nodes[node.id] = {
@@ -246,8 +256,9 @@ export function calculateThroughput(
     }
 
     const overclockedRecipe = {
-      ...recipe,
+      ...applyMachineHandlerToRecipe(recipe, node),
       ...getOverclockedRecipeStats(recipe, node),
+      outputs: applyOutputMultipliers(recipe, node),
     };
     const utilizationReport = selectLimitingOutput(
       overclockedRecipe,
@@ -274,13 +285,7 @@ export function calculateThroughput(
       storagesById,
     );
     if (
-      !refreshNodeUtilizationFromEdgeResults(
-        project,
-        recipesById,
-        nodes,
-        edgeResults,
-        storagesById,
-      )
+      !refreshNodeUtilizationFromEdgeResults(project, recipesById, nodes, edgeResults, storagesById)
     ) {
       break;
     }
@@ -491,7 +496,8 @@ function countIncomingEdgesByTargetResource(project: FactoryProject): Map<string
   const counts = new Map<string, number>();
 
   for (const edge of project.edges) {
-    const key = getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
+    const key =
+      getEdgeTargetDemandKey(project, edge) ?? makeResourceKey(edge.resourceKind, edge.resourceId);
     const countKey = `${edge.target}|${key}`;
     counts.set(countKey, (counts.get(countKey) ?? 0) + 1);
   }
@@ -566,12 +572,11 @@ function refreshEdgeResultsFromNodeUtilization(
       ? (storageIncomingCounts.get(key) ?? 1)
       : (incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1);
     const effectiveStorageDemand = targetStorage ? (storageOutgoingDemand.get(key) ?? 0) : 0;
-    const targetDemand =
-      targetStorage
-        ? effectiveStorageDemand > EPSILON
-          ? effectiveStorageDemand / targetCount
-          : sourceCapacity
-        : !targetResult
+    const targetDemand = targetStorage
+      ? effectiveStorageDemand > EPSILON
+        ? effectiveStorageDemand / targetCount
+        : sourceCapacity
+      : !targetResult
         ? sourceCapacity
         : getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetResult.utilization) /
           targetCount;
@@ -636,11 +641,9 @@ function refreshNodeUtilizationFromEdgeResults(
   storagesById: Map<string, FactoryStorage>,
 ): boolean {
   const requiredByNodeAndResource = new Map<string, Map<ResourceKey, number>>();
-  const storageOutgoingDemand = calculateEffectiveStorageOutgoingDemand(
-    project,
-    nodes,
-    [...storagesById.values()],
-  );
+  const storageOutgoingDemand = calculateEffectiveStorageOutgoingDemand(project, nodes, [
+    ...storagesById.values(),
+  ]);
   let changed = false;
 
   for (const edge of project.edges) {
@@ -697,8 +700,9 @@ function refreshNodeUtilizationFromEdgeResults(
     }
 
     const overclockedRecipe = {
-      ...recipe,
+      ...applyMachineHandlerToRecipe(recipe, node),
       ...getOverclockedRecipeStats(recipe, node),
+      outputs: applyOutputMultipliers(recipe, node),
     };
     const utilizationReport = selectLimitingOutput(
       overclockedRecipe,
@@ -1036,7 +1040,7 @@ function applyProjectTarget(
 
 function selectLimitingOutput(
   recipe: Recipe,
-  node: { parallel: number; machineCount: number },
+  node: Pick<FactoryProject["nodes"][number], "parallel" | "machineCount" | "machineConfigTiers">,
   nodeResult: NodeThroughputResult,
   requiredByResource: Map<ResourceKey, number>,
 ): {
@@ -1075,7 +1079,7 @@ function selectLimitingOutput(
         utilization,
         theoreticalMachinesRequired: calculateTheoreticalMachines(
           recipe,
-          node.parallel,
+          node.parallel * getMachineParallelMultiplier(recipe, node),
           requiredRatePerSecond,
           recipeOutput,
         ),
@@ -1116,6 +1120,20 @@ function findRecipeOutputByKey(
   resourceKey: ResourceKey,
 ): RecipeOutput | undefined {
   return outputs.find((output) => makeResourceKey(output.kind, output.id) === resourceKey);
+}
+
+function applyOutputMultipliers(recipe: Recipe, node: FactoryProject["nodes"][number]) {
+  const effectiveRecipe = applyMachineHandlerToRecipe(recipe, node);
+  const overclockedRecipe = getOverclockedRecipeStats(recipe, node);
+  return effectiveRecipe.outputs.map((output) => {
+    const multiplier = getMachineOutputMultiplier(
+      effectiveRecipe,
+      node,
+      output,
+      overclockedRecipe.tier,
+    );
+    return multiplier === 1 ? output : { ...output, amount: output.amount * multiplier };
+  });
 }
 
 function calculateTheoreticalMachines(

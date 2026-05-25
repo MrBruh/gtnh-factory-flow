@@ -6,6 +6,10 @@ import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import { normalizeProjectFuelProfiles } from "@/lib/model/fuels";
 import { calculateThroughput } from "@/lib/solver";
 import {
+  getMachineOutputMultiplier,
+  getMachineParallelMultiplier,
+} from "@/lib/solver/machine-effects";
+import {
   getChanceMultiplier,
   getResourceKey,
   isRecipeInputConsumed,
@@ -1756,8 +1760,15 @@ function getCyclicOptimizedMachineCount(
   }
 
   const overclockedRecipe = getOverclockedRecipeStats(recipe, node);
+  const outputMultiplier = getMachineOutputMultiplier(recipe, node, output, overclockedRecipe.tier);
+  const parallelMultiplier = getMachineParallelMultiplier(recipe, node);
   const outputPerMachineSecond =
-    (output.amount * getChanceMultiplier(output) * node.parallel * TICKS_PER_SECOND) /
+    (output.amount *
+      getChanceMultiplier(output) *
+      outputMultiplier *
+      node.parallel *
+      parallelMultiplier *
+      TICKS_PER_SECOND) /
     overclockedRecipe.durationTicks;
   if (outputPerMachineSecond <= 0) {
     return getOptimizedMachineCount(0, node.machineCount);

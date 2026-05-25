@@ -42,6 +42,16 @@ export function getOverclockedRecipeStats(
       ? minimumTier
       : requestedTier;
   const overclockSteps = Math.max(0, getVoltageTierIndex(tier) - getVoltageTierIndex(minimumTier));
+  if (isFixedTimeTierDrivenOutputRecipe(effectiveRecipe)) {
+    return {
+      tier,
+      minimumTier,
+      overclockSteps,
+      durationTicks: effectiveRecipe.durationTicks,
+      eut: effectiveRecipe.eut,
+    };
+  }
+
   const heatOverclock = getHeatOverclockStats(effectiveRecipe, node, tier, overclockSteps);
 
   return {
@@ -102,6 +112,27 @@ function getRecipeMinimumVoltageTier(recipe: Pick<Recipe, "eut" | "minimumTier">
   return getVoltageTierIndex(declaredMinimum) >= getVoltageTierIndex(powerTier)
     ? declaredMinimum
     : powerTier;
+}
+
+function isFixedTimeTierDrivenOutputRecipe(
+  recipe: Pick<Recipe, "source"> & { machineType?: string },
+) {
+  if (!recipe.machineType) {
+    return false;
+  }
+  const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  return normalizeRecipeMapName(recipeMap) === "tree growth simulator";
+}
+
+function normalizeRecipeMapName(recipeMap: string): string {
+  return recipeMap
+    .trim()
+    .toLowerCase()
+    .replace(/\brecipes?\b/g, "")
+    .replace(/\brecipe\s+map\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function resolveVoltageTier(value: string, defaultTier: VoltageTier): VoltageTier {

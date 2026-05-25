@@ -1,0 +1,109 @@
+import { getRecipeMachineConfigTierControls } from "@/lib/model/recipe-rules";
+import { getVoltageTierIndex } from "@/lib/model/tiers";
+import type { FactoryNode, MachineTier, Recipe, RecipeOutput } from "@/lib/model/types";
+
+type VoltageTier = Exclude<MachineTier, "DEMO">;
+
+const TGS_BASE_OUTPUT_MULTIPLIER = 5;
+
+export function getMachineOutputMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+  output: RecipeOutput,
+  tier: VoltageTier,
+): number {
+  if (!isTreeGrowthSimulatorRecipe(recipe)) {
+    return 1;
+  }
+
+  const tierOrdinal = getVoltageTierIndex(tier) + 1;
+  const tierMultiplier = (2 * tierOrdinal ** 2 - 2 * tierOrdinal + 5) / TGS_BASE_OUTPUT_MULTIPLIER;
+  const toolMultiplier = getTreeGrowthSimulatorToolMultiplier(recipe, node, output);
+  return tierMultiplier * toolMultiplier;
+}
+
+export function applyMachineOutputMultipliers(
+  recipe: Recipe,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+  tier: VoltageTier,
+): Recipe {
+  const outputs = recipe.outputs.map((output) => {
+    const multiplier = getMachineOutputMultiplier(recipe, node, output, tier);
+    return multiplier === 1 ? output : { ...output, amount: output.amount * multiplier };
+  });
+
+  return outputs.some((output, index) => output !== recipe.outputs[index])
+    ? { ...recipe, outputs }
+    : recipe;
+}
+
+function getTreeGrowthSimulatorToolMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+  output: RecipeOutput,
+) {
+  const category = getTreeGrowthSimulatorOutputCategory(output);
+  const controlId = category ? `tgs${category}Tool` : undefined;
+  if (!controlId) {
+    return 1;
+  }
+
+  const control = getRecipeMachineConfigTierControls(recipe, node).find(
+    (entry) => entry.id === controlId,
+  );
+  return control?.current.outputMultiplier ?? 1;
+}
+
+export function getMachineParallelMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+): number {
+  return getRecipeMachineConfigTierControls(recipe, node).reduce(
+    (multiplier, control) => multiplier * (control.current.parallelMultiplier ?? 1),
+    1,
+  );
+}
+
+function getTreeGrowthSimulatorOutputCategory(output: RecipeOutput) {
+  const slot = output.neiSlot;
+  if (slot?.x === 108 && slot.y === 36) {
+    return "Log";
+  }
+  if (slot?.x === 126 && slot.y === 36) {
+    return "Sapling";
+  }
+  if (slot?.x === 108 && slot.y === 54) {
+    return "Leaves";
+  }
+  if (slot?.x === 126 && slot.y === 54) {
+    return "Fruit";
+  }
+
+  const label = `${output.displayName ?? ""} ${output.id}`.toLowerCase();
+  if (label.includes("sapling")) {
+    return "Sapling";
+  }
+  if (label.includes("leaves") || label.includes("leaf")) {
+    return "Leaves";
+  }
+  if (label.includes("log") || label.includes("wood")) {
+    return "Log";
+  }
+  return "Fruit";
+}
+
+function isTreeGrowthSimulatorRecipe(recipe: Pick<Recipe, "machineType" | "source">): boolean {
+  const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  return normalizeRecipeMapName(recipeMap) === "tree growth simulator";
+}
+
+function normalizeRecipeMapName(recipeMap: string): string {
+  return recipeMap
+    .trim()
+    .toLowerCase()
+    .replace(/\brecipes?\b/g, "")
+    .replace(/\brecipe\s+map\b/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}

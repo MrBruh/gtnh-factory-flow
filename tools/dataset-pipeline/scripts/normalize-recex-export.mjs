@@ -65,6 +65,34 @@ const pipeCasingTiers = [
   { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
 ];
 
+const treeGrowthSimulatorTools = {
+  log: [
+    { key: "saw", label: "Saw", multiplier: 1, id: "gregtech:gt.metatool.01@10" },
+    { key: "buzzsaw", label: "Buzzsaw", multiplier: 2, id: "gregtech:gt.metatool.01@140" },
+    { key: "chainsaw", label: "Chainsaw", multiplier: 4, id: "gregtech:gt.metatool.01@110" },
+  ],
+  sapling: [
+    {
+      key: "branch_cutter",
+      label: "Branch Cutter",
+      multiplier: 1,
+      id: "gregtech:gt.metatool.01@30",
+    },
+    { key: "grafter", label: "Grafter", multiplier: 4, id: "Forestry:grafter" },
+  ],
+  leaves: [
+    { key: "shears", label: "Shears", multiplier: 1, id: "minecraft:shears" },
+    { key: "wire_cutter", label: "Wire Cutter", multiplier: 2, id: "gregtech:gt.metatool.01@26" },
+    {
+      key: "automatic_snips",
+      label: "Automatic Snips",
+      multiplier: 4,
+      id: "miscutils:gt.plusplus.metatool.01@7934",
+    },
+  ],
+  fruit: [{ key: "knife", label: "Knife", multiplier: 1, id: "gregtech:gt.metatool.01@34" }],
+};
+
 const sources = Array.isArray(raw.sources) ? raw.sources : [];
 const gregtechSource = sources.find((source) => source.type === "gregtech");
 
@@ -158,6 +186,7 @@ function normalizeGregtechRecipes(source) {
             neiSlot: findNeiSlot(slotFrames, "input", "fluid", fluid.sl ?? fluidIndex),
           }),
         ),
+        ...machineOptionalInputsForRecipe(machineType),
       ].filter(Boolean);
       const outputs = [
         ...(rawRecipe.iO ?? []).map((item, itemIndex) =>
@@ -358,18 +387,87 @@ function machineConfigControlsForRecipe(machineType, specialValue) {
       label: "Pipe Casing",
       minimumKey: pipeCasingTiers[0].key,
       defaultKey: pipeCasingTiers[0].key,
-      tiers: pipeCasingTiers.map((tier) => ({
+      tiers: pipeCasingTiers.map((tier, index) => ({
         key: tier.key,
         label: tier.label,
+        parallelMultiplier: 2 * (index + 1),
         resource: machineConfigResource(tier.blockId, `${tier.label} Pipe Casing`, [
           "Pipe casing tier",
+          `Parallels: ${2 * (index + 1)}`,
           `${tier.label} pipe casing`,
         ]),
       })),
     });
   }
 
+  if (isTreeGrowthSimulatorRecipeMap(normalized)) {
+    controls.push(
+      treeGrowthSimulatorToolControl("tgsLogTool", "Log Tool", treeGrowthSimulatorTools.log),
+    );
+    controls.push(
+      treeGrowthSimulatorToolControl(
+        "tgsSaplingTool",
+        "Sapling Tool",
+        treeGrowthSimulatorTools.sapling,
+      ),
+    );
+    controls.push(
+      treeGrowthSimulatorToolControl(
+        "tgsLeavesTool",
+        "Leaves Tool",
+        treeGrowthSimulatorTools.leaves,
+      ),
+    );
+    controls.push(
+      treeGrowthSimulatorToolControl("tgsFruitTool", "Fruit Tool", treeGrowthSimulatorTools.fruit),
+    );
+  }
+
   return controls.length > 0 ? controls : undefined;
+}
+
+function treeGrowthSimulatorToolControl(id, label, tools) {
+  return {
+    id,
+    label,
+    minimumKey: tools[0].key,
+    defaultKey: tools[0].key,
+    tiers: tools.map((tool) => ({
+      key: tool.key,
+      label: tool.label,
+      outputMultiplier: tool.multiplier,
+      resource: machineConfigResource(tool.id, tool.label, [
+        `${label}`,
+        `Output multiplier: ${tool.multiplier}x`,
+      ]),
+    })),
+  };
+}
+
+function machineOptionalInputsForRecipe(machineType) {
+  if (!isTreeGrowthSimulatorRecipeMap(normalizeLabel(machineType))) {
+    return [];
+  }
+
+  return [
+    machineToolInput(treeGrowthSimulatorTools.log[0], { x: 36, y: 36 }),
+    machineToolInput(treeGrowthSimulatorTools.sapling[0], { x: 54, y: 36 }),
+    machineToolInput(treeGrowthSimulatorTools.leaves[0], { x: 36, y: 54 }),
+    machineToolInput(treeGrowthSimulatorTools.fruit[0], { x: 54, y: 54 }),
+  ];
+}
+
+function machineToolInput(tool, neiSlot) {
+  return {
+    kind: "item",
+    id: tool.id,
+    amount: 1,
+    displayName: tool.label,
+    tooltip: [`Optional ${tool.label}`, `Output multiplier: ${tool.multiplier}x`],
+    optional: true,
+    consumed: false,
+    neiSlot,
+  };
 }
 
 function machineConfigResources(controls) {
@@ -406,11 +504,15 @@ function isChemicalPlantRecipeMap(normalizedMachineType) {
   );
 }
 
+function isTreeGrowthSimulatorRecipeMap(normalizedMachineType) {
+  return normalizedMachineType === "tree growth simulator";
+}
+
 function machineHandlersFromCatalysts(
   catalysts,
   { baseMachineType, minimumTierWhenUnknown, catalystScope },
 ) {
-  const handlers = [];
+  const handlersByFamily = new Map();
   const seen = new Set([slug(baseMachineType)]);
 
   for (const catalyst of catalysts ?? []) {
@@ -430,7 +532,7 @@ function machineHandlersFromCatalysts(
     }
     seen.add(id);
 
-    handlers.push({
+    addMachineHandlerFamily(handlersByFamily, {
       id,
       label,
       machineType: label,
@@ -439,7 +541,74 @@ function machineHandlersFromCatalysts(
     });
   }
 
-  return handlers;
+  return [...handlersByFamily.values()];
+}
+
+function addMachineHandlerFamily(handlersByFamily, handler) {
+  const familyLabel = machineHandlerFamilyLabel(handler.label);
+  const familyId = `nei-catalyst-${slug(familyLabel)}`;
+  const existing = handlersByFamily.get(familyId);
+  const next = {
+    ...handler,
+    id: familyId,
+    label: familyLabel,
+    machineType: machineHandlerFamilyLabel(handler.machineType),
+  };
+
+  if (!existing) {
+    handlersByFamily.set(familyId, next);
+    return;
+  }
+
+  handlersByFamily.set(familyId, {
+    ...existing,
+    minimumTier: lowerKnownTier(existing.minimumTier, next.minimumTier),
+    kind: existing.kind === next.kind ? existing.kind : (existing.kind ?? next.kind),
+  });
+}
+
+function machineHandlerFamilyLabel(label) {
+  return text(label, "")
+    .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)$/i, "")
+    .replace(/\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, "")
+    .trim();
+}
+
+function lowerKnownTier(left, right) {
+  if (left === "UNKNOWN") {
+    return right;
+  }
+  if (right === "UNKNOWN") {
+    return left;
+  }
+
+  const tiers = [
+    "NONE",
+    "ULV",
+    "LV",
+    "MV",
+    "HV",
+    "EV",
+    "IV",
+    "LuV",
+    "ZPM",
+    "UV",
+    "UHV",
+    "UEV",
+    "UIV",
+    "UXV",
+    "OpV",
+    "MAX",
+  ];
+  const leftIndex = tiers.indexOf(left);
+  const rightIndex = tiers.indexOf(right);
+  if (leftIndex === -1) {
+    return right;
+  }
+  if (rightIndex === -1) {
+    return left;
+  }
+  return leftIndex <= rightIndex ? left : right;
 }
 
 function isTimedAutomatedCraftingCatalyst(label) {

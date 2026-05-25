@@ -834,4 +834,81 @@ describe("calculateThroughput", () => {
     expect(result.nodes.node.euT).toBe(120);
     expect(result.totalEuT).toBe(120);
   });
+
+  it("applies Tree Growth Simulator tier and tool output formulas without changing work time", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "tgs-project",
+      name: "TGS formula test",
+      recipes: [
+        {
+          id: "tgs-oak",
+          name: "Tree Growth Simulator: Oak Log",
+          machineType: "Tree Growth Simulator",
+          minimumTier: "UNKNOWN",
+          durationTicks: 100,
+          eut: 0,
+          inputs: [{ kind: "item", id: "minecraft:sapling", amount: 1, consumed: false }],
+          outputs: [
+            {
+              kind: "item",
+              id: "minecraft:log",
+              amount: 5,
+              neiSlot: { x: 108, y: 36 },
+            },
+            {
+              kind: "item",
+              id: "minecraft:sapling",
+              amount: 5,
+              neiSlot: { x: 126, y: 36 },
+            },
+          ],
+          machineConfigControls: [
+            {
+              id: "tgsLogTool",
+              label: "Log Tool",
+              minimumKey: "saw",
+              defaultKey: "saw",
+              tiers: [
+                {
+                  key: "saw",
+                  label: "Saw",
+                  outputMultiplier: 1,
+                  resource: { kind: "item", id: "saw", amount: 1 },
+                },
+                {
+                  key: "chainsaw",
+                  label: "Chainsaw",
+                  outputMultiplier: 4,
+                  resource: { kind: "item", id: "chainsaw", amount: 1 },
+                },
+              ],
+            },
+          ],
+          source: { recipeMap: "Tree Growth Simulator" },
+        },
+      ],
+      nodes: [
+        {
+          id: "node",
+          recipeId: "tgs-oak",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          machineConfigTiers: { tgsLogTool: "chainsaw" },
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.node.operationRatePerSecond).toBeCloseTo(0.2);
+    expect(result.nodes.node.outputs["item:minecraft:log"].amountPerSecond).toBeCloseTo(7.2);
+    expect(result.nodes.node.outputs["item:minecraft:sapling"].amountPerSecond).toBeCloseTo(1.8);
+    expect(result.nodes.node.euT).toBe(0);
+  });
 });
