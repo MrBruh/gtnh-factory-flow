@@ -425,6 +425,19 @@ export async function prewarmDatasetVersion(versionId: string): Promise<void> {
   return promise;
 }
 
+export async function prewarmLatestDatasetVersions(): Promise<void> {
+  const manifest = await loadManifest();
+  const versionIds = [
+    manifest.latestStableVersion,
+    manifest.latestDailyVersion,
+    manifest.versions[0]?.id,
+  ].filter((versionId, index, versionIds): versionId is string => {
+    return Boolean(versionId) && versionIds.indexOf(versionId) === index;
+  });
+
+  await Promise.all(versionIds.map((versionId) => prewarmDatasetVersion(versionId)));
+}
+
 async function prewarmDatasetVersionOnce(versionId: string): Promise<void> {
   const catalog = await loadCatalog(versionId);
   ensureResourceIndexes(catalog);
@@ -435,6 +448,7 @@ async function prewarmDatasetVersionOnce(versionId: string): Promise<void> {
 
   const recipeCatalog = await loadRecipeIndex(versionId);
   ensureIndexes(recipeCatalog);
+  await Promise.all(recipeCatalog.shards.map((shard) => loadShard(recipeCatalog.version, shard)));
 }
 
 export async function getDatasetRecipe(
