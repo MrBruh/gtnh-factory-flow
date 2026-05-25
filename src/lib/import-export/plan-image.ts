@@ -4,6 +4,10 @@ const PLAN_METADATA_KEY = "gtnh-factory-flow-project";
 export const FLOW_IMAGE_EXPORT_EVENT = "gtnh-flow-export-image";
 export const FLOW_IMAGE_EXPORT_COMPLETE_EVENT = "gtnh-flow-export-image-complete";
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
+const PIXEL_PAYLOAD_MAGIC = "GTNHPLAN";
+const PIXEL_PAYLOAD_HEADER_BYTES = PIXEL_PAYLOAD_MAGIC.length + 9;
+const PIXEL_PAYLOAD_GZIP_FLAG = 1;
+const MAX_DISCORD_IMAGE_SIDE = 4096;
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
 
@@ -20,7 +24,8 @@ export function extractProjectJsonFromSvg(svgText: string): string | undefined {
 }
 
 export async function embedProjectJsonInPng(pngBlob: Blob, projectJson: string): Promise<Blob> {
-  const bytes = new Uint8Array(await pngBlob.arrayBuffer());
+  const pngWithPixelPayload = await embedProjectJsonInPngPixels(pngBlob, projectJson);
+  const bytes = new Uint8Array(await pngWithPixelPayload.arrayBuffer());
   validatePng(bytes);
 
   const iendOffset = findPngChunkOffset(bytes, "IEND");
@@ -69,13 +74,13 @@ export async function extractProjectJsonFromPng(file: Blob): Promise<string | un
     }
 
     if (type === "IEND") {
-      return undefined;
+      break;
     }
 
     offset = dataEnd + 4;
   }
 
-  return undefined;
+  return extractProjectJsonFromPngPixels(file);
 }
 
 export function dataUrlToText(dataUrl: string): string {
@@ -109,6 +114,164 @@ function decodeText(value: string): string {
   const binary = atob(value);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return TEXT_DECODER.decode(bytes);
+}
+
+async function embedProjectJsonInPngPixels(pngBlob: Blob, projectJson: string): Promise<Blob> {
+  const image = await createImageBitmap(pngBlob);
+  const payload = await createPixelPayload(projectJson);
+  const stripHeight = Math.ceil(payload.length / (image.width * 3));
+  if (stripHeight >= MAX_DISCORD_IMAGE_SIDE) {
+    image.close();
+    return pngBlob;
+  }
+  const canvas = document.createElement("canvas");
+  const outputHeight = Math.min(MAX_DISCORD_IMAGE_SIDE, image.height + stripHeight);
+  const availableImageHeight = outputHeight - stripHeight;
+  const imageScale = Math.min(1, availableImageHeight / image.height);
+  const imageWidth = Math.round(image.width * imageScale);
+  const imageHeight = Math.round(image.height * imageScale);
+  const imageX = Math.floor((image.width - imageWidth) / 2);
+
+  canvas.width = image.width;
+  canvas.height = outputHeight;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    image.close();
+    return pngBlob;
+  }
+
+  context.fillStyle = "#f5f5f5";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = "high";
+  context.drawImage(image, imageX, 0, imageWidth, imageHeight);
+  image.close();
+
+  const stripY = canvas.height - stripHeight;
+  const imageData = context.createImageData(canvas.width, stripHeight);
+  for (let index = 0; index < payload.length; index += 1) {
+    const pixelIndex = Math.floor(index / 3) * 4;
+    imageData.data[pixelIndex + (index % 3)] = payload[index];
+    imageData.data[pixelIndex + 3] = 255;
+  }
+  for (let index = Math.ceil(payload.length / 3) * 4; index < imageData.data.length; index += 4) {
+    imageData.data[index + 3] = 255;
+  }
+  context.putImageData(imageData, 0, stripY);
+
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => resolve(blob ?? pngBlob), "image/png");
+  });
+}
+
+async function createPixelPayload(projectJson: string): Promise<Uint8Array> {
+  const jsonBytes = TEXT_ENCODER.encode(projectJson);
+  const compressedBytes = await gzipBytes(jsonBytes);
+  const payloadBytes = compressedBytes ?? jsonBytes;
+  const flags = compressedBytes ? PIXEL_PAYLOAD_GZIP_FLAG : 0;
+  const header = new Uint8Array(PIXEL_PAYLOAD_HEADER_BYTES);
+
+  header.set(TEXT_ENCODER.encode(PIXEL_PAYLOAD_MAGIC), 0);
+  header[PIXEL_PAYLOAD_MAGIC.length] = flags;
+  writeUint32(header, PIXEL_PAYLOAD_MAGIC.length + 1, payloadBytes.length);
+  writeUint32(header, PIXEL_PAYLOAD_MAGIC.length + 5, crc32(payloadBytes));
+
+  return concatBytes(header, payloadBytes);
+}
+
+async function extractProjectJsonFromPngPixels(file: Blob): Promise<string | undefined> {
+  const image = await createImageBitmap(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = image.width;
+  canvas.height = image.height;
+
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) {
+    image.close();
+    return undefined;
+  }
+
+  context.drawImage(image, 0, 0);
+  image.close();
+
+  const scanHeight = canvas.height;
+  const imageData = context.getImageData(0, canvas.height - scanHeight, canvas.width, scanHeight);
+  const rgbBytes = rgbBytesFromImageData(imageData.data);
+  const magicBytes = TEXT_ENCODER.encode(PIXEL_PAYLOAD_MAGIC);
+  const payloadOffset = findByteSequence(rgbBytes, magicBytes);
+  if (payloadOffset < 0) {
+    return undefined;
+  }
+
+  const headerEnd = payloadOffset + PIXEL_PAYLOAD_HEADER_BYTES;
+  if (headerEnd > rgbBytes.length) {
+    return undefined;
+  }
+
+  const flags = rgbBytes[payloadOffset + PIXEL_PAYLOAD_MAGIC.length];
+  const payloadLength = readUint32(rgbBytes, payloadOffset + PIXEL_PAYLOAD_MAGIC.length + 1);
+  const expectedCrc = readUint32(rgbBytes, payloadOffset + PIXEL_PAYLOAD_MAGIC.length + 5);
+  const payloadEnd = headerEnd + payloadLength;
+  if (payloadLength <= 0 || payloadEnd > rgbBytes.length) {
+    return undefined;
+  }
+
+  const payloadBytes = rgbBytes.slice(headerEnd, payloadEnd);
+  if (crc32(payloadBytes) !== expectedCrc) {
+    return undefined;
+  }
+
+  const jsonBytes =
+    flags & PIXEL_PAYLOAD_GZIP_FLAG ? await gunzipBytes(payloadBytes) : payloadBytes;
+  return TEXT_DECODER.decode(jsonBytes);
+}
+
+async function gzipBytes(bytes: Uint8Array): Promise<Uint8Array | undefined> {
+  if (typeof CompressionStream === "undefined") {
+    return undefined;
+  }
+
+  const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new CompressionStream("gzip"));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+async function gunzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("This browser cannot decompress the embedded PNG plan.");
+  }
+
+  const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(
+    new DecompressionStream("gzip"),
+  );
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function rgbBytesFromImageData(data: Uint8ClampedArray): Uint8Array {
+  const bytes = new Uint8Array((data.length / 4) * 3);
+  for (let sourceIndex = 0, targetIndex = 0; sourceIndex < data.length; sourceIndex += 4) {
+    bytes[targetIndex] = data[sourceIndex];
+    bytes[targetIndex + 1] = data[sourceIndex + 1];
+    bytes[targetIndex + 2] = data[sourceIndex + 2];
+    targetIndex += 3;
+  }
+  return bytes;
+}
+
+function findByteSequence(bytes: Uint8Array, sequence: Uint8Array): number {
+  for (let offset = 0; offset <= bytes.length - sequence.length; offset += 1) {
+    let matches = true;
+    for (let index = 0; index < sequence.length; index += 1) {
+      if (bytes[offset + index] !== sequence[index]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) {
+      return offset;
+    }
+  }
+  return -1;
 }
 
 function validatePng(bytes: Uint8Array) {
