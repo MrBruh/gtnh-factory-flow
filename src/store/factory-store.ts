@@ -164,6 +164,7 @@ export type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 type RecipeInputContextResource = Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
   mode: RecipeBrowserMode;
   inputIndex?: number;
+  neiSlot?: ResourceAmount["neiSlot"];
 };
 
 export interface RecipeBrowserResource {
@@ -1302,13 +1303,20 @@ function buildRecipeInputOverrides(
 ): FactoryNode["recipeInputOverrides"] {
   const overrides: NonNullable<FactoryNode["recipeInputOverrides"]> = {};
   recipe.inputs.forEach((input, index) => {
-    if (
-      resource.inputIndex !== index &&
-      (resource.inputIndex !== undefined || !resourceMatchesInput(resource, input))
-    ) {
+    if (input.kind !== resource.kind) {
       return;
     }
-    if (input.kind !== resource.kind) {
+    const matchesSlot =
+      resource.neiSlot &&
+      input.neiSlot &&
+      resource.neiSlot.x === input.neiSlot.x &&
+      resource.neiSlot.y === input.neiSlot.y;
+    const matchesIndex = resource.neiSlot === undefined && resource.inputIndex === index;
+    const matchesResource =
+      resource.neiSlot === undefined &&
+      resource.inputIndex === undefined &&
+      resourceMatchesInput(resource, input);
+    if (!matchesSlot && !matchesIndex && !matchesResource) {
       return;
     }
 

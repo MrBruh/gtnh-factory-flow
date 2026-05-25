@@ -31,9 +31,18 @@ const cokeOvenRecipe: Recipe = {
   inputs: [
     {
       kind: "item",
+      id: "gregtech:gt.integrated_circuit@1",
+      amount: 0,
+      displayName: "Integrated Circuit",
+      consumed: false,
+      neiSlot: { x: 44, y: 35 },
+    },
+    {
+      kind: "item",
       id: "oredict:logWood",
       amount: 16,
       displayName: "Ore Dictionary: logWood",
+      neiSlot: { x: 62, y: 35 },
     },
   ],
   outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20, displayName: "Charcoal" }],
@@ -49,6 +58,7 @@ const cokeOvenSummary: RecipeSummary = {
       id: "minecraft:log@1",
       amount: 16,
       displayName: "Spruce Log",
+      neiSlot: { x: 62, y: 35 },
     },
   ],
 };
@@ -108,7 +118,7 @@ describe("RecipeBrowser", () => {
 
     await waitFor(() => {
       const node = useFactoryStore.getState().project.nodes[0];
-      expect(node?.recipeInputOverrides?.["0"]).toEqual(
+      expect(node?.recipeInputOverrides?.["1"]).toEqual(
         expect.objectContaining({
           id: "minecraft:log@1",
           displayName: "Spruce Log",
@@ -116,7 +126,7 @@ describe("RecipeBrowser", () => {
         }),
       );
     });
-    expect(useFactoryStore.getState().project.recipes[0]?.inputs[0]).toEqual(
+    expect(useFactoryStore.getState().project.recipes[0]?.inputs[1]).toEqual(
       expect.objectContaining({
         id: "oredict:logWood",
       }),

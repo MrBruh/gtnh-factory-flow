@@ -1335,6 +1335,7 @@ function getRecipeAddContextResource(
   | (Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
       mode: "recipes" | "uses";
       inputIndex?: number;
+      neiSlot?: ResourceAmount["neiSlot"];
     })
   | undefined {
   if (!activeResource) {
@@ -1359,6 +1360,7 @@ function getRecipeAddContextResource(
         displayName: contextInput.displayName ?? activeResource.displayName,
         mode,
         inputIndex: contextInputIndex,
+        neiSlot: contextInput.neiSlot,
       };
     }
   }
