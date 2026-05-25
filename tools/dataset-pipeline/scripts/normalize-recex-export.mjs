@@ -17,6 +17,7 @@ const outDir = path.dirname(outputPath);
 const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
 const renderedIconFiles = await stageRenderedIcons(renderedIconDir, outDir);
 const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
+const rawItemResources = collectRawItemResources(raw);
 
 const resources = new Map();
 const recipeMaps = [];
@@ -290,6 +291,7 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
     baseMachineType: machineType,
     minimumTierWhenUnknown: "NONE",
     catalystScope: "crafting",
+    additionalResources: craftingMachineHandlerResources(),
   });
   recipeMaps.push(machineType);
 
@@ -613,13 +615,15 @@ function isTreeGrowthSimulatorRecipeMap(normalizedMachineType) {
 
 function machineHandlersFromCatalysts(
   catalysts,
-  { baseMachineType, minimumTierWhenUnknown, catalystScope },
+  { baseMachineType, minimumTierWhenUnknown, catalystScope, additionalResources = [] },
 ) {
   const handlersByFamily = new Map();
   const seen = new Set([slug(baseMachineType)]);
 
-  for (const catalyst of catalysts ?? []) {
-    const resource = itemAmount(catalyst, { defaultAmount: 1 });
+  for (const resource of [
+    ...(catalysts ?? []).map((catalyst) => itemAmount(catalyst, { defaultAmount: 1 })),
+    ...additionalResources,
+  ]) {
     if (!resource) {
       continue;
     }
@@ -655,6 +659,15 @@ function machineHandlersFromCatalysts(
     return handlers;
   }
   return handlers.filter(shouldExposeSingleMachineHandler);
+}
+
+function craftingMachineHandlerResources() {
+  return rawItemResources.filter((resource) => {
+    const label = resource.displayName ?? resource.id;
+    return (
+      isTimedAutomatedCraftingCatalyst(label) && inferCatalystMinimumTier(label, "NONE") !== "NONE"
+    );
+  });
 }
 
 function addMachineHandlerFamily(handlersByFamily, handler) {
@@ -887,6 +900,38 @@ function addResource(resource) {
     oreDictionary: resource.oreDictionary,
     alternatives: resource.alternatives,
   });
+}
+
+function collectRawItemResources(value) {
+  const itemsById = new Map();
+  const stack = [value];
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (!current || typeof current !== "object") {
+      continue;
+    }
+
+    if (Array.isArray(current)) {
+      stack.push(...current);
+      continue;
+    }
+
+    if (typeof current.id === "string" && typeof current.lN === "string") {
+      const resource = itemAmount(current, { defaultAmount: 1 });
+      if (resource) {
+        itemsById.set(`${resource.kind}:${resource.id}`, resource);
+      }
+    }
+
+    for (const child of Object.values(current)) {
+      if (child && typeof child === "object") {
+        stack.push(child);
+      }
+    }
+  }
+
+  return [...itemsById.values()];
 }
 
 function applyOreDictionaryMemberships() {
