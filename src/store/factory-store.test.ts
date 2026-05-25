@@ -147,6 +147,101 @@ describe("factory resource links", () => {
     );
   });
 
+  it("connects explicit concrete handles even when the source recipe output is contextual", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "contextual-output-link-test",
+      name: "Contextual output link test",
+      fuelProfiles: [],
+      recipes: [
+        {
+          id: "tgs",
+          name: "Tree Growth Simulator",
+          machineType: "Tree Growth Simulator",
+          minimumTier: "LV",
+          durationTicks: 100,
+          eut: 0,
+          inputs: [],
+          outputs: [
+            {
+              kind: "item",
+              id: "oredict:logWood",
+              amount: 16,
+              displayName: "Ore Dictionary: logWood",
+              alternatives: [{ kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" }],
+            },
+          ],
+        },
+        {
+          id: "coke",
+          name: "Coke Oven",
+          machineType: "Coke Oven",
+          minimumTier: "MV",
+          durationTicks: 256,
+          eut: 96,
+          inputs: [
+            {
+              kind: "item",
+              id: "oredict:logWood",
+              amount: 16,
+              displayName: "Ore Dictionary: logWood",
+              alternatives: [{ kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" }],
+            },
+          ],
+          outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "tgs-node",
+          recipeId: "tgs",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "coke-node",
+          recipeId: "coke",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "MV",
+          recipeInputOverrides: {
+            "0": {
+              kind: "item",
+              id: "minecraft:log@1",
+              amount: 16,
+              displayName: "Spruce Log",
+            },
+          },
+          enabled: true,
+          position: { x: 400, y: 0 },
+        },
+      ],
+      edges: [],
+    });
+
+    useFactoryStore.getState().connectNodes("tgs-node", "coke-node", {
+      kind: "item",
+      id: "minecraft:log@1",
+      displayName: "Spruce Log",
+      sourceHandle: makeResourceHandleId("output", { kind: "item", id: "minecraft:log@1" }, 0),
+      targetHandle: makeResourceHandleId("input", { kind: "item", id: "minecraft:log@1" }, 0),
+    });
+
+    expect(useFactoryStore.getState().project.edges[0]).toEqual(
+      expect.objectContaining({
+        source: "tgs-node",
+        target: "coke-node",
+        resourceKind: "item",
+        resourceId: "minecraft:log@1",
+        sourceHandle: "output:item:minecraft%3Alog%401:0",
+        targetHandle: "input:item:minecraft%3Alog%401:0",
+      }),
+    );
+  });
+
   it("connects tool outputs to matching ore dictionary tool inputs", () => {
     useFactoryStore.getState().connectNodes("screwdriver-source", "screwdriver-oredict-target", {
       kind: "item",

@@ -5,6 +5,7 @@ import { createEmptyProject } from "@/examples";
 import type { DatasetManifest, RecipeDataset } from "@/lib/datasets";
 import { normalizeProjectFuelProfiles } from "@/lib/model/fuels";
 import { calculateThroughput } from "@/lib/solver";
+import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import {
   getMachineOutputMultiplier,
   getMachineParallelMultiplier,
@@ -1636,6 +1637,24 @@ function buildEdgeBetweenNodes(
     return undefined;
   }
 
+  if (selectedResource?.sourceHandle && selectedResource.targetHandle) {
+    const matchedInput = getExplicitTargetInput(targetRecipe, targetNode, selectedResource);
+    if (!matchedInput) {
+      return undefined;
+    }
+
+    return {
+      id: createId("edge"),
+      source: sourceNode.id,
+      target: targetNode.id,
+      sourceHandle: selectedResource.sourceHandle,
+      targetHandle: selectedResource.targetHandle,
+      resourceKind: selectedResource.kind,
+      resourceId: selectedResource.id,
+      label: selectedResource.displayName ?? resourceLabel(matchedInput),
+    };
+  }
+
   const matchedOutput = selectedResource
     ? sourceRecipe.outputs.find(
         (output) =>
@@ -1665,6 +1684,33 @@ function buildEdgeBetweenNodes(
     resourceId: matchedOutput.id,
     label: resourceLabel(matchedOutput),
   };
+}
+
+function getExplicitTargetInput(
+  targetRecipe: Recipe,
+  targetNode: FactoryNode,
+  selectedResource: Pick<ResourceAmount, "kind" | "id"> & {
+    targetHandle?: string;
+  },
+): Recipe["inputs"][number] | undefined {
+  const targetHandle = parseResourceHandleId(selectedResource.targetHandle);
+  const targetRecipeWithOverrides = applyRecipeInputOverrides(targetRecipe, targetNode);
+  const indexedInput =
+    targetHandle?.side === "input" && targetHandle.slotIndex !== undefined
+      ? targetRecipeWithOverrides.inputs[targetHandle.slotIndex]
+      : undefined;
+
+  if (
+    indexedInput &&
+    isRecipeInputConsumed(indexedInput) &&
+    resourceMatchesInput(selectedResource, indexedInput)
+  ) {
+    return indexedInput;
+  }
+
+  return targetRecipeWithOverrides.inputs.find(
+    (input) => isRecipeInputConsumed(input) && resourceMatchesInput(selectedResource, input),
+  );
 }
 
 function buildCompatibleEdgesBetweenNodes(
