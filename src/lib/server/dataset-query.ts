@@ -448,7 +448,6 @@ async function prewarmDatasetVersionOnce(versionId: string): Promise<void> {
 
   const recipeCatalog = await loadRecipeIndex(versionId);
   ensureIndexes(recipeCatalog);
-  await Promise.all(recipeCatalog.shards.map((shard) => loadShard(recipeCatalog.version, shard)));
 }
 
 export async function getDatasetRecipe(
@@ -739,9 +738,24 @@ async function getRecipeSummariesByIndexMap(
 
   const resourcesByKey = getCatalogResourcesByKey(catalog);
   const summariesByIndex = new Map<number, RecipeSummary>();
-  const shardRequests = new Map<RecipeIndexShard, number[]>();
+  const missingRecipeIndexes: number[] = [];
 
   for (const recipeIndex of recipeIndexes) {
+    const summary = catalog.recipes?.[recipeIndex];
+    if (summary) {
+      summariesByIndex.set(recipeIndex, summary);
+    } else {
+      missingRecipeIndexes.push(recipeIndex);
+    }
+  }
+
+  if (missingRecipeIndexes.length === 0) {
+    return summariesByIndex;
+  }
+
+  const shardRequests = new Map<RecipeIndexShard, number[]>();
+
+  for (const recipeIndex of missingRecipeIndexes) {
     const shard = catalog.shards.find(
       (entry) => recipeIndex >= entry.start && recipeIndex < entry.end,
     );
