@@ -580,6 +580,78 @@ describe("project recipe refresh", () => {
       }),
     );
   });
+
+  it("stores concrete uses inputs when the recipe input is an ore dictionary alternative", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "connected-oredict-context-test",
+      name: "Connected oredict context test",
+      fuelProfiles: [],
+      recipes: [
+        {
+          id: "drawer-source",
+          name: "Drawer",
+          machineType: "Drawer",
+          minimumTier: "NONE",
+          durationTicks: 20,
+          eut: 0,
+          inputs: [],
+          outputs: [{ kind: "item", id: "minecraft:log@1", amount: 1, displayName: "Spruce Log" }],
+        },
+      ],
+      nodes: [
+        {
+          id: "source-node",
+          recipeId: "drawer-source",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "NONE",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+    });
+
+    useFactoryStore.getState().addConnectedNodeForRecipeObject(
+      {
+        id: "coke-oven-log",
+        name: "Coke Oven: Charcoal",
+        machineType: "Coke Oven",
+        minimumTier: "MV",
+        durationTicks: 256,
+        eut: 96,
+        inputs: [
+          {
+            kind: "item",
+            id: "oredict:logWood",
+            amount: 16,
+            displayName: "Ore Dictionary: logWood",
+            alternatives: [
+              { kind: "item", id: "minecraft:log@0", displayName: "Oak Log" },
+              { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" },
+            ],
+          },
+        ],
+        outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20 }],
+      },
+      "source-node",
+      { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log", mode: "uses" },
+    );
+
+    const node = useFactoryStore
+      .getState()
+      .project.nodes.find((entry) => entry.recipeId === "coke-oven-log");
+
+    expect(node?.recipeInputOverrides?.["0"]).toEqual(
+      expect.objectContaining({
+        kind: "item",
+        id: "minecraft:log@1",
+        displayName: "Spruce Log",
+        alternatives: undefined,
+      }),
+    );
+  });
 });
 
 describe("factory machine count optimization", () => {

@@ -1274,13 +1274,20 @@ function buildRecipeInputOverrides(
 
   const overrides: NonNullable<FactoryNode["recipeInputOverrides"]> = {};
   recipe.inputs.forEach((input, index) => {
-    if (input.kind !== resource.kind || input.id !== resource.id) {
+    if (!resourceMatchesInput(resource, input)) {
       return;
     }
 
+    const alternative = input.alternatives?.find(
+      (entry) => entry.kind === resource.kind && entry.id === resource.id,
+    );
+
     overrides[String(index)] = {
       ...input,
-      displayName: input.displayName ?? resource.displayName,
+      ...alternative,
+      kind: resource.kind,
+      id: resource.id,
+      displayName: resource.displayName ?? alternative?.displayName ?? input.displayName,
       alternatives: undefined,
     };
   });
