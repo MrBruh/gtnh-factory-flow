@@ -41,7 +41,7 @@ if (datasetSizeBytes > maxDatasetBytes) {
     )}\n`,
   );
   console.log(
-    `Skipping texture icon fallback for ${versionId}: dataset is ${datasetSizeBytes} bytes.`,
+    `Skipping texture icon enrichment for ${versionId}: dataset is ${datasetSizeBytes} bytes.`,
   );
   process.exit(0);
 }
@@ -332,10 +332,10 @@ function addFirst(map, key, value) {
   }
 }
 
-function positiveIntEnv(name, fallback) {
+function positiveIntEnv(name, defaultValue) {
   const rawValue = process.env[name];
   if (!rawValue) {
-    return fallback;
+    return defaultValue;
   }
 
   const parsed = Number.parseInt(rawValue, 10);

@@ -104,6 +104,6 @@ function getRecipeMinimumVoltageTier(recipe: Pick<Recipe, "eut" | "minimumTier">
     : powerTier;
 }
 
-function resolveVoltageTier(value: string, fallback: VoltageTier): VoltageTier {
-  return GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier ?? fallback;
+function resolveVoltageTier(value: string, defaultTier: VoltageTier): VoltageTier {
+  return GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier ?? defaultTier;
 }

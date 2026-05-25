@@ -29,7 +29,7 @@ It currently:
 - Runs automatically from `repository_dispatch` events named `gtnh-daily-published`,
   `gtnh-stable-published`, or `gtnh-version-published`. A dispatch payload can include
   `channel: "daily"`, `channel: "stable"`, or `channel: "both"` to limit detection.
-- Polls GitHub every 30 minutes as a fallback in case no upstream dispatch is sent.
+- Polls GitHub every 30 minutes when no upstream dispatch is sent.
 - Detects the latest stable release from `GTNewHorizons/GT-New-Horizons-Modpack`.
 - Detects the latest successful daily build from `GTNewHorizons/DreamAssemblerXXL`.
 - Creates one build job per detected channel.

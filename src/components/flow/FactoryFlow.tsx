@@ -1080,8 +1080,8 @@ function ResourceEdge({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
     position: sourcePosition,
-    fallbackX: sourceX,
-    fallbackY: sourceY,
+    estimatedX: sourceX,
+    estimatedY: sourceY,
     endpointOffset: data?.sourceEndpointOffset,
     isRecipeSlotEndpoint: data?.sourceSlotEndpoint,
     isStorageSlotEndpoint: data?.sourceStorageEndpoint,
@@ -1092,8 +1092,8 @@ function ResourceEdge({
     nodeId: target,
     handleId: data?.targetHandleId ?? targetHandleId,
     position: targetPosition,
-    fallbackX: targetX,
-    fallbackY: targetY,
+    estimatedX: targetX,
+    estimatedY: targetY,
     endpointOffset: data?.targetEndpointOffset,
     isRecipeSlotEndpoint: data?.targetSlotEndpoint,
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
@@ -1121,7 +1121,7 @@ function ResourceEdge({
           sourceNodeId: source,
           sourceHandleIds: data.bundle.sourceHandleIds,
           sourcePosition: visualSource.side,
-          fallbackSource: visualSource,
+          estimatedSource: visualSource,
           targetNodeId: target,
           targetX: visualTarget.x,
           targetY: visualTarget.y,
@@ -1133,7 +1133,7 @@ function ResourceEdge({
             sourceNodeId: source,
             sourceHandleId: data.sourceHandleId ?? sourceHandleId ?? undefined,
             sourcePosition: visualSource.side,
-            fallbackSource: visualSource,
+            estimatedSource: visualSource,
             targetNodeId: target,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
@@ -1221,9 +1221,9 @@ function ResourceEdge({
         <polyline
           points={getArrowHeadPointsForRoute({
             points: routedEdge.points,
-            fallbackTargetX: visualTarget.x,
-            fallbackTargetY: visualTarget.y,
-            fallbackTargetPosition: visualTarget.side,
+            estimatedTargetX: visualTarget.x,
+            estimatedTargetY: visualTarget.y,
+            estimatedTargetPosition: visualTarget.side,
           })}
           stroke="#252525"
           strokeWidth={isHighlighted ? 4 : 3.2}
@@ -1241,9 +1241,9 @@ function ResourceEdge({
         <polyline
           points={getArrowHeadPointsForRoute({
             points: routedEdge.points,
-            fallbackTargetX: visualTarget.x,
-            fallbackTargetY: visualTarget.y,
-            fallbackTargetPosition: visualTarget.side,
+            estimatedTargetX: visualTarget.x,
+            estimatedTargetY: visualTarget.y,
+            estimatedTargetPosition: visualTarget.side,
           })}
           stroke={edgeColor}
           strokeWidth={isHighlighted ? 2.2 : 1.8}
@@ -1686,9 +1686,7 @@ function getSimpleOrthogonalEdgePoints({
   return compactPolylinePoints([
     source,
     sourceExit,
-    sourceVertical
-      ? { x: sourceExit.x, y: targetExit.y }
-      : { x: targetExit.x, y: sourceExit.y },
+    sourceVertical ? { x: sourceExit.x, y: targetExit.y } : { x: targetExit.x, y: sourceExit.y },
     targetExit,
     target,
   ]);
@@ -2006,7 +2004,7 @@ function getBundledEdgePath({
   sourceNodeId,
   sourceHandleIds,
   sourcePosition,
-  fallbackSource,
+  estimatedSource,
   targetNodeId,
   targetX,
   targetY,
@@ -2016,7 +2014,7 @@ function getBundledEdgePath({
   sourceNodeId: string;
   sourceHandleIds: string[];
   sourcePosition: Position;
-  fallbackSource: { x: number; y: number };
+  estimatedSource: { x: number; y: number };
   targetNodeId?: string;
   targetX: number;
   targetY: number;
@@ -2036,8 +2034,8 @@ function getBundledEdgePath({
   if (sourcePoints.length < 2) {
     return getDirectEdgePath({
       sourceNodeId,
-      sourceX: fallbackSource.x,
-      sourceY: fallbackSource.y,
+      sourceX: estimatedSource.x,
+      sourceY: estimatedSource.y,
       sourcePosition,
       targetNodeId,
       targetX,
@@ -2088,7 +2086,7 @@ function getBundledMemberEdgePath({
   sourceNodeId,
   sourceHandleId,
   sourcePosition,
-  fallbackSource,
+  estimatedSource,
   targetNodeId,
   targetX,
   targetY,
@@ -2099,7 +2097,7 @@ function getBundledMemberEdgePath({
   sourceNodeId: string;
   sourceHandleId?: string;
   sourcePosition: Position;
-  fallbackSource: { x: number; y: number };
+  estimatedSource: { x: number; y: number };
   targetNodeId?: string;
   targetX: number;
   targetY: number;
@@ -2126,8 +2124,8 @@ function getBundledMemberEdgePath({
   if (allSourcePoints.length < 2 || !ownSourcePoint) {
     return getDirectEdgePath({
       sourceNodeId,
-      sourceX: fallbackSource.x,
-      sourceY: fallbackSource.y,
+      sourceX: estimatedSource.x,
+      sourceY: estimatedSource.y,
       sourcePosition,
       targetNodeId,
       targetX,
@@ -2157,7 +2155,7 @@ function getBundledMemberEdgePath({
     y: (ownSourcePoint.y + targetY) / 2,
   };
   const path = pointsToSvgPath(points);
-  const [fallbackPath, fallbackLabelX, fallbackLabelY] = getSmoothStepPath({
+  const [estimatedPath, estimatedLabelX, estimatedLabelY] = getSmoothStepPath({
     sourceX: busX,
     sourceY: ownSourcePoint.y,
     sourcePosition,
@@ -2167,9 +2165,9 @@ function getBundledMemberEdgePath({
   });
 
   return {
-    path: path || fallbackPath,
-    labelX: path ? labelPoint.x : fallbackLabelX,
-    labelY: path ? labelPoint.y : fallbackLabelY,
+    path: path || estimatedPath,
+    labelX: path ? labelPoint.x : estimatedLabelX,
+    labelY: path ? labelPoint.y : estimatedLabelY,
     points,
   };
 }
@@ -2345,8 +2343,8 @@ function getSlotEdgeEndpoint({
   nodeId,
   handleId,
   position,
-  fallbackX,
-  fallbackY,
+  estimatedX,
+  estimatedY,
   endpointOffset,
   isRecipeSlotEndpoint,
   isStorageSlotEndpoint,
@@ -2356,8 +2354,8 @@ function getSlotEdgeEndpoint({
   nodeId: string;
   handleId?: string | null;
   position: unknown;
-  fallbackX: number;
-  fallbackY: number;
+  estimatedX: number;
+  estimatedY: number;
   endpointOffset?: number;
   isRecipeSlotEndpoint?: boolean;
   isStorageSlotEndpoint?: boolean;
@@ -2365,7 +2363,7 @@ function getSlotEdgeEndpoint({
   counterpartY?: number;
 }) {
   if (!isRecipeSlotEndpoint && !isStorageSlotEndpoint) {
-    return { x: fallbackX, y: fallbackY, side: positionToEdgeSide(position) };
+    return { x: estimatedX, y: estimatedY, side: positionToEdgeSide(position) };
   }
 
   const handle = parseResourceHandleId(handleId);
@@ -2375,8 +2373,8 @@ function getSlotEdgeEndpoint({
       ? getRecipeSlotEdgeSideTowardPoint({
           nodeId,
           handleId,
-          fallbackX,
-          fallbackY,
+          estimatedX,
+          estimatedY,
           counterpartX,
           counterpartY,
           logicalSide: logicalRecipeSide,
@@ -2385,11 +2383,11 @@ function getSlotEdgeEndpoint({
         ? getSlotEdgeSideTowardPoint({
             nodeId,
             handleId,
-            fallbackX,
-            fallbackY,
+            estimatedX,
+            estimatedY,
             counterpartX,
             counterpartY,
-            fallbackSide: positionToEdgeSide(position),
+            estimatedSide: positionToEdgeSide(position),
           })
         : positionToEdgeSide(position);
 
@@ -2409,22 +2407,22 @@ function getSlotEdgeEndpoint({
   switch (edgeSide) {
     case "right":
       return {
-        x: fallbackX + (isStorageSlotEndpoint ? -offset : offset),
-        y: fallbackY + endpointLaneOffset,
+        x: estimatedX + (isStorageSlotEndpoint ? -offset : offset),
+        y: estimatedY + endpointLaneOffset,
         side: edgeSide,
       };
     case "left":
       return {
-        x: fallbackX + (isStorageSlotEndpoint ? offset : -offset),
-        y: fallbackY + endpointLaneOffset,
+        x: estimatedX + (isStorageSlotEndpoint ? offset : -offset),
+        y: estimatedY + endpointLaneOffset,
         side: edgeSide,
       };
     case "top":
-      return { x: fallbackX + endpointLaneOffset, y: fallbackY - offset, side: edgeSide };
+      return { x: estimatedX + endpointLaneOffset, y: estimatedY - offset, side: edgeSide };
     case "bottom":
-      return { x: fallbackX + endpointLaneOffset, y: fallbackY + offset, side: edgeSide };
+      return { x: estimatedX + endpointLaneOffset, y: estimatedY + offset, side: edgeSide };
     default:
-      return { x: fallbackX, y: fallbackY, side: edgeSide };
+      return { x: estimatedX, y: estimatedY, side: edgeSide };
   }
 }
 
@@ -2446,21 +2444,21 @@ function positionToEdgeSide(position: unknown): Position {
 function getSlotEdgeSideTowardPoint({
   nodeId,
   handleId,
-  fallbackX,
-  fallbackY,
+  estimatedX,
+  estimatedY,
   counterpartX,
   counterpartY,
-  fallbackSide,
+  estimatedSide,
 }: {
   nodeId: string;
   handleId?: string | null;
-  fallbackX: number;
-  fallbackY: number;
+  estimatedX: number;
+  estimatedY: number;
   counterpartX: number;
   counterpartY: number;
-  fallbackSide: Position;
+  estimatedSide: Position;
 }) {
-  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
+  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: estimatedX, y: estimatedY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
 
@@ -2472,27 +2470,27 @@ function getSlotEdgeSideTowardPoint({
     return distanceX >= 0 ? Position.Right : Position.Left;
   }
 
-  return fallbackSide;
+  return estimatedSide;
 }
 
 function getRecipeSlotEdgeSideTowardPoint({
   nodeId,
   handleId,
-  fallbackX,
-  fallbackY,
+  estimatedX,
+  estimatedY,
   counterpartX,
   counterpartY,
   logicalSide,
 }: {
   nodeId: string;
   handleId?: string | null;
-  fallbackX: number;
-  fallbackY: number;
+  estimatedX: number;
+  estimatedY: number;
   counterpartX: number;
   counterpartY: number;
   logicalSide: Position;
 }) {
-  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: fallbackX, y: fallbackY };
+  const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: estimatedX, y: estimatedY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
   const horizontalSide = distanceX >= 0 ? Position.Right : Position.Left;
@@ -2752,7 +2750,7 @@ function getResourceHandleAtPointer(event: MouseEvent | TouchEvent) {
 
 function getResourceHandleAtPosition(
   position: { x: number; y: number } | undefined,
-  fallbackEvent?: MouseEvent | TouchEvent,
+  estimatedEvent?: MouseEvent | TouchEvent,
 ) {
   if (!position || typeof document === "undefined") {
     return undefined;
@@ -2763,7 +2761,7 @@ function getResourceHandleAtPosition(
     return geometricMatch;
   }
 
-  if (fallbackEvent) {
+  if (estimatedEvent) {
     for (const element of document.elementsFromPoint(position.x, position.y)) {
       const match = readResourceHandleElement(
         element.closest<HTMLElement>("[data-resource-handle='true']"),
@@ -2870,7 +2868,7 @@ function getStorageHandleAtPointer(
 function getStorageHandleAtPosition(
   position: { x: number; y: number } | undefined,
   draggedResource: DraggedResourceConnection | undefined,
-  fallbackEvent?: MouseEvent | TouchEvent,
+  estimatedEvent?: MouseEvent | TouchEvent,
 ) {
   if (!position || !draggedResource || typeof document === "undefined") {
     return undefined;
@@ -2878,7 +2876,7 @@ function getStorageHandleAtPosition(
 
   const storageElements = [
     ...document.querySelectorAll<HTMLElement>("[data-storage-node-id]"),
-    ...(fallbackEvent
+    ...(estimatedEvent
       ? document
           .elementsFromPoint(position.x, position.y)
           .map((element) => element.closest<HTMLElement>("[data-storage-node-id]"))
@@ -2952,19 +2950,19 @@ function getArrowHeadPoints(targetX: number, targetY: number, targetPosition: un
 
 function getArrowHeadPointsForRoute({
   points,
-  fallbackTargetX,
-  fallbackTargetY,
-  fallbackTargetPosition,
+  estimatedTargetX,
+  estimatedTargetY,
+  estimatedTargetPosition,
 }: {
   points: Array<{ x: number; y: number }>;
-  fallbackTargetX: number;
-  fallbackTargetY: number;
-  fallbackTargetPosition: unknown;
+  estimatedTargetX: number;
+  estimatedTargetY: number;
+  estimatedTargetPosition: unknown;
 }) {
   const routeTarget = points[points.length - 1];
   const routePrevious = points[points.length - 2];
   if (!routeTarget || !routePrevious) {
-    return getArrowHeadPoints(fallbackTargetX, fallbackTargetY, fallbackTargetPosition);
+    return getArrowHeadPoints(estimatedTargetX, estimatedTargetY, estimatedTargetPosition);
   }
 
   const distanceX = routeTarget.x - routePrevious.x;

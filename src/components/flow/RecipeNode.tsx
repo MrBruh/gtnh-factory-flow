@@ -480,34 +480,34 @@ function clampTier(tier: VoltageTier, minimum: VoltageTier) {
   return getVoltageTierIndex(tier) < getVoltageTierIndex(minimum) ? minimum : tier;
 }
 
-function resolveVoltageTier(value: string, fallback: VoltageTier): VoltageTier {
+function resolveVoltageTier(value: string, defaultTier: VoltageTier): VoltageTier {
   const tier = GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier;
-  return tier ?? fallback;
+  return tier ?? defaultTier;
 }
 
 function resolveDatasetMachineConfigResource(
-  fallback: ResourceAmount,
+  configuredResource: ResourceAmount,
   dataset: ReturnType<typeof useFactoryStore.getState>["dataset"],
 ): ResourceAmount {
-  const normalizedLabel = normalizeSearch(fallback.displayName ?? fallback.id);
+  const normalizedLabel = normalizeSearch(configuredResource.displayName ?? configuredResource.id);
   const indexed = [...(dataset?.resources ?? []), ...(dataset?.resourceIndex ?? [])].find(
     (resource) =>
-      resource.kind === fallback.kind &&
-      (resource.id === fallback.id ||
+      resource.kind === configuredResource.kind &&
+      (resource.id === configuredResource.id ||
         normalizeSearch(resource.displayName ?? resource.id) === normalizedLabel),
   );
 
   if (!indexed) {
-    return fallback;
+    return configuredResource;
   }
 
   return {
-    ...fallback,
+    ...configuredResource,
     id: indexed.id,
-    displayName: indexed.displayName ?? fallback.displayName,
-    iconPath: indexed.iconPath ?? fallback.iconPath,
-    iconAtlas: indexed.iconAtlas ?? fallback.iconAtlas,
-    dominantColor: indexed.dominantColor ?? fallback.dominantColor,
+    displayName: indexed.displayName ?? configuredResource.displayName,
+    iconPath: indexed.iconPath ?? configuredResource.iconPath,
+    iconAtlas: indexed.iconAtlas ?? configuredResource.iconAtlas,
+    dominantColor: indexed.dominantColor ?? configuredResource.dominantColor,
   };
 }
 

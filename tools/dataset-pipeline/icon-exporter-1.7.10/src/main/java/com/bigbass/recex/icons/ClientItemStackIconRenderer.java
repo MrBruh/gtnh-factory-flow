@@ -644,11 +644,11 @@ public final class ClientItemStackIconRenderer {
         return new File(cacheDir(), filename);
     }
 
-    static File cacheFileForKey(String key, String fallbackFilename) {
+    static File cacheFileForKey(String key, String defaultFilename) {
         try {
             return new File(cacheDir(), "stack-" + sha1(key) + ".png");
         } catch (Throwable t) {
-            return cacheFile(fallbackFilename);
+            return cacheFile(defaultFilename);
         }
     }
 

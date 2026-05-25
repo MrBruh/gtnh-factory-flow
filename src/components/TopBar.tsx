@@ -615,12 +615,12 @@ function remapRecipeHandle(
     return makeResourceHandleId(expectedSide, resources[nextIndex], nextIndex);
   }
 
-  const fallbackIndex = resources.findIndex(
+  const matchingHandleIndex = resources.findIndex(
     (resource) => resource.kind === handleResourceKind && resource.id === handleResourceId,
   );
-  return fallbackIndex === -1
+  return matchingHandleIndex === -1
     ? handleId
-    : makeResourceHandleId(expectedSide, resources[fallbackIndex], fallbackIndex);
+    : makeResourceHandleId(expectedSide, resources[matchingHandleIndex], matchingHandleIndex);
 }
 
 function parseResourceHandleSlotIndex(handleId: string | undefined): number | undefined {

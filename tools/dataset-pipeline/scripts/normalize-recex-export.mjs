@@ -119,7 +119,7 @@ function normalizeGregtechRecipes(source) {
     const machineType = text(machine.n, "unknown-machine");
     const machineHandlers = machineHandlersFromCatalysts(machine.cat, {
       baseMachineType: machineType,
-      fallbackMinimumTier: "UNKNOWN",
+      minimumTierWhenUnknown: "UNKNOWN",
     });
     recipeMaps.push(machineType);
 
@@ -215,7 +215,7 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
 
   const machineHandlers = machineHandlersFromCatalysts(source.catalysts, {
     baseMachineType: machineType,
-    fallbackMinimumTier: "NONE",
+    minimumTierWhenUnknown: "NONE",
   });
   recipeMaps.push(machineType);
 
@@ -405,7 +405,7 @@ function isChemicalPlantRecipeMap(normalizedMachineType) {
   );
 }
 
-function machineHandlersFromCatalysts(catalysts, { baseMachineType, fallbackMinimumTier }) {
+function machineHandlersFromCatalysts(catalysts, { baseMachineType, minimumTierWhenUnknown }) {
   const handlers = [];
   const seen = new Set([slug(baseMachineType)]);
 
@@ -426,15 +426,15 @@ function machineHandlersFromCatalysts(catalysts, { baseMachineType, fallbackMini
       id,
       label,
       machineType: label,
-      minimumTier: inferCatalystMinimumTier(label, fallbackMinimumTier),
-      kind: inferCatalystKind(label, fallbackMinimumTier),
+      minimumTier: inferCatalystMinimumTier(label, minimumTierWhenUnknown),
+      kind: inferCatalystKind(label, minimumTierWhenUnknown),
     });
   }
 
   return handlers;
 }
 
-function machineHandlersFromNames(names, { baseMachineType, fallbackMinimumTier }) {
+function machineHandlersFromNames(names, { baseMachineType, minimumTierWhenUnknown }) {
   const handlers = [];
   const seen = new Set([slug(baseMachineType)]);
 
@@ -450,8 +450,8 @@ function machineHandlersFromNames(names, { baseMachineType, fallbackMinimumTier 
       id,
       label,
       machineType: inferHandlerMachineType(label, baseMachineType),
-      minimumTier: inferCatalystMinimumTier(label, fallbackMinimumTier),
-      kind: inferCatalystKind(label, fallbackMinimumTier),
+      minimumTier: inferCatalystMinimumTier(label, minimumTierWhenUnknown),
+      kind: inferCatalystKind(label, minimumTierWhenUnknown),
     });
   }
 
@@ -462,7 +462,7 @@ function inferHandlerMachineType(label, baseMachineType) {
   return normalizeLabel(label) === normalizeLabel("Crafting Table") ? baseMachineType : label;
 }
 
-function inferCatalystMinimumTier(label, fallback) {
+function inferCatalystMinimumTier(label, minimumTierWhenUnknown) {
   const normalized = normalizeLabel(label);
   if (normalized === "crafting table") {
     return "NONE";
@@ -485,10 +485,10 @@ function inferCatalystMinimumTier(label, fallback) {
     "OpV",
     "MAX",
   ].find((entry) => new RegExp(`(^|\\b)${escapeRegExp(entry)}(\\b|$)`, "i").test(label));
-  return tier ?? fallback;
+  return tier ?? minimumTierWhenUnknown;
 }
 
-function inferCatalystKind(label, fallbackMinimumTier) {
+function inferCatalystKind(label, minimumTierWhenUnknown) {
   const normalized = normalizeLabel(label);
   if (normalized === "crafting table") {
     return "crafting";
@@ -499,7 +499,7 @@ function inferCatalystKind(label, fallbackMinimumTier) {
   if (normalized.includes("multiblock") || normalized.includes("controller")) {
     return "multiblock";
   }
-  if (fallbackMinimumTier === "NONE") {
+  if (minimumTierWhenUnknown === "NONE") {
     return "crafting";
   }
   return "single";
@@ -908,9 +908,9 @@ function slug(value) {
     .replace(/^-|-$/g, "");
 }
 
-function text(value, fallback) {
+function text(value, defaultText) {
   const normalized = String(value ?? "").trim();
-  return normalized.length > 0 ? normalized : fallback;
+  return normalized.length > 0 ? normalized : defaultText;
 }
 
 function compareById(a, b) {

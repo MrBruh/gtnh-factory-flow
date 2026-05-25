@@ -71,7 +71,10 @@ if (!existsSync(recipeDatasetPath)) {
 }
 
 const datasetStats = await readDatasetStatsAndValidate(recipeDatasetPath);
-const postProcessMaxDatasetBytes = positiveIntEnv("GTNH_ICON_POST_PROCESS_MAX_DATASET_BYTES", 450_000_000);
+const postProcessMaxDatasetBytes = positiveIntEnv(
+  "GTNH_ICON_POST_PROCESS_MAX_DATASET_BYTES",
+  450_000_000,
+);
 const recipeDatasetSizeBytes = (await fs.stat(recipeDatasetPath)).size;
 if (recipeDatasetSizeBytes <= postProcessMaxDatasetBytes) {
   await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
@@ -306,10 +309,10 @@ function requiredEnv(name) {
   return value;
 }
 
-function positiveIntEnv(name, fallback) {
+function positiveIntEnv(name, defaultValue) {
   const rawValue = process.env[name];
   if (!rawValue) {
-    return fallback;
+    return defaultValue;
   }
 
   const parsed = Number.parseInt(rawValue, 10);

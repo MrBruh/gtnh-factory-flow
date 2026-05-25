@@ -357,10 +357,10 @@ function removeUndefined(value) {
   return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
 }
 
-function positiveIntEnv(name, fallback) {
+function positiveIntEnv(name, defaultValue) {
   const rawValue = process.env[name];
   if (!rawValue) {
-    return fallback;
+    return defaultValue;
   }
 
   const parsed = Number.parseInt(rawValue, 10);

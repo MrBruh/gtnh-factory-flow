@@ -261,10 +261,10 @@ async function writeAtlasPage(atlas, pageIndex) {
   await fs.writeFile(outputPath, PNG.sync.write(atlas, { colorType: 6 }));
 }
 
-function positiveIntEnv(name, fallback) {
+function positiveIntEnv(name, defaultValue) {
   const rawValue = process.env[name];
   if (!rawValue) {
-    return fallback;
+    return defaultValue;
   }
   const value = Number(rawValue);
   if (!Number.isInteger(value) || value <= 0) {
