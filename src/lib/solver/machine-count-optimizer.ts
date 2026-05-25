@@ -98,16 +98,19 @@ class MachineCountOptimizer {
   }
 
   optimize(): MachineCountOptimizationResult {
+    let hasExplicitDemand = false;
     for (const node of this.context.project.nodes) {
       if (!node.targetOutput) {
         continue;
       }
 
+      hasExplicitDemand = true;
       const key = makeResourceKey(node.targetOutput.kind, node.targetOutput.resourceId);
       this.requireNodeOutput(node.id, key, node.targetOutput.amountPerSecond, undefined);
     }
 
     if (this.context.project.targetRate) {
+      hasExplicitDemand = true;
       const key = makeResourceKey(
         this.context.project.targetRate.kind,
         this.context.project.targetRate.resourceId,
@@ -115,10 +118,25 @@ class MachineCountOptimizer {
       this.satisfyLooseOutputDemand(key, this.context.project.targetRate.amountPerSecond);
     }
 
+    if (!hasExplicitDemand) {
+      this.seedImplicitTerminalDemands();
+    }
+
     return {
       machineCounts: this.machineCounts,
       diagnostics: this.context.diagnostics,
     };
+  }
+
+  private seedImplicitTerminalDemands() {
+    for (const node of this.context.project.nodes) {
+      const plan = this.context.ratePlans.get(node.id);
+      if (!plan?.enabled || !plan.valid || (this.context.adjacency.get(node.id) ?? []).length > 0) {
+        continue;
+      }
+
+      this.ensureNodeOperations(node.id, normalizeMachineCount(node.machineCount), new Set());
+    }
   }
 
   private satisfyLooseOutputDemand(resourceKey: ResourceKey, amountPerSecond: number) {

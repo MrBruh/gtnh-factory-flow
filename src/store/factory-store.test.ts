@@ -1204,6 +1204,33 @@ describe("factory machine count optimization", () => {
     );
   });
 
+  it("uses terminal consumers as implicit demand when no explicit target exists", () => {
+    useFactoryStore.getState().setProject(createImplicitTerminalStorageDemandProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "implicit-source", machineCount: 10 }),
+        expect.objectContaining({ id: "implicit-consumer", machineCount: 1 }),
+      ]),
+    );
+  });
+
+  it("combines direct and indirect storage output for implicit terminal demand", () => {
+    useFactoryStore.getState().setProject(createImplicitDirectAndIndirectStorageOutputProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "implicit-coke", machineCount: 3 }),
+        expect.objectContaining({ id: "implicit-extractor", machineCount: 1 }),
+        expect.objectContaining({ id: "implicit-distillation", machineCount: 1 }),
+      ]),
+    );
+  });
+
   it("combines direct and indirect storage output when optimizing a shared producer", () => {
     useFactoryStore.getState().setProject(createDirectAndIndirectStorageOutputProject());
 
@@ -2101,6 +2128,147 @@ function createSurplusStorageConsumerInputProject(): FactoryProject {
         id: "tank-to-storage-consumer",
         source: "woodtar-tank",
         target: "storage-consumer",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createImplicitTerminalStorageDemandProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "implicit-terminal-storage-demand",
+    name: "Implicit terminal storage demand",
+    recipes: [
+      {
+        id: "implicit-source-recipe",
+        name: "Implicit Source",
+        machineType: "Source",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [{ kind: "fluid", id: "oil", amount: 1 }],
+      },
+      {
+        id: "implicit-consumer-recipe",
+        name: "Implicit Consumer",
+        machineType: "Distillation Tower",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "oil", amount: 10 }],
+        outputs: [{ kind: "fluid", id: "fuel", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("implicit-source", "implicit-source-recipe", 0),
+      makeNode("implicit-consumer", "implicit-consumer-recipe", 320),
+    ],
+    storages: [
+      { id: "implicit-oil-tank", kind: "fluid", resourceId: "oil", position: { x: 160, y: 0 } },
+    ],
+    edges: [
+      {
+        id: "implicit-source-to-tank",
+        source: "implicit-source",
+        target: "implicit-oil-tank",
+        resourceKind: "fluid",
+        resourceId: "oil",
+      },
+      {
+        id: "implicit-tank-to-consumer",
+        source: "implicit-oil-tank",
+        target: "implicit-consumer",
+        resourceKind: "fluid",
+        resourceId: "oil",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createImplicitDirectAndIndirectStorageOutputProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "implicit-direct-indirect-storage-output",
+    name: "Implicit direct and indirect storage output",
+    recipes: [
+      {
+        id: "implicit-coke-recipe",
+        name: "Implicit Coke",
+        machineType: "Coke Oven",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [
+          { kind: "item", id: "charcoal", amount: 3 },
+          { kind: "fluid", id: "woodtar", amount: 4 },
+        ],
+      },
+      {
+        id: "implicit-extractor-recipe",
+        name: "Implicit Extractor",
+        machineType: "Fluid Extractor",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "charcoal", amount: 100 }],
+        outputs: [{ kind: "fluid", id: "woodtar", amount: 1000 }],
+      },
+      {
+        id: "implicit-distillation-recipe",
+        name: "Implicit Distillation",
+        machineType: "Distillation Tower",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "woodtar", amount: 70 }],
+        outputs: [{ kind: "fluid", id: "benzene", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("implicit-coke", "implicit-coke-recipe", 0),
+      makeNode("implicit-extractor", "implicit-extractor-recipe", 240),
+      makeNode("implicit-distillation", "implicit-distillation-recipe", 520),
+    ],
+    storages: [
+      {
+        id: "implicit-woodtar-tank",
+        kind: "fluid",
+        resourceId: "woodtar",
+        position: { x: 380, y: 120 },
+      },
+    ],
+    edges: [
+      {
+        id: "implicit-coke-to-extractor",
+        source: "implicit-coke",
+        target: "implicit-extractor",
+        resourceKind: "item",
+        resourceId: "charcoal",
+      },
+      {
+        id: "implicit-coke-to-tank",
+        source: "implicit-coke",
+        target: "implicit-woodtar-tank",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+      {
+        id: "implicit-extractor-to-tank",
+        source: "implicit-extractor",
+        target: "implicit-woodtar-tank",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+      {
+        id: "implicit-tank-to-distillation",
+        source: "implicit-woodtar-tank",
+        target: "implicit-distillation",
         resourceKind: "fluid",
         resourceId: "woodtar",
       },
