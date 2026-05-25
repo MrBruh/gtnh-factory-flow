@@ -69,6 +69,21 @@ const pipeCasingTiers = [
   { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
 ];
 
+const industrialCokeOvenCasingTiers = [
+  {
+    key: "heat_resistant",
+    label: "Heat Resistant",
+    blockId: "miscutils:miscutils.blockcasings@1",
+    parallels: 18,
+  },
+  {
+    key: "heat_proof",
+    label: "Heat Proof",
+    blockId: "gregtech:gt.blockcasings@11",
+    parallels: 30,
+  },
+];
+
 const solenoidTiers = [
   { key: "mv", label: "MV", blockId: "gregtech:gt.blockcasings.cyclotron_coils", voltageTier: 2 },
   { key: "hv", label: "HV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@1", voltageTier: 3 },
@@ -459,6 +474,25 @@ function machineConfigControlsForRecipe(machineType, specialValue) {
     });
   }
 
+  if (isIndustrialCokeOvenRecipeMap(normalized)) {
+    controls.push({
+      id: "industrialCokeOvenCasing",
+      label: "Casing",
+      minimumKey: industrialCokeOvenCasingTiers[0].key,
+      defaultKey: industrialCokeOvenCasingTiers[0].key,
+      tiers: industrialCokeOvenCasingTiers.map((tier) => ({
+        key: tier.key,
+        label: tier.label,
+        parallelMultiplier: tier.parallels,
+        resource: machineConfigResource(tier.blockId, `${tier.label} Casing`, [
+          "Industrial Coke Oven casing tier",
+          `Parallels: ${tier.parallels}`,
+          `${tier.label} casing`,
+        ]),
+      })),
+    });
+  }
+
   if (isTreeGrowthSimulatorRecipeMap(normalized)) {
     controls.push(...treeGrowthSimulatorToolSlots.map(treeGrowthSimulatorToolSlotControl));
   }
@@ -620,6 +654,10 @@ function isChemicalPlantRecipeMap(normalizedMachineType) {
 
 function isTreeGrowthSimulatorRecipeMap(normalizedMachineType) {
   return normalizedMachineType === "tree growth simulator";
+}
+
+function isIndustrialCokeOvenRecipeMap(normalizedMachineType) {
+  return normalizedMachineType === "industrial coke oven";
 }
 
 function machineHandlersFromCatalysts(
