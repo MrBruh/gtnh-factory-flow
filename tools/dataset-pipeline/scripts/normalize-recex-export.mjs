@@ -372,13 +372,15 @@ function machineConfigControlsForRecipe(machineType, specialValue) {
       label: "Heating Coil",
       minimumKey: heatingCoilTiers[0].key,
       defaultKey: heatingCoilTiers[0].key,
-      tiers: heatingCoilTiers.map((tier) => ({
+      tiers: heatingCoilTiers.map((tier, index) => ({
         key: tier.key,
         label: tier.label,
         heat: tier.heat,
+        durationMultiplier: 2 / (index + 2),
         resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
           "Heating coil tier",
           `Heat capacity: ${tier.heat} K`,
+          `Duration multiplier: ${formatMultiplier(2 / (index + 2))}`,
         ]),
       })),
     });
@@ -485,6 +487,12 @@ function machineConfigResource(id, displayName, tooltip) {
     tooltip,
     consumed: false,
   };
+}
+
+function formatMultiplier(value) {
+  return Number.isInteger(value)
+    ? `${value}x`
+    : `${value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}x`;
 }
 
 function coilTierForHeat(heat) {

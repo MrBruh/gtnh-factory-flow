@@ -107,6 +107,7 @@ export const machineConfigControlSchema = z.object({
         key: z.string().min(1),
         label: z.string().min(1),
         heat: z.number().int().positive().optional(),
+        durationMultiplier: z.number().positive().optional(),
         outputMultiplier: z.number().positive().optional(),
         parallelMultiplier: z.number().positive().optional(),
         resource: resourceAmountSchema,

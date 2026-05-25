@@ -1,4 +1,7 @@
-import { getRecipeMachineConfigTierControls } from "@/lib/model/recipe-rules";
+import {
+  getRecipeCoilTierControl,
+  getRecipeMachineConfigTierControls,
+} from "@/lib/model/recipe-rules";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
 import type { FactoryNode, MachineTier, Recipe, RecipeOutput } from "@/lib/model/types";
 
@@ -62,6 +65,19 @@ export function getMachineParallelMultiplier(
     (multiplier, control) => multiplier * (control.current.parallelMultiplier ?? 1),
     1,
   );
+}
+
+export function getMachineDurationMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "coilTier" | "machineConfigTiers">,
+): number {
+  const coilControl = getRecipeCoilTierControl(recipe, node);
+  const coilMultiplier = coilControl?.current.durationMultiplier ?? 1;
+  const configMultiplier = getRecipeMachineConfigTierControls(recipe, node).reduce(
+    (multiplier, control) => multiplier * (control.current.durationMultiplier ?? 1),
+    1,
+  );
+  return coilMultiplier * configMultiplier;
 }
 
 function getTreeGrowthSimulatorOutputCategory(output: RecipeOutput) {
