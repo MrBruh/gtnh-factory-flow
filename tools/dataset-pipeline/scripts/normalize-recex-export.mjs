@@ -449,11 +449,15 @@ function machineConfigControlsForMachineHandler(label, rawItem) {
 }
 
 function machineConfigControlsFromRawItems(items, { scope }) {
+  const maxParallel = (items ?? []).reduce((maximum, item) => {
+    const value = Number.isFinite(item?.mp) ? item.mp : 0;
+    return value > maximum ? value : maximum;
+  }, 0);
   const lines = (items ?? [])
     .flatMap((item) => (Array.isArray(item?.tt) ? item.tt : []))
     .map((line) => text(line, "").replace(/\s+/g, " ").trim())
     .filter(Boolean);
-  if (lines.length === 0) {
+  if (lines.length === 0 && maxParallel <= 1) {
     return [];
   }
 
@@ -502,7 +506,41 @@ function machineConfigControlsFromRawItems(items, { scope }) {
     });
   }
 
+  if (maxParallel > 1 && !controls.some(controlHasParallelMultiplier)) {
+    controls.push(fixedParallelControl(maxParallel, scope));
+  }
+
   return controls;
+}
+
+function controlHasParallelMultiplier(control) {
+  return (control?.tiers ?? []).some((tier) => Number.isFinite(tier.parallelMultiplier));
+}
+
+function fixedParallelControl(parallels, scope) {
+  const key = `fixed-${parallels}`;
+  const label = `${parallels} Parallels`;
+  return {
+    id: scope === "recipe" ? "machineParallel" : `machineParallel${capitalize(scope)}`,
+    label: "Parallel",
+    minimumKey: key,
+    defaultKey: key,
+    tiers: [
+      {
+        key,
+        label,
+        parallelMultiplier: parallels,
+        resource: {
+          ...virtualMachineConfigResource(key, label),
+          tooltip: [
+            "Imported from machine controller",
+            "Source: getMaxParallelRecipes()",
+            `Parallels: ${parallels}`,
+          ],
+        },
+      },
+    ],
+  };
 }
 
 function addDirectParallelTier(tiersByControl, subject, parallels, line, scope) {

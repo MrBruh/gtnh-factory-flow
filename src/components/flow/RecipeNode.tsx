@@ -98,7 +98,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   }));
   const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
   const statsMachineConfigControls = machineConfigControls.filter(
-    (control) => !isTreeGrowthSimulatorToolControl(control),
+    (control) =>
+      !isTreeGrowthSimulatorToolControl(control) && !isDisplayOnlyParallelControl(control),
   );
   const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
   const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
@@ -583,6 +584,10 @@ function isTreeGrowthSimulatorToolControl(control: MachineConfigTierControl) {
     /^tgsToolSlot\d+$/.test(control.id) ||
     (control.id.startsWith("tgs") && control.id.endsWith("Tool"))
   );
+}
+
+function isDisplayOnlyParallelControl(control: MachineConfigTierControl) {
+  return /^machineParallel/.test(control.id) && control.tiers.length <= 1;
 }
 
 const TREE_GROWTH_SIMULATOR_TOOL_SLOTS: Record<string, { x: number; y: number }> = {
