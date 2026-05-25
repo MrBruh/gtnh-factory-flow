@@ -6,7 +6,10 @@ import {
   fetchDatasetManifest,
   pickDefaultDatasetVersion,
 } from "@/lib/datasets";
-import { initRecipeDatasetVersion } from "@/lib/datasets/browser-loader";
+import {
+  getRecipeDatasetRecipe,
+  initRecipeDatasetVersion,
+} from "@/lib/datasets/browser-loader";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { LOCAL_STORAGE_KEY, loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { FactoryFlow } from "./flow/FactoryFlow";
@@ -20,6 +23,7 @@ export function FactoryPlannerApp() {
   const hydrateResourceHistory = useFactoryStore((state) => state.hydrateResourceHistory);
   const setDatasetManifest = useFactoryStore((state) => state.setDatasetManifest);
   const setDataset = useFactoryStore((state) => state.setDataset);
+  const refreshProjectRecipes = useFactoryStore((state) => state.refreshProjectRecipes);
   const setDatasetLoading = useFactoryStore((state) => state.setDatasetLoading);
   const setDatasetError = useFactoryStore((state) => state.setDatasetError);
   const hydratedRef = useRef(false);
@@ -42,12 +46,27 @@ export function FactoryPlannerApp() {
         setDatasetLoading(true);
         const dataset = await initRecipeDatasetVersion(manifestUrl, version);
         setDataset(dataset);
+        const projectRecipes = useFactoryStore.getState().project.recipes;
+        if (projectRecipes.length > 0) {
+          const refreshedRecipes = (
+            await Promise.allSettled(
+              projectRecipes.map((recipe) =>
+                getRecipeDatasetRecipe(manifestUrl, version, recipe.id),
+              ),
+            )
+          )
+            .filter((result): result is PromiseFulfilledResult<(typeof projectRecipes)[number]> => {
+              return result.status === "fulfilled";
+            })
+            .map((result) => result.value);
+          refreshProjectRecipes(refreshedRecipes);
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : "Dataset load failed.";
         setDatasetError(message);
       }
     },
-    [setDataset, setDatasetError, setDatasetLoading],
+    [refreshProjectRecipes, setDataset, setDatasetError, setDatasetLoading],
   );
 
   useEffect(() => {

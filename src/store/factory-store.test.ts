@@ -385,6 +385,67 @@ describe("factory resource links", () => {
   });
 });
 
+describe("project recipe refresh", () => {
+  it("replaces stale machine handlers from the loaded dataset recipe", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "refresh-test",
+      name: "Refresh test",
+      fuelProfiles: [],
+      recipes: [
+        {
+          id: "fluid-extractor-recipe",
+          name: "Fluid Extractor: Charcoal",
+          machineType: "Fluid Extractor",
+          minimumTier: "LV",
+          durationTicks: 30,
+          eut: 16,
+          inputs: [{ kind: "item", id: "minecraft:coal@1", amount: 1 }],
+          outputs: [{ kind: "fluid", id: "woodtar", amount: 100 }],
+          machineHandlers: [
+            {
+              id: "nei-catalyst-basic-fluid-extractor",
+              label: "Basic Fluid Extractor",
+              machineType: "Basic Fluid Extractor",
+              minimumTier: "LV",
+              kind: "single",
+            },
+          ],
+        },
+      ],
+      nodes: [
+        {
+          id: "node-1",
+          recipeId: "fluid-extractor-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          machineHandlerId: "nei-catalyst-basic-fluid-extractor",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+    });
+
+    useFactoryStore.getState().refreshProjectRecipes([
+      {
+        id: "fluid-extractor-recipe",
+        name: "Fluid Extractor: Charcoal",
+        machineType: "Fluid Extractor",
+        minimumTier: "LV",
+        durationTicks: 30,
+        eut: 16,
+        inputs: [{ kind: "item", id: "minecraft:coal@1", amount: 1 }],
+        outputs: [{ kind: "fluid", id: "woodtar", amount: 100 }],
+      },
+    ]);
+
+    expect(useFactoryStore.getState().project.recipes[0]?.machineHandlers).toBeUndefined();
+    expect(useFactoryStore.getState().project.nodes[0]?.machineHandlerId).toBeUndefined();
+  });
+});
+
 describe("factory machine count optimization", () => {
   it("propagates suggested machine counts through connected recipe chains", () => {
     useFactoryStore.getState().setProject(createRatioOptimizationProject());

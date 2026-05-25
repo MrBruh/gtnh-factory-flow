@@ -554,7 +554,7 @@ function machineHandlersFromCatalysts(
     });
   }
 
-  return [...handlersByFamily.values()];
+  return handlersByFamily.size > 1 ? [...handlersByFamily.values()] : [];
 }
 
 function addMachineHandlerFamily(handlersByFamily, handler) {

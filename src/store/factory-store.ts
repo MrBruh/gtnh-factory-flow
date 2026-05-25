@@ -71,6 +71,7 @@ interface FactoryStore {
   redo: () => void;
   setDatasetManifest: (manifest: DatasetManifest, manifestUrl: string) => void;
   setDataset: (dataset: RecipeDataset) => void;
+  refreshProjectRecipes: (recipes: Recipe[]) => void;
   clearDataset: () => void;
   setDatasetLoading: (isLoading: boolean) => void;
   setProjectImporting: (isImporting: boolean) => void;
@@ -290,6 +291,38 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       datasetError: undefined,
       isDatasetLoading: false,
     }));
+  },
+  refreshProjectRecipes: (recipes) => {
+    set((state) => {
+      if (recipes.length === 0) {
+        return state;
+      }
+
+      const recipesById = new Map(recipes.map((recipe) => [recipe.id, recipe] as const));
+      const project = {
+        ...state.project,
+        recipes: state.project.recipes.map((recipe) => recipesById.get(recipe.id) ?? recipe),
+        nodes: state.project.nodes.map((node) => {
+          const recipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
+          const refreshedRecipe = recipe ? recipesById.get(recipe.id) : undefined;
+          if (!refreshedRecipe) {
+            return node;
+          }
+
+          const validMachineHandlerIds = new Set(
+            (refreshedRecipe.machineHandlers ?? []).map((handler) => handler.id),
+          );
+          return node.machineHandlerId && !validMachineHandlerIds.has(node.machineHandlerId)
+            ? { ...node, machineHandlerId: undefined }
+            : node;
+        }),
+      };
+
+      return {
+        project,
+        lastResult: calculateThroughput(project),
+      };
+    });
   },
   clearDataset: () => {
     set({
