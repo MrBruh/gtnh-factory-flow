@@ -612,10 +612,11 @@ function applyTreeGrowthSimulatorToolInputs(
     if (!matchingControl) {
       return input;
     }
+    const resource = getTreeGrowthSimulatorSlotResource(matchingControl);
 
     return {
       ...input,
-      ...matchingControl.resource,
+      ...resource,
       amount: 1,
       optional: true,
       consumed: false,
@@ -627,7 +628,54 @@ function applyTreeGrowthSimulatorToolInputs(
 }
 
 function isTreeGrowthSimulatorEmptyTool(control: MachineConfigTierControl) {
-  return control.current.key === "none";
+  return (
+    control.current.key === "none" ||
+    getTreeGrowthSimulatorToolCategory(control.current.key) !==
+      getTreeGrowthSimulatorSlotCategory(control.id)
+  );
+}
+
+function getTreeGrowthSimulatorSlotResource(control: MachineConfigTierControl) {
+  if (!isTreeGrowthSimulatorEmptyTool(control)) {
+    return control.resource;
+  }
+
+  return control.tiers.find((tier) => tier.key === "none")?.resource ?? control.resource;
+}
+
+function getTreeGrowthSimulatorToolCategory(key: string): string | undefined {
+  const [category] = key.split(":");
+  return category && category !== "none" ? category : undefined;
+}
+
+function getTreeGrowthSimulatorSlotCategory(controlId: string): string | undefined {
+  switch (controlId) {
+    case "tgsToolSlot1":
+    case "tgsLogTool":
+      return "log";
+    case "tgsToolSlot2":
+    case "tgsSaplingTool":
+      return "sapling";
+    case "tgsToolSlot3":
+    case "tgsLeavesTool":
+      return "leaves";
+    case "tgsToolSlot4":
+    case "tgsFruitTool":
+      return "fruit";
+    default:
+      return undefined;
+  }
+}
+
+function getTreeGrowthSimulatorSlotTiers(control: MachineConfigTierControl) {
+  const category = getTreeGrowthSimulatorSlotCategory(control.id);
+  if (!category) {
+    return control.tiers;
+  }
+
+  return control.tiers.filter(
+    (tier) => tier.key === "none" || getTreeGrowthSimulatorToolCategory(tier.key) === category,
+  );
 }
 
 function TreeGrowthSimulatorToolSlotMenu({
@@ -644,6 +692,7 @@ function TreeGrowthSimulatorToolSlotMenu({
   onSelect: (nextTier: string) => void;
 }) {
   const selectedEmpty = isTreeGrowthSimulatorEmptyTool(control);
+  const tiers = getTreeGrowthSimulatorSlotTiers(control);
   const currentTitle = selectedEmpty
     ? `${control.label}: empty`
     : `${control.label}: ${control.resource.displayName ?? control.current.label}`;
@@ -692,7 +741,7 @@ function TreeGrowthSimulatorToolSlotMenu({
             event.stopPropagation();
           }}
         >
-          {control.tiers.map((tier) => {
+          {tiers.map((tier) => {
             const isEmpty = tier.key === "none";
             const resource = resolveDatasetMachineConfigResource(tier.resource, dataset);
             return (
@@ -702,7 +751,7 @@ function TreeGrowthSimulatorToolSlotMenu({
                 tabIndex={0}
                 className={[
                   "grid h-[52px] w-[52px] place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
-                  tier.key === control.current.key
+                  !selectedEmpty && tier.key === control.current.key
                     ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
                     : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
                 ].join(" ")}

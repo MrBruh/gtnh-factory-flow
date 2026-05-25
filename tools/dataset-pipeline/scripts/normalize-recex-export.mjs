@@ -139,10 +139,10 @@ const treeGrowthSimulatorTools = {
 };
 
 const treeGrowthSimulatorToolSlots = [
-  { id: "tgsToolSlot1", label: "Tool Slot 1", x: 36, y: 36 },
-  { id: "tgsToolSlot2", label: "Tool Slot 2", x: 54, y: 36 },
-  { id: "tgsToolSlot3", label: "Tool Slot 3", x: 36, y: 54 },
-  { id: "tgsToolSlot4", label: "Tool Slot 4", x: 54, y: 54 },
+  { id: "tgsToolSlot1", label: "Log Tool", category: "log", x: 36, y: 36 },
+  { id: "tgsToolSlot2", label: "Sapling Tool", category: "sapling", x: 54, y: 36 },
+  { id: "tgsToolSlot3", label: "Leaves Tool", category: "leaves", x: 36, y: 54 },
+  { id: "tgsToolSlot4", label: "Fruit Tool", category: "fruit", x: 54, y: 54 },
 ];
 
 const sources = Array.isArray(raw.sources) ? raw.sources : [];
@@ -508,7 +508,11 @@ function machineConfigControlsForMachineHandler(label) {
 }
 
 function treeGrowthSimulatorToolSlotControl(slot) {
-  const tools = treeGrowthSimulatorAllTools();
+  const tools = treeGrowthSimulatorTools[slot.category].map((tool) => ({
+    ...tool,
+    category: slot.category,
+    categoryLabel: capitalize(slot.category),
+  }));
   return {
     id: slot.id,
     label: slot.label,
@@ -531,16 +535,6 @@ function treeGrowthSimulatorToolSlotControl(slot) {
       })),
     ],
   };
-}
-
-function treeGrowthSimulatorAllTools() {
-  return Object.entries(treeGrowthSimulatorTools).flatMap(([category, tools]) =>
-    tools.map((tool) => ({
-      ...tool,
-      category,
-      categoryLabel: capitalize(category),
-    })),
-  );
 }
 
 function machineOptionalInputsForRecipe(machineType) {
