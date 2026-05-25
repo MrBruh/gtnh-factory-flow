@@ -44,11 +44,14 @@ import {
 import {
   formatRate,
   applyRecipeInputOverrides,
+  applyMachineHandlerToRecipe,
   isRecipeInputConsumed,
   makeResourceKey,
   resourceMatchesInput,
   trimTrailingDecimalZeros,
 } from "@/lib/model";
+import { applyMachineOutputMultipliers } from "@/lib/solver/machine-effects";
+import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import type {
   FactoryEdge,
   FactoryNodeColorTag,
@@ -3391,7 +3394,7 @@ function getDraggedResourceForHandle(
     return undefined;
   }
 
-  const contextualRecipe = applyRecipeInputOverrides(recipe, node);
+  const contextualRecipe = getNodeRecipeForHandles(recipe, node);
   const resources = handle.side === "input" ? contextualRecipe.inputs : contextualRecipe.outputs;
   const resource = resources.find(
     (entry) => entry.kind === handle.kind && entry.id === handle.resourceId,
@@ -3444,10 +3447,25 @@ function getResourceForHandle(
     return undefined;
   }
 
-  const contextualRecipe = applyRecipeInputOverrides(recipe, node);
+  const contextualRecipe = getNodeRecipeForHandles(recipe, node);
   const resources = handle.side === "input" ? contextualRecipe.inputs : contextualRecipe.outputs;
 
   return resources?.find((entry) => entry.kind === handle.kind && entry.id === handle.resourceId);
+}
+
+function getNodeRecipeForHandles(recipe: Recipe, node: FactoryProject["nodes"][number]): Recipe {
+  const nodeRecipe = applyRecipeInputOverrides(recipe, node);
+  const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, node);
+  const overclockedStats = getOverclockedRecipeStats(nodeRecipe, node);
+  const adjustedRecipe = applyMachineOutputMultipliers(
+    effectiveRecipe,
+    node,
+    overclockedStats.tier,
+  );
+  return {
+    ...effectiveRecipe,
+    ...adjustedRecipe,
+  };
 }
 
 function getClientPosition(event: MouseEvent | TouchEvent) {

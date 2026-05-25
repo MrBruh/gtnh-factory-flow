@@ -25,7 +25,7 @@ import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
-const RECIPE_QUERY_LIMIT = 5000;
+const RECIPE_QUERY_LIMIT = 120;
 const RESOURCE_DEFAULT_PAGE_SIZE = 6;
 const RESOURCE_ROW_HEIGHT = 62;
 const RESOURCE_ROW_GAP = 8;
@@ -55,7 +55,10 @@ export function RecipeBrowser() {
   const addNodeForRecipe = useFactoryStore((state) => state.addNodeForRecipeObject);
   const [selectedRecipeMap, setSelectedRecipeMap] = useState("");
   const [recipePage, setRecipePage] = useState(0);
+  const [recipeBookSearch, setRecipeBookSearch] = useState("");
   const [filteredRecipes, setFilteredRecipes] = useState<RecipeSummary[]>([]);
+  const [recipeTotal, setRecipeTotal] = useState(0);
+  const [recipeHasMore, setRecipeHasMore] = useState(false);
   const [availableRecipeMaps, setAvailableRecipeMaps] = useState<string[]>([]);
   const [resourcePage, setResourcePage] = useState(0);
   const [resourcePageSize, setResourcePageSize] = useState(RESOURCE_DEFAULT_PAGE_SIZE);
@@ -96,6 +99,7 @@ export function RecipeBrowser() {
   );
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap) ? selectedRecipeMap : "";
+  const activeRecipeQuery = activeResource ? recipeBookSearch.trim() : recipeSearch.trim();
 
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -107,7 +111,7 @@ export function RecipeBrowser() {
       selectedDatasetVersion
         ? getRecipeQueryCacheKey({
             versionId: getDatasetVersionCacheKey(selectedDatasetVersion),
-            query: recipeSearch.trim(),
+            query: activeRecipeQuery,
             resource: activeResource,
             mode: browserMode,
             recipeMap,
@@ -116,7 +120,7 @@ export function RecipeBrowser() {
             limit: RECIPE_QUERY_LIMIT,
           })
         : "",
-    [activeResource, browserMode, maxTier, recipeSearch, selectedDatasetVersion],
+    [activeRecipeQuery, activeResource, browserMode, maxTier, selectedDatasetVersion],
   );
 
   const getResourceQueryKey = useCallback(
@@ -138,7 +142,7 @@ export function RecipeBrowser() {
         return;
       }
 
-      const query = recipeSearch.trim();
+      const query = activeRecipeQuery;
       if (!activeResource && query.length < 2) {
         return;
       }
@@ -172,11 +176,11 @@ export function RecipeBrowser() {
     },
     [
       activeResource,
+      activeRecipeQuery,
       browserMode,
       datasetManifestUrl,
       getRecipeQueryKey,
       maxTier,
-      recipeSearch,
       selectedDatasetVersion,
     ],
   );
@@ -202,12 +206,23 @@ export function RecipeBrowser() {
 
   const handleAddRecipe = useCallback(
     async (recipeSummary: RecipeSummary) => {
+      const currentState = useFactoryStore.getState();
+      const currentResource = currentState.recipeBrowserResource
+        ? {
+            ...currentState.recipeBrowserResource,
+            recipeCount: 0,
+            anchorNodeId: currentState.recipeBrowserResource.anchorNodeId,
+          }
+        : activeResource;
+      const currentMode = currentState.recipeBrowserResource
+        ? currentState.recipeBrowserMode
+        : browserMode;
       const contextResource = getRecipeAddContextResource(
-        activeResource,
-        browserMode,
+        currentResource,
+        currentMode,
         recipeSummary,
       );
-      const recipe = await getFullRecipe(recipeSummary.id, Boolean(activeResource));
+      const recipe = await getFullRecipe(recipeSummary.id, Boolean(currentResource));
       addNodeForRecipe(recipe, contextResource);
       clearResourceBrowser();
     },
@@ -304,31 +319,32 @@ export function RecipeBrowser() {
     activeResource?.kind,
     browserMode,
     maxTier,
-    recipeSearch,
+    activeRecipeQuery,
     selectedDatasetVersion?.id,
     selectedRecipeMap,
   ]);
 
   useEffect(() => {
-    if (recipePage !== 0) {
-      return deferStateUpdate(() => setRecipePage(0));
-    }
-    return undefined;
-  }, [recipePage]);
+    return deferStateUpdate(() => setRecipeBookSearch(""));
+  }, [activeResource?.id, activeResource?.kind, browserMode, selectedDatasetVersion?.id]);
 
   useEffect(() => {
     if (!selectedDatasetVersion) {
       return deferStateUpdate(() => {
         setFilteredRecipes([]);
+        setRecipeTotal(0);
+        setRecipeHasMore(false);
         setAvailableRecipeMaps([]);
         setRecipeMapIcons({});
       });
     }
 
-    const query = recipeSearch.trim();
+    const query = activeRecipeQuery;
     if (!activeResource && query.length < 2) {
       return deferStateUpdate(() => {
         setFilteredRecipes([]);
+        setRecipeTotal(0);
+        setRecipeHasMore(false);
         setAvailableRecipeMaps([]);
         setRecipeMapIcons({});
         setRecipeQueryLoading(false);
@@ -340,7 +356,11 @@ export function RecipeBrowser() {
     const cached = getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey);
     if (cached) {
       return scheduleAfterPaint(() => {
-        setFilteredRecipes(cached.recipes);
+        setFilteredRecipes((current) =>
+          recipePage === 0 ? cached.recipes : appendUniqueRecipes(current, cached.recipes),
+        );
+        setRecipeTotal(cached.total);
+        setRecipeHasMore(cached.hasMore);
         setAvailableRecipeMaps(cached.recipeMaps);
         setRecipeMapIcons(cached.recipeMapIcons ?? {});
         setRecipeQueryLoading(false);
@@ -351,7 +371,11 @@ export function RecipeBrowser() {
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {
-        setFilteredRecipes([]);
+        if (recipePage === 0) {
+          setFilteredRecipes([]);
+          setRecipeTotal(0);
+          setRecipeHasMore(false);
+        }
         setRecipeQueryLoading(true);
         setRecipeQueryError(undefined);
       }
@@ -382,7 +406,11 @@ export function RecipeBrowser() {
           }
           setCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey, result);
           trimRecipeQueryCache(recipeQueryCacheRef.current);
-          setFilteredRecipes(result.recipes);
+          setFilteredRecipes((current) =>
+            recipePage === 0 ? result.recipes : appendUniqueRecipes(current, result.recipes),
+          );
+          setRecipeTotal(result.total);
+          setRecipeHasMore(result.hasMore);
           setAvailableRecipeMaps(result.recipeMaps);
           setRecipeMapIcons(result.recipeMapIcons ?? {});
           if (activeResource && !activeRecipeMap && result.recipeMaps[0]) {
@@ -395,6 +423,8 @@ export function RecipeBrowser() {
             return;
           }
           setFilteredRecipes([]);
+          setRecipeTotal(0);
+          setRecipeHasMore(false);
           setAvailableRecipeMaps([]);
           setRecipeMapIcons({});
           setRecipeQueryError(error instanceof Error ? error.message : "Recipe query failed.");
@@ -408,12 +438,12 @@ export function RecipeBrowser() {
     };
   }, [
     activeRecipeMap,
+    activeRecipeQuery,
     activeResource,
     browserMode,
     datasetManifestUrl,
     getRecipeQueryKey,
     maxTier,
-    recipeSearch,
     recipePage,
     selectedDatasetVersion,
   ]);
@@ -494,8 +524,11 @@ export function RecipeBrowser() {
           activeResource={activeResource}
           filteredRecipes={filteredRecipes}
           isLoading={recipeQueryLoading}
+          query={recipeBookSearch}
           queryError={recipeQueryError}
+          queryTotal={recipeTotal}
           recipeMapTabs={recipeMapTabs}
+          hasMore={recipeHasMore}
           selectedRecipeId={selectedRecipeId}
           onAdd={handleAddRecipe}
           onAddConnected={undefined}
@@ -516,6 +549,15 @@ export function RecipeBrowser() {
           onRecipeMapChange={(recipeMap) => {
             setSelectedRecipeMap(recipeMap);
             setRecipePage(0);
+          }}
+          onQueryChange={(query) => {
+            setRecipeBookSearch(query);
+            setRecipePage(0);
+          }}
+          onLoadMore={() => {
+            if (!recipeQueryLoading && recipeHasMore) {
+              setRecipePage((page) => page + 1);
+            }
           }}
           onRecipeMapHover={prefetchRecipeMap}
           onSelectRecipe={selectRecipe}
@@ -920,8 +962,11 @@ function RecipeBookOverlay({
   activeRecipeMap,
   activeResource,
   filteredRecipes,
+  hasMore,
   isLoading,
+  query,
   queryError,
+  queryTotal,
   recipeMapTabs,
   selectedRecipeId,
   onAdd,
@@ -929,14 +974,19 @@ function RecipeBookOverlay({
   onBrowseResource,
   onRecipeMapChange,
   onRecipeMapHover,
+  onQueryChange,
+  onLoadMore,
   onSelectRecipe,
   onClose,
 }: {
   activeRecipeMap: string;
   activeResource: IndexedResource & { anchorNodeId?: string };
   filteredRecipes: RecipeSummary[];
+  hasMore: boolean;
   isLoading: boolean;
+  query: string;
   queryError?: string;
+  queryTotal: number;
   recipeMapTabs: RecipeMapTab[];
   selectedRecipeId?: string;
   onAdd: (recipe: RecipeSummary) => void | Promise<void>;
@@ -944,6 +994,8 @@ function RecipeBookOverlay({
   onBrowseResource: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   onRecipeMapChange: (recipeMap: string) => void;
   onRecipeMapHover: (recipeMap: string) => void;
+  onQueryChange: (query: string) => void;
+  onLoadMore: () => void;
   onSelectRecipe: (recipeId: string) => void;
   onClose: () => void;
 }) {
@@ -958,11 +1010,7 @@ function RecipeBookOverlay({
     originX: number;
     originY: number;
   } | null>(null);
-  const [bookSearch, setBookSearch] = useState("");
-  const displayedRecipes = useMemo(
-    () => filterRecipesByIngredientName(filteredRecipes, bookSearch),
-    [bookSearch, filteredRecipes],
-  );
+  const displayedRecipes = filteredRecipes;
 
   const handlePointerDown = (event: PointerEvent<HTMLElement>) => {
     if (event.button !== 0) {
@@ -1044,15 +1092,15 @@ function RecipeBookOverlay({
             <label className="flex h-9 items-center gap-2 border-2 border-[#555] bg-[#17191d] px-2 text-sm text-neutral-100 shadow-[inset_2px_2px_0_#30343b,inset_-2px_-2px_0_#050607]">
               <Search className="h-4 w-4 text-neutral-500" />
               <input
-                value={bookSearch}
-                onChange={(event) => setBookSearch(event.target.value)}
+                value={query}
+                onChange={(event) => onQueryChange(event.target.value)}
                 placeholder="Search ingredient..."
                 className="min-w-0 flex-1 bg-transparent text-neutral-100 outline-none placeholder:text-neutral-500"
               />
-              {bookSearch ? (
+              {query ? (
                 <button
                   type="button"
-                  onClick={() => setBookSearch("")}
+                  onClick={() => onQueryChange("")}
                   className="text-neutral-400 hover:text-white"
                   aria-label="Clear recipe book search"
                   title="Clear recipe book search"
@@ -1079,15 +1127,18 @@ function RecipeBookOverlay({
             ) : (
               <VirtualRecipeResultList
                 recipes={displayedRecipes}
-                queryTotal={displayedRecipes.length}
+                queryTotal={queryTotal}
                 currentPage={0}
-                pageSize={displayedRecipes.length}
+                pageSize={RECIPE_QUERY_LIMIT}
                 selectedRecipeId={selectedRecipeId}
                 onSelectRecipe={onSelectRecipe}
                 onAdd={onAdd}
                 onAddConnected={onAddConnected}
                 onSlotBrowse={onBrowseResource}
                 contextResource={activeResource}
+                hasMore={hasMore}
+                isLoadingMore={isLoading && displayedRecipes.length > 0}
+                onLoadMore={onLoadMore}
               />
             )}
           </div>
@@ -1108,6 +1159,9 @@ function VirtualRecipeResultList({
   onAddConnected,
   onSlotBrowse,
   contextResource,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
 }: {
   recipes: RecipeSummary[];
   queryTotal: number;
@@ -1119,6 +1173,9 @@ function VirtualRecipeResultList({
   onAddConnected?: (recipeId: string) => void | Promise<void>;
   onSlotBrowse: (resource: ResourceAmount, mode: "recipes" | "uses") => void;
   contextResource?: PreviewContextResource;
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 360 });
@@ -1163,6 +1220,20 @@ function VirtualRecipeResultList({
     };
   }, [recipes.length]);
 
+  useEffect(() => {
+    const scrollParent = anchorRef.current?.parentElement;
+    if (!scrollParent || !hasMore || isLoadingMore) {
+      return;
+    }
+
+    const threshold = 360;
+    const remaining =
+      scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight;
+    if (remaining <= threshold) {
+      onLoadMore();
+    }
+  }, [hasMore, isLoadingMore, onLoadMore, viewport.scrollTop, viewport.height, recipes.length]);
+
   return (
     <div
       ref={anchorRef}
@@ -1190,6 +1261,11 @@ function VirtualRecipeResultList({
           />
         ))}
       </div>
+      {isLoadingMore ? (
+        <div className="mt-3 border-2 border-[#777] bg-[#b6b6b6] p-3 text-center text-sm shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+          Loading recipes...
+        </div>
+      ) : null}
       <div style={{ height: bottomPadding }} />
     </div>
   );
@@ -1355,23 +1431,31 @@ function getRecipeAddContextResource(
       contextInputIndex !== undefined && contextInputIndex >= 0
         ? contextRecipe?.inputs[contextInputIndex]
         : undefined;
-    if (contextInput && !contextInput.id.startsWith("oredict:")) {
+    const contextSlotInput =
+      contextInput ??
+      contextRecipe?.inputs.find(
+        (input) =>
+          input.neiSlot &&
+          input.kind === activeResource.kind &&
+          resourceMatchesInput({ kind: activeResource.kind, id: activeResource.id }, input),
+      );
+    if (contextSlotInput && !contextSlotInput.id.startsWith("oredict:")) {
       return {
-        kind: contextInput.kind,
-        id: contextInput.id,
-        displayName: contextInput.displayName ?? activeResource.displayName,
-        iconPath: contextInput.iconPath ?? activeResource.iconPath,
-        iconAtlas: contextInput.iconAtlas ?? activeResource.iconAtlas,
+        kind: contextSlotInput.kind,
+        id: contextSlotInput.id,
+        displayName: contextSlotInput.displayName ?? activeResource.displayName,
+        iconPath: contextSlotInput.iconPath ?? activeResource.iconPath,
+        iconAtlas: contextSlotInput.iconAtlas ?? activeResource.iconAtlas,
         dominantColor:
-          contextInput.dominantColor ??
-          contextInput.iconAtlas?.dominantColor ??
+          contextSlotInput.dominantColor ??
+          contextSlotInput.iconAtlas?.dominantColor ??
           activeResource.dominantColor ??
           activeResource.iconAtlas?.dominantColor,
-        tooltip: contextInput.tooltip,
-        modId: contextInput.modId,
+        tooltip: contextSlotInput.tooltip,
+        modId: contextSlotInput.modId,
         mode,
         inputIndex: contextInputIndex,
-        neiSlot: contextInput.neiSlot,
+        neiSlot: contextSlotInput.neiSlot,
       };
     }
   }
@@ -1391,26 +1475,6 @@ function recipeHasRenderableIcons(recipe: Recipe) {
   return [...recipe.inputs, ...recipe.outputs]
     .filter((resource) => resource.kind === "item")
     .every((resource) => Boolean(resource.iconPath || resource.iconAtlas));
-}
-
-function filterRecipesByIngredientName(recipes: RecipeSummary[], query: string) {
-  const tokens = normalizeSearchTokens(query);
-  if (tokens.length === 0) {
-    return recipes;
-  }
-
-  return recipes.filter((recipe) => {
-    const resourceText = [...recipe.inputs, ...recipe.outputs]
-      .map((resource) => `${resource.displayName ?? ""} ${resource.id}`)
-      .join(" ")
-      .toLowerCase();
-
-    return tokens.every((token) => resourceText.includes(token));
-  });
-}
-
-function normalizeSearchTokens(query: string) {
-  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
 }
 
 function clampDragOffset(offset: { x: number; y: number }, panel: HTMLElement | null) {
@@ -1488,6 +1552,19 @@ function getDatasetVersionCacheKey(version: {
   publishedAt: string;
 }) {
   return [version.id, version.checksumSha256 ?? version.publishedAt].join("@");
+}
+
+function appendUniqueRecipes(current: RecipeSummary[], incoming: RecipeSummary[]) {
+  const seen = new Set(current.map((recipe) => recipe.id));
+  const next = [...current];
+  for (const recipe of incoming) {
+    if (seen.has(recipe.id)) {
+      continue;
+    }
+    seen.add(recipe.id);
+    next.push(recipe);
+  }
+  return next;
 }
 
 function getRecipeQueryCacheKey({
