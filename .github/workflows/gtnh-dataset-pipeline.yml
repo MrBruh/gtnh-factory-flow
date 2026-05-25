@@ -47,9 +47,9 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       has_versions: ${{ steps.detect.outputs.has_versions }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
 
@@ -60,7 +60,7 @@ jobs:
           FORCE_REBUILD: ${{ github.event.client_payload.force_rebuild || inputs.force_rebuild || false }}
         run: GTNH_DATASETS_ROOT="$HOME/data/gtnh-factory-flow/datasets/gtnh" node tools/dataset-pipeline/scripts/detect-gtnh-versions.mjs
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: detected-gtnh-versions
           path: .pipeline/detected-versions.json
@@ -75,9 +75,9 @@ jobs:
       max-parallel: 1
       matrix: ${{ fromJson(needs.detect.outputs.matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: detected-gtnh-versions
           path: .pipeline
@@ -144,7 +144,7 @@ jobs:
             gtnh-factory-flow-dataset:ci \
             bash -lc 'npm install && node tools/dataset-pipeline/scripts/generate-dataset.mjs'
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         continue-on-error: true
         with:
@@ -161,9 +161,9 @@ jobs:
     if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || inputs.publish == true || inputs.force_rebuild == true) }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: detected-gtnh-versions
           path: .pipeline
@@ -235,7 +235,7 @@ jobs:
     if: ${{ needs.publish.result == 'success' }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: main
 

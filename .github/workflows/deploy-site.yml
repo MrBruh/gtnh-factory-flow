@@ -19,7 +19,7 @@ jobs:
     name: Deploy site to exotiserver
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Build Docker image
         run: docker build -t gtnh-factory-flow-site:ci -f tools/dataset-pipeline/docker/Dockerfile .

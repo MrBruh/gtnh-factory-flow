@@ -15,7 +15,7 @@ jobs:
     name: Deploy Umami analytics to exotiserver
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Start Umami
         run: |
