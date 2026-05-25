@@ -17,9 +17,13 @@ const gtnhVersion = requiredEnv("GTNH_DATASET_VERSION_LABEL");
 const generatedAt = new Date().toISOString();
 const outDir = path.dirname(outputPath);
 const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
+console.log("Staging rendered icons.");
 const renderedIconFiles = await stageRenderedIcons(renderedIconDir, outDir);
+console.log(`Indexing rendered icon colors for ${renderedIconFiles.length} files.`);
 const renderedIconColors = await indexRenderedIconColors(outDir, renderedIconFiles);
+console.log(`Reading RecEx export from ${inputPath}.`);
 const raw = JSON.parse(stripBom(await fs.readFile(inputPath, "utf8")));
+console.log("Collecting raw item resources.");
 const rawItemResources = collectRawItemResources(raw);
 
 const resources = new Map();
@@ -153,6 +157,7 @@ const sources = Array.isArray(raw.sources) ? raw.sources : [];
 const gregtechSource = sources.find((source) => source.type === "gregtech");
 
 if (gregtechSource?.machines?.length) {
+  console.log(`Normalizing ${gregtechSource.machines.length} GregTech recipe maps.`);
   normalizeGregtechRecipes(gregtechSource);
 }
 
@@ -195,6 +200,7 @@ if (dataset.recipes.length === 0) {
 await pruneUnusedRenderedIcons(dataset, outDir);
 
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
+console.log("Writing normalized dataset JSON.");
 await writeDatasetJson(outputPath, dataset);
 console.log(`Wrote ${dataset.recipes.length} recipes to ${outputPath}.`);
 
@@ -204,6 +210,9 @@ function normalizeGregtechRecipes(source) {
     const machineHandlers = machineHandlersFromCatalysts(machine.cat, {
       baseMachineType: machineType,
       minimumTierWhenUnknown: "UNKNOWN",
+    });
+    const machineConfigControls = machineConfigControlsFromRawItems(machine.cat, {
+      scope: "recipe",
     });
     recipeMaps.push(machineType);
 
@@ -268,7 +277,11 @@ function normalizeGregtechRecipes(source) {
         machineType,
         minimumTier: "UNKNOWN",
         machineHandlers: machineHandlers.length > 0 ? machineHandlers : undefined,
-        machineConfigControls: machineConfigControlsForRecipe(machineType, rawRecipe.sp, machine),
+        machineConfigControls: machineConfigControlsForRecipe(
+          machineType,
+          rawRecipe.sp,
+          machineConfigControls,
+        ),
         durationTicks: rawRecipe.dur,
         eut: rawRecipe.eut ?? 0,
         inputs,
@@ -399,10 +412,9 @@ function addRecipe(recipe) {
   recipes.push(recipe);
 }
 
-function machineConfigControlsForRecipe(machineType, specialValue, machine) {
-  const controls = [];
+function machineConfigControlsForRecipe(machineType, specialValue, machineConfigControls = []) {
+  const controls = [...machineConfigControls];
   const normalized = normalizeLabel(machineType);
-  controls.push(...machineConfigControlsFromRawItems(machine?.cat, { scope: "recipe" }));
 
   if (isBlastFurnaceRecipeMap(normalized) && Number.isFinite(specialValue) && specialValue > 0) {
     const minimum = coilTierForHeat(specialValue);
