@@ -83,6 +83,8 @@ export const recipeOutputSchema = resourceAmountSchema.extend({
 export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
+  durationTicks: z.number().int().positive("Duration must be at least 1 tick").optional(),
+  eut: z.number().min(0, "EU/t must be zero or positive").optional(),
   maxParallel: z.number().positive().optional(),
   eutLimit: z.number().positive().optional(),
   notes: z.string().optional(),

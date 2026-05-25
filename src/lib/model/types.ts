@@ -89,6 +89,8 @@ export interface RecipeOutput extends ResourceAmount {
 export interface MachineProfile {
   machineType: string;
   minimumTier: MachineTier | string;
+  durationTicks?: number;
+  eut?: number;
   maxParallel?: number;
   eutLimit?: number;
   notes?: string;

@@ -265,7 +265,7 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
       machineType,
       minimumTier: "NONE",
       machineHandlers: machineHandlers.length > 0 ? machineHandlers : undefined,
-      durationTicks: 20,
+      durationTicks: 1,
       eut: 0,
       inputs,
       outputs: [output],
@@ -523,6 +523,11 @@ function machineHandlersFromCatalysts(
 
     const label = resource.displayName ?? resource.id;
     if (catalystScope === "crafting" && !isTimedAutomatedCraftingCatalyst(label)) {
+      continue;
+    }
+
+    const familyLabel = machineHandlerFamilyLabel(label);
+    if (normalizeLabel(familyLabel) === normalizeLabel(baseMachineType)) {
       continue;
     }
 

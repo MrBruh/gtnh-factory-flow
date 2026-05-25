@@ -38,6 +38,8 @@ describe("recipe machine handlers", () => {
           label: "Autoworkbench",
           machineType: "Autoworkbench",
           minimumTier: "LV",
+          durationTicks: 40,
+          eut: 16,
           kind: "automation" as const,
         },
       ],
@@ -53,9 +55,13 @@ describe("recipe machine handlers", () => {
     expect(effective).toMatchObject({
       machineType: "Autoworkbench",
       minimumTier: "LV",
+      durationTicks: 40,
+      eut: 16,
       machineProfile: {
         machineType: "Autoworkbench",
         minimumTier: "LV",
+        durationTicks: 40,
+        eut: 16,
       },
     });
   });
