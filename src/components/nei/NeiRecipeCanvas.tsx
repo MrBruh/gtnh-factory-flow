@@ -25,6 +25,7 @@ interface NeiRecipeCanvasProps {
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
   suppressSlotHover?: (slot: NeiPositionedSlot) => boolean;
+  getSlotZIndex?: (slot: NeiPositionedSlot) => number | undefined;
   slotTooltip?: boolean;
 }
 
@@ -40,6 +41,7 @@ export function NeiRecipeCanvas({
   getSlotConnectionAttributes,
   onSlotClick,
   suppressSlotHover,
+  getSlotZIndex,
   slotTooltip = true,
 }: NeiRecipeCanvasProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
@@ -82,48 +84,52 @@ export function NeiRecipeCanvas({
         <ProgressTexture key={`${bar.x}-${bar.y}-${index}`} bar={bar} scale={renderScale} />
       ))}
 
-      {renderLayout.frames.map((frame) => (
-        <div
-          key={`${frame.side}-${frame.kind}-${frame.slotIndex}-${frame.x}-${frame.y}-${frame.action ?? "slot"}`}
-          className="nodrag absolute"
-          style={{
-            left: frame.x * renderScale,
-            top: frame.y * renderScale,
-            width: slotSize,
-            height: slotSize,
-          }}
-        >
-          <NeiSlotFrameView
-            frame={frame}
-            iconPixelSize={renderedIconPixelSize}
-            renderHandle={renderHandle}
-            getSlotConnectionAttributes={getSlotConnectionAttributes}
-            onSlotClick={onSlotClick}
-            suppressSlotHover={suppressSlotHover}
-            slotTooltip={slotTooltip}
-            onOverflowClick={
-              frame.action === "overflow"
-                ? () =>
-                    setExpandedGroups((current) => {
-                      const next = new Set(current);
-                      next.add(getGroupKey(frame));
-                      return next;
-                    })
-                : undefined
-            }
-            onCollapseClick={
-              frame.action === "collapse"
-                ? () =>
-                    setExpandedGroups((current) => {
-                      const next = new Set(current);
-                      next.delete(getGroupKey(frame));
-                      return next;
-                    })
-                : undefined
-            }
-          />
-        </div>
-      ))}
+      {renderLayout.frames.map((frame) => {
+        const slot = frame.resource ? (frame as NeiPositionedSlot) : undefined;
+        return (
+          <div
+            key={`${frame.side}-${frame.kind}-${frame.slotIndex}-${frame.x}-${frame.y}-${frame.action ?? "slot"}`}
+            className="nodrag absolute"
+            style={{
+              left: frame.x * renderScale,
+              top: frame.y * renderScale,
+              width: slotSize,
+              height: slotSize,
+              zIndex: slot ? getSlotZIndex?.(slot) : undefined,
+            }}
+          >
+            <NeiSlotFrameView
+              frame={frame}
+              iconPixelSize={renderedIconPixelSize}
+              renderHandle={renderHandle}
+              getSlotConnectionAttributes={getSlotConnectionAttributes}
+              onSlotClick={onSlotClick}
+              suppressSlotHover={suppressSlotHover}
+              slotTooltip={slotTooltip}
+              onOverflowClick={
+                frame.action === "overflow"
+                  ? () =>
+                      setExpandedGroups((current) => {
+                        const next = new Set(current);
+                        next.add(getGroupKey(frame));
+                        return next;
+                      })
+                  : undefined
+              }
+              onCollapseClick={
+                frame.action === "collapse"
+                  ? () =>
+                      setExpandedGroups((current) => {
+                        const next = new Set(current);
+                        next.delete(getGroupKey(frame));
+                        return next;
+                      })
+                  : undefined
+              }
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

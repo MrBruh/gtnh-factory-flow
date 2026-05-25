@@ -19,6 +19,7 @@ interface NeiRecipeWindowProps {
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
   suppressSlotHover?: (slot: NeiPositionedSlot) => boolean;
+  getSlotZIndex?: (slot: NeiPositionedSlot) => number | undefined;
   slotTooltip?: boolean;
   hideCollapseControls?: boolean;
   contextResource?: Pick<ResourceAmount, "kind" | "id">;
@@ -35,6 +36,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
   getSlotConnectionAttributes,
   onSlotClick,
   suppressSlotHover,
+  getSlotZIndex,
   slotTooltip = true,
   hideCollapseControls = false,
   contextResource,
@@ -72,6 +74,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
             getSlotConnectionAttributes={getSlotConnectionAttributes}
             onSlotClick={onSlotClick}
             suppressSlotHover={suppressSlotHover}
+            getSlotZIndex={getSlotZIndex}
             slotTooltip={slotTooltip}
             hideCollapseControls={preserveNativeSlots}
             contextResource={contextResource}

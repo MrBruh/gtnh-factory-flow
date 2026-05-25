@@ -139,7 +139,15 @@ function getMachineConfigResources(catalog: LoadedRecipeIndex): DatasetResourceI
 
 function isMachineConfigTooltipLine(line: string) {
   const normalized = line.trim().toLowerCase();
-  return normalized === "heating coil tier" || normalized === "pipe casing tier";
+  return (
+    normalized === "heating coil tier" ||
+    normalized === "pipe casing tier" ||
+    normalized === "solenoid tier" ||
+    normalized === "log tool" ||
+    normalized === "sapling tool" ||
+    normalized === "leaves tool" ||
+    normalized === "fruit tool"
+  );
 }
 
 export async function getDatasetRecipeIds(versionId: string): Promise<string[]> {
@@ -469,7 +477,21 @@ export async function getDatasetRecipe(
     return undefined;
   }
   const recipes = await loadShard(catalog.version, shard);
-  return recipes.find((recipe) => recipe.id === recipeId);
+  const recipe = recipes.find((entry) => entry.id === recipeId);
+  if (!recipe) {
+    return undefined;
+  }
+  const resourcesByKey = getCatalogResourcesByKey(catalog);
+  return {
+    ...recipe,
+    machineConfigControls: hydrateMachineConfigControls(
+      recipe.machineConfigControls,
+      resourcesByKey,
+    ),
+    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
+    inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+  };
 }
 
 async function loadManifest(): Promise<DatasetManifest> {
@@ -677,6 +699,11 @@ function hydrateSummaries(recipes: RecipeSummary[], catalog: LoadedRecipeIndex):
   const resourcesByKey = getCatalogResourcesByKey(catalog);
   return recipes.map((recipe) => ({
     ...recipe,
+    machineConfigControls: hydrateMachineConfigControls(
+      recipe.machineConfigControls,
+      resourcesByKey,
+    ),
+    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
     inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
     outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
   }));
@@ -798,14 +825,43 @@ function toRecipeSummary(
     durationTicks: recipe.durationTicks,
     eut: recipe.eut,
     programmedCircuit: recipe.programmedCircuit,
-    machineHandlers: recipe.machineHandlers,
-    machineConfigControls: recipe.machineConfigControls,
+    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
+    machineConfigControls: hydrateMachineConfigControls(
+      recipe.machineConfigControls,
+      resourcesByKey,
+    ),
     inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
     outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
     source: recipe.source?.recipeMap ? { recipeMap: recipe.source.recipeMap } : undefined,
     nei: recipe.nei,
     slots: [],
   };
+}
+
+function hydrateMachineHandlers<T extends Recipe["machineHandlers"]>(
+  handlers: T,
+  resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
+): T {
+  return handlers?.map((handler) => ({
+    ...handler,
+    machineConfigControls: hydrateMachineConfigControls(
+      handler.machineConfigControls,
+      resourcesByKey,
+    ),
+  })) as T;
+}
+
+function hydrateMachineConfigControls<T extends Recipe["machineConfigControls"]>(
+  controls: T,
+  resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
+): T {
+  return controls?.map((control) => ({
+    ...control,
+    tiers: control.tiers.map((tier) => ({
+      ...tier,
+      resource: tier.resource ? hydrateResource(tier.resource, resourcesByKey) : tier.resource,
+    })),
+  })) as T;
 }
 
 function getCatalogResourcesByKey(

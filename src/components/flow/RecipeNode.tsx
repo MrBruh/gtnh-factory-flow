@@ -369,6 +369,13 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
             suppressSlotHover={(slot) =>
               Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
             }
+            getSlotZIndex={(slot) => {
+              const control = getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls);
+              if (!control) {
+                return undefined;
+              }
+              return openMachineConfigMenuId === control.id ? 130 : 70;
+            }}
             renderHandle={(slot) => {
               const tgsToolControl = getTreeGrowthSimulatorToolControlForSlot(
                 slot,
@@ -678,7 +685,7 @@ function TreeGrowthSimulatorToolSlotMenu({
       </span>
       {isOpen ? (
         <span
-          className="absolute left-0 top-full z-[120] grid grid-cols-3 gap-1 border-2 border-[#252525] bg-[#c6c6c6] p-1 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
+          className="absolute left-0 top-[calc(100%+4px)] z-[120] grid grid-cols-3 gap-2 border-2 border-[#252525] bg-[#c6c6c6] p-2 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -694,7 +701,7 @@ function TreeGrowthSimulatorToolSlotMenu({
                 role="button"
                 tabIndex={0}
                 className={[
-                  "grid h-9 w-9 place-items-center border-2 text-[18px] font-bold leading-none",
+                  "grid h-10 w-10 place-items-center border-2 text-[18px] font-bold leading-none",
                   tier.key === control.current.key
                     ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
                     : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
@@ -725,8 +732,8 @@ function TreeGrowthSimulatorToolSlotMenu({
                     tooltip={false}
                     showAmount={false}
                     showConsumedState={false}
-                    iconPixelSize={40}
-                    className="h-8 w-8 !overflow-visible"
+                    iconPixelSize={46}
+                    className="h-9 w-9 !overflow-visible"
                   />
                 )}
               </span>
