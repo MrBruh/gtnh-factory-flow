@@ -7,6 +7,7 @@ import type { DatasetManifest, DatasetVersion, RecipeSummary } from "@/lib/datas
 import { PROJECT_SCHEMA_VERSION } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { RecipeBrowser } from "./RecipeBrowser";
+import { queryRecipeDatasetRecipes } from "@/lib/datasets/browser-loader";
 
 const datasetVersion: DatasetVersion = {
   id: "test-version",
@@ -67,16 +68,72 @@ const cokeOvenSummary: RecipeSummary = {
   ],
 };
 
+const browserLoaderMock = vi.hoisted(() => {
+  const fullRecipe = {
+    id: "coke-oven-log",
+    name: "Coke Oven: Charcoal",
+    machineType: "Coke Oven",
+    minimumTier: "MV",
+    durationTicks: 256,
+    eut: 96,
+    inputs: [
+      {
+        kind: "item",
+        id: "gregtech:gt.integrated_circuit@1",
+        amount: 0,
+        displayName: "Integrated Circuit",
+        consumed: false,
+        neiSlot: { x: 44, y: 35 },
+      },
+      {
+        kind: "item",
+        id: "oredict:logWood",
+        amount: 16,
+        displayName: "Ore Dictionary: logWood",
+        iconPath: "/items/oak-log.png",
+        tooltip: ["Ore Dictionary: logWood"],
+        neiSlot: { x: 62, y: 35 },
+      },
+    ],
+    outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20, displayName: "Charcoal" }],
+  };
+
+  return {
+    getRecipeDatasetRecipe: vi.fn(async () => fullRecipe),
+    queryRecipeDatasetRecipes: vi.fn(async (_manifestUrl, _version, query) => ({
+      recipes: [
+        {
+          ...fullRecipe,
+          recipeMap: "Coke Oven",
+          slots: [],
+          inputs:
+            query.mode === "uses"
+              ? [
+                  {
+                    kind: "item",
+                    id: "minecraft:log@1",
+                    amount: 16,
+                    displayName: "Spruce Log",
+                    iconPath: "/items/spruce-log.png",
+                    tooltip: ["Spruce Log"],
+                    neiSlot: { x: 62, y: 35 },
+                  },
+                ]
+              : fullRecipe.inputs,
+        },
+      ],
+      total: 1,
+      recipeMaps: ["Coke Oven"],
+      offset: 0,
+      limit: 120,
+      hasMore: false,
+    })),
+  };
+});
+
 vi.mock("@/lib/datasets/browser-loader", () => ({
-  getRecipeDatasetRecipe: vi.fn(async () => cokeOvenRecipe),
-  queryRecipeDatasetRecipes: vi.fn(async () => ({
-    recipes: [cokeOvenSummary],
-    total: 1,
-    recipeMaps: ["Coke Oven"],
-    offset: 0,
-    limit: 5000,
-    hasMore: false,
-  })),
+  getRecipeDatasetRecipe: browserLoaderMock.getRecipeDatasetRecipe,
+  queryRecipeDatasetRecipes: browserLoaderMock.queryRecipeDatasetRecipes,
   queryRecipeDatasetResources: vi.fn(async () => ({
     resources: [],
     total: 0,
@@ -129,6 +186,11 @@ describe("RecipeBrowser", () => {
     fireEvent.click(await screen.findByLabelText("Add recipe node"));
 
     await waitFor(() => {
+      expect(queryRecipeDatasetRecipes).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Object),
+        expect.objectContaining({ mode: "uses" }),
+      );
       const node = useFactoryStore.getState().project.nodes[0];
       expect(node?.recipeInputOverrides?.["1"]).toEqual(
         expect.objectContaining({

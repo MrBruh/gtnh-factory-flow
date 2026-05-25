@@ -2798,7 +2798,12 @@ function getSlotEdgeSideTowardPoint({
   const center = getMeasuredSlotCenter({ nodeId, handleId }) ?? { x: estimatedX, y: estimatedY };
   const distanceX = counterpartX - center.x;
   const distanceY = counterpartY - center.y;
+  const horizontalSide = distanceX >= 0 ? Position.Right : Position.Left;
   const verticalSide = distanceY >= 0 ? Position.Bottom : Position.Top;
+
+  if (Math.abs(distanceX) >= 36 && Math.abs(distanceX) > Math.abs(distanceY) * 1.15) {
+    return horizontalSide;
+  }
 
   if (Math.abs(distanceY) >= 24) {
     return verticalSide;
@@ -2809,7 +2814,7 @@ function getSlotEdgeSideTowardPoint({
   }
 
   if (Math.abs(distanceX) > 1) {
-    return distanceX >= 0 ? Position.Right : Position.Left;
+    return horizontalSide;
   }
 
   return estimatedSide;
