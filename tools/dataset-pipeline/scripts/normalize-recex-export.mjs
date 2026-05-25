@@ -216,6 +216,7 @@ function normalizeCraftingSource(source, { machineType, sourceType }) {
   const machineHandlers = machineHandlersFromCatalysts(source.catalysts, {
     baseMachineType: machineType,
     minimumTierWhenUnknown: "NONE",
+    catalystScope: "crafting",
   });
   recipeMaps.push(machineType);
 
@@ -405,7 +406,10 @@ function isChemicalPlantRecipeMap(normalizedMachineType) {
   );
 }
 
-function machineHandlersFromCatalysts(catalysts, { baseMachineType, minimumTierWhenUnknown }) {
+function machineHandlersFromCatalysts(
+  catalysts,
+  { baseMachineType, minimumTierWhenUnknown, catalystScope },
+) {
   const handlers = [];
   const seen = new Set([slug(baseMachineType)]);
 
@@ -416,6 +420,10 @@ function machineHandlersFromCatalysts(catalysts, { baseMachineType, minimumTierW
     }
 
     const label = resource.displayName ?? resource.id;
+    if (catalystScope === "crafting" && !isTimedAutomatedCraftingCatalyst(label)) {
+      continue;
+    }
+
     const id = `nei-catalyst-${slug(resource.id)}`;
     if (seen.has(id) || normalizeLabel(label) === normalizeLabel(baseMachineType)) {
       continue;
@@ -432,6 +440,13 @@ function machineHandlersFromCatalysts(catalysts, { baseMachineType, minimumTierW
   }
 
   return handlers;
+}
+
+function isTimedAutomatedCraftingCatalyst(label) {
+  const normalized = normalizeLabel(label);
+  return [/^auto/, /\bautocrafting\b/, /\bcrafter\b/, /\bcrafty crate\b/].some((pattern) =>
+    pattern.test(normalized),
+  );
 }
 
 function machineHandlersFromNames(names, { baseMachineType, minimumTierWhenUnknown }) {
