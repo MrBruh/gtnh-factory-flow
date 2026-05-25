@@ -304,21 +304,34 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         ...state.project,
         recipes: state.project.recipes.map((recipe) => {
           const refreshedRecipe = recipesById.get(recipe.id);
-          return refreshedRecipe ? mergeRefreshedRecipe(recipe, refreshedRecipe) : recipe;
+          return refreshedRecipe ? mergeRefreshedRecipe(refreshedRecipe) : recipe;
         }),
         nodes: state.project.nodes.map((node) => {
           const recipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
           const refreshedRecipe = recipe ? recipesById.get(recipe.id) : undefined;
-          if (!refreshedRecipe) {
+          if (!recipe || !refreshedRecipe) {
             return node;
           }
 
+          const contextualInputOverrides = buildRecipeInputOverridesFromContextualRecipeInputs(
+            recipe,
+            refreshedRecipe,
+          );
           const validMachineHandlerIds = new Set(
             (refreshedRecipe.machineHandlers ?? []).map((handler) => handler.id),
           );
-          return node.machineHandlerId && !validMachineHandlerIds.has(node.machineHandlerId)
-            ? { ...node, machineHandlerId: undefined }
+          const nextNode: FactoryNode = Object.keys(contextualInputOverrides).length
+            ? {
+                ...node,
+                recipeInputOverrides: {
+                  ...contextualInputOverrides,
+                  ...node.recipeInputOverrides,
+                },
+              }
             : node;
+          return nextNode.machineHandlerId && !validMachineHandlerIds.has(nextNode.machineHandlerId)
+            ? { ...nextNode, machineHandlerId: undefined }
+            : nextNode;
         }),
       };
 
@@ -1307,24 +1320,24 @@ function mergeRecipe(existing: Recipe, incoming: Recipe): Recipe {
   };
 }
 
-function mergeRefreshedRecipe(existing: Recipe, incoming: Recipe): Recipe {
+function mergeRefreshedRecipe(incoming: Recipe): Recipe {
   return {
     ...incoming,
-    inputs: preserveContextualInputs(existing.inputs, incoming.inputs),
   };
 }
 
-function preserveContextualInputs(
-  existingInputs: Recipe["inputs"],
-  refreshedInputs: Recipe["inputs"],
-): Recipe["inputs"] {
-  return refreshedInputs.map((refreshedInput, index) => {
-    const existingInput = existingInputs[index];
-    if (!existingInput || !shouldPreserveContextualInput(existingInput, refreshedInput)) {
-      return refreshedInput;
+function buildRecipeInputOverridesFromContextualRecipeInputs(
+  existingRecipe: Recipe,
+  refreshedRecipe: Recipe,
+): NonNullable<FactoryNode["recipeInputOverrides"]> {
+  const overrides: NonNullable<FactoryNode["recipeInputOverrides"]> = {};
+  refreshedRecipe.inputs.forEach((refreshedInput, index) => {
+    const existingInput = existingRecipe.inputs[index];
+    if (!existingInput || !isContextualRecipeInput(existingInput, refreshedInput)) {
+      return;
     }
 
-    return {
+    overrides[String(index)] = {
       ...refreshedInput,
       id: existingInput.id,
       displayName: existingInput.displayName ?? refreshedInput.displayName,
@@ -1335,9 +1348,11 @@ function preserveContextualInputs(
       alternatives: undefined,
     };
   });
+
+  return overrides;
 }
 
-function shouldPreserveContextualInput(
+function isContextualRecipeInput(
   existingInput: Recipe["inputs"][number],
   refreshedInput: Recipe["inputs"][number],
 ): boolean {

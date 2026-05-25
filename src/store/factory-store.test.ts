@@ -445,7 +445,7 @@ describe("project recipe refresh", () => {
     expect(useFactoryStore.getState().project.nodes[0]?.machineHandlerId).toBeUndefined();
   });
 
-  it("preserves a concrete ore dictionary input selected on a recipe node", () => {
+  it("moves a legacy concrete ore dictionary input from the recipe to the node", () => {
     useFactoryStore.getState().setProject({
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "refresh-context-test",
@@ -506,6 +506,12 @@ describe("project recipe refresh", () => {
     ]);
 
     expect(useFactoryStore.getState().project.recipes[0]?.inputs[0]).toEqual(
+      expect.objectContaining({
+        id: "oredict:logWood",
+        alternatives: [{ kind: "item", id: "minecraft:log@1" }],
+      }),
+    );
+    expect(useFactoryStore.getState().project.nodes[0]?.recipeInputOverrides?.["0"]).toEqual(
       expect.objectContaining({
         id: "minecraft:log@1",
         displayName: "Spruce Log",
