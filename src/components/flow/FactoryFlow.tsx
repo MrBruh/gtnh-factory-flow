@@ -137,6 +137,8 @@ type ResourceEdgeData = {
 
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
+type SlotEdgeEndpoint = { x: number; y: number; side: Position };
+
 type DraggedResourceConnection = Pick<
   ResourceAmount,
   | "kind"
@@ -1102,7 +1104,7 @@ function ResourceEdge({
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
   const edgeColor = resourceColor;
-  const visualSource = getSlotEdgeEndpoint({
+  const visualSourceCandidates = getSlotEdgeEndpointCandidates({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
     position: sourcePosition,
@@ -1114,7 +1116,7 @@ function ResourceEdge({
     counterpartX: targetX,
     counterpartY: targetY,
   });
-  const visualTarget = getSlotEdgeEndpoint({
+  const visualTargetCandidates = getSlotEdgeEndpointCandidates({
     nodeId: target,
     handleId: data?.targetHandleId ?? targetHandleId,
     position: targetPosition,
@@ -1126,6 +1128,8 @@ function ResourceEdge({
     counterpartX: sourceX,
     counterpartY: sourceY,
   });
+  const visualSource = visualSourceCandidates[0];
+  const visualTarget = visualTargetCandidates[0];
   const rate = data?.bundle?.demand
     ? `${formatEdgeValue(data.bundle.demand)} ${data.unit}`
     : formatEdgeRateLabel(data);
@@ -1169,10 +1173,12 @@ function ResourceEdge({
         : getDirectEdgePath({
             edgeId: id,
             sourceNodeId: source,
+            sourceCandidates: visualSourceCandidates,
             sourceX: visualSource.x,
             sourceY: visualSource.y,
             sourcePosition: visualSource.side,
             targetNodeId: target,
+            targetCandidates: visualTargetCandidates,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
@@ -1641,10 +1647,12 @@ function getDirectEdgePath({
   laneOffset = 0,
   routePriority,
   sourceNodeId,
+  sourceCandidates,
   sourceX,
   sourceY,
   sourcePosition,
   targetNodeId,
+  targetCandidates,
   targetX,
   targetY,
   targetPosition,
@@ -1654,11 +1662,13 @@ function getDirectEdgePath({
   routePriority?: number;
   sourceNodeId?: string;
   sourceIsRecipeNode?: boolean;
+  sourceCandidates?: SlotEdgeEndpoint[];
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
   targetNodeId?: string;
   targetIsRecipeNode?: boolean;
+  targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
   targetY: number;
   targetPosition: Position;
@@ -1669,10 +1679,12 @@ function getDirectEdgePath({
       laneOffset,
       routePriority,
       sourceNodeId,
+      sourceCandidates,
       sourceX,
       sourceY,
       sourcePosition,
       targetNodeId,
+      targetCandidates,
       targetX,
       targetY,
       targetPosition,
@@ -1758,10 +1770,12 @@ function getBestDirectEdgePoints({
   laneOffset,
   routePriority,
   sourceNodeId,
+  sourceCandidates,
   sourceX,
   sourceY,
   sourcePosition,
   targetNodeId,
+  targetCandidates,
   targetX,
   targetY,
   targetPosition,
@@ -1770,25 +1784,40 @@ function getBestDirectEdgePoints({
   laneOffset: number;
   routePriority?: number;
   sourceNodeId?: string;
+  sourceCandidates?: SlotEdgeEndpoint[];
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
   targetNodeId?: string;
+  targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
   targetY: number;
   targetPosition: Position;
 }) {
-  const candidates = getDirectEdgePointCandidates({
-    laneOffset,
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
   const nodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
   const renderedEdgeSegments = getRenderedEdgeSegments(edgeId, routePriority);
+  const sourceEndpoints =
+    sourceCandidates && sourceCandidates.length > 0
+      ? sourceCandidates
+      : [{ x: sourceX, y: sourceY, side: sourcePosition }];
+  const targetEndpoints =
+    targetCandidates && targetCandidates.length > 0
+      ? targetCandidates
+      : [{ x: targetX, y: targetY, side: targetPosition }];
+
+  const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
+    targetEndpoints.flatMap((targetEndpoint) =>
+      getDirectEdgePointCandidates({
+        laneOffset,
+        sourceX: sourceEndpoint.x,
+        sourceY: sourceEndpoint.y,
+        sourcePosition: sourceEndpoint.side,
+        targetX: targetEndpoint.x,
+        targetY: targetEndpoint.y,
+        targetPosition: targetEndpoint.side,
+      }),
+    ),
+  );
 
   return candidates
     .map((points) => ({
@@ -2825,7 +2854,7 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getSlotEdgeEndpoint({
+function getSlotEdgeEndpointCandidates({
   nodeId,
   handleId,
   position,
@@ -2848,13 +2877,14 @@ function getSlotEdgeEndpoint({
   counterpartX?: number;
   counterpartY?: number;
 }) {
+  const estimatedSide = positionToEdgeSide(position);
   if (!isRecipeSlotEndpoint && !isStorageSlotEndpoint) {
-    return { x: estimatedX, y: estimatedY, side: positionToEdgeSide(position) };
+    return [{ x: estimatedX, y: estimatedY, side: estimatedSide }];
   }
 
   const handle = parseResourceHandleId(handleId);
   const logicalRecipeSide = handle?.side === "input" ? Position.Left : Position.Right;
-  const edgeSide =
+  const preferredSide =
     isRecipeSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
       ? getRecipeSlotEdgeSideTowardPoint({
           nodeId,
@@ -2873,10 +2903,49 @@ function getSlotEdgeEndpoint({
             estimatedY,
             counterpartX,
             counterpartY,
-            estimatedSide: positionToEdgeSide(position),
+            estimatedSide,
           })
-        : positionToEdgeSide(position);
+        : estimatedSide;
+  const sides = dedupeEdgeSides([
+    preferredSide,
+    isRecipeSlotEndpoint ? logicalRecipeSide : estimatedSide,
+    estimatedSide,
+    Position.Bottom,
+    Position.Top,
+    Position.Left,
+    Position.Right,
+  ]);
 
+  return sides.map((edgeSide) =>
+    getSlotEdgeEndpointForSide({
+      nodeId,
+      handleId,
+      edgeSide,
+      estimatedX,
+      estimatedY,
+      endpointOffset,
+      isStorageSlotEndpoint,
+    }),
+  );
+}
+
+function getSlotEdgeEndpointForSide({
+  nodeId,
+  handleId,
+  edgeSide,
+  estimatedX,
+  estimatedY,
+  endpointOffset,
+  isStorageSlotEndpoint,
+}: {
+  nodeId: string;
+  handleId?: string | null;
+  edgeSide: Position;
+  estimatedX: number;
+  estimatedY: number;
+  endpointOffset?: number;
+  isStorageSlotEndpoint?: boolean;
+}): SlotEdgeEndpoint {
   const measuredEndpoint = getMeasuredSlotEndpoint({
     nodeId,
     handleId,
@@ -2891,25 +2960,37 @@ function getSlotEdgeEndpoint({
   const endpointLaneOffset = endpointOffset ?? 0;
 
   switch (edgeSide) {
-    case "right":
+    case Position.Right:
       return {
         x: estimatedX + (isStorageSlotEndpoint ? -offset : offset),
         y: estimatedY + endpointLaneOffset,
         side: edgeSide,
       };
-    case "left":
+    case Position.Left:
       return {
         x: estimatedX + (isStorageSlotEndpoint ? offset : -offset),
         y: estimatedY + endpointLaneOffset,
         side: edgeSide,
       };
-    case "top":
+    case Position.Top:
       return { x: estimatedX + endpointLaneOffset, y: estimatedY - offset, side: edgeSide };
-    case "bottom":
+    case Position.Bottom:
       return { x: estimatedX + endpointLaneOffset, y: estimatedY + offset, side: edgeSide };
     default:
       return { x: estimatedX, y: estimatedY, side: edgeSide };
   }
+}
+
+function dedupeEdgeSides(sides: Position[]) {
+  const seen = new Set<string>();
+  return sides.filter((side) => {
+    const key = String(side);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 function positionToEdgeSide(position: unknown): Position {
