@@ -65,6 +65,50 @@ const pipeCasingTiers = [
   { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
 ];
 
+const solenoidTiers = [
+  { key: "mv", label: "MV", blockId: "gregtech:gt.blockcasings.cyclotron_coils", voltageTier: 2 },
+  { key: "hv", label: "HV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@1", voltageTier: 3 },
+  { key: "ev", label: "EV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@2", voltageTier: 4 },
+  { key: "iv", label: "IV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@3", voltageTier: 5 },
+  {
+    key: "luv",
+    label: "LuV",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@4",
+    voltageTier: 6,
+  },
+  {
+    key: "zpm",
+    label: "ZPM",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@5",
+    voltageTier: 7,
+  },
+  { key: "uv", label: "UV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@6", voltageTier: 8 },
+  {
+    key: "uhv",
+    label: "UHV",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@7",
+    voltageTier: 9,
+  },
+  {
+    key: "uev",
+    label: "UEV",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@8",
+    voltageTier: 10,
+  },
+  {
+    key: "uiv",
+    label: "UIV",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@9",
+    voltageTier: 11,
+  },
+  {
+    key: "umv",
+    label: "UMV",
+    blockId: "gregtech:gt.blockcasings.cyclotron_coils@10",
+    voltageTier: 12,
+  },
+];
+
 const treeGrowthSimulatorTools = {
   log: [
     { key: "saw", label: "Saw", multiplier: 1, id: "gregtech:gt.metatool.01@10" },
@@ -335,6 +379,7 @@ function addRecipe(recipe) {
     ...recipe.inputs,
     ...recipe.outputs,
     ...machineConfigResources(recipe.machineConfigControls),
+    ...machineHandlerConfigResources(recipe.machineHandlers),
   ]) {
     addResource(resource);
   }
@@ -428,6 +473,50 @@ function machineConfigControlsForRecipe(machineType, specialValue) {
   return controls.length > 0 ? controls : undefined;
 }
 
+function machineConfigControlsForMachineHandler(label) {
+  if (normalizeLabel(label) !== "large fluid extractor") {
+    return undefined;
+  }
+
+  return [
+    {
+      id: "heatingCoil",
+      label: "Heating Coil",
+      minimumKey: heatingCoilTiers[0].key,
+      defaultKey: heatingCoilTiers[0].key,
+      tiers: heatingCoilTiers.map((tier, index) => ({
+        key: tier.key,
+        label: tier.label,
+        heat: tier.heat,
+        durationMultiplier: 1 / (1.5 + 0.1 * index),
+        eutMultiplier: 0.8 * 0.9 ** index,
+        resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
+          "Heating coil tier",
+          `Heat capacity: ${tier.heat} K`,
+          `Duration multiplier: ${formatMultiplier(1 / (1.5 + 0.1 * index))}`,
+          `EU/t multiplier: ${formatMultiplier(0.8 * 0.9 ** index)}`,
+        ]),
+      })),
+    },
+    {
+      id: "solenoidCoil",
+      label: "Solenoid",
+      minimumKey: solenoidTiers[0].key,
+      defaultKey: solenoidTiers[0].key,
+      tiers: solenoidTiers.map((tier) => ({
+        key: tier.key,
+        label: tier.label,
+        parallelMultiplier: 8 * tier.voltageTier,
+        resource: machineConfigResource(
+          tier.blockId,
+          `${tier.label} Solenoid Superconductor Coil`,
+          ["Solenoid tier", `Parallels: ${8 * tier.voltageTier}`],
+        ),
+      })),
+    },
+  ];
+}
+
 function treeGrowthSimulatorToolControl(id, label, tools) {
   return {
     id,
@@ -475,6 +564,12 @@ function machineToolInput(tool, neiSlot) {
 function machineConfigResources(controls) {
   return (controls ?? []).flatMap((control) =>
     (control.tiers ?? []).map((tier) => tier.resource).filter(Boolean),
+  );
+}
+
+function machineHandlerConfigResources(handlers) {
+  return (handlers ?? []).flatMap((handler) =>
+    machineConfigResources(handler.machineConfigControls),
   );
 }
 
@@ -551,10 +646,15 @@ function machineHandlersFromCatalysts(
       machineType: label,
       minimumTier: inferCatalystMinimumTier(label, minimumTierWhenUnknown),
       kind: inferCatalystKind(label, minimumTierWhenUnknown),
+      machineConfigControls: machineConfigControlsForMachineHandler(label),
     });
   }
 
-  return handlersByFamily.size > 1 ? [...handlersByFamily.values()] : [];
+  const handlers = [...handlersByFamily.values()];
+  if (handlers.length > 1) {
+    return handlers;
+  }
+  return handlers.filter(shouldExposeSingleMachineHandler);
 }
 
 function addMachineHandlerFamily(handlersByFamily, handler) {
@@ -575,9 +675,14 @@ function addMachineHandlerFamily(handlersByFamily, handler) {
 
   handlersByFamily.set(familyId, {
     ...existing,
-    minimumTier: lowerKnownTier(existing.minimumTier, next.minimumTier),
+    minimumTier: mergeMachineHandlerTier(existing.minimumTier, next.minimumTier),
     kind: existing.kind === next.kind ? existing.kind : (existing.kind ?? next.kind),
+    machineConfigControls: existing.machineConfigControls ?? next.machineConfigControls,
   });
+}
+
+function shouldExposeSingleMachineHandler(handler) {
+  return handler.kind === "multiblock" || Boolean(handler.machineConfigControls?.length);
 }
 
 function machineHandlerFamilyLabel(label) {
@@ -624,6 +729,20 @@ function lowerKnownTier(left, right) {
     return left;
   }
   return leftIndex <= rightIndex ? left : right;
+}
+
+function mergeMachineHandlerTier(left, right) {
+  if (left === "NONE" && isVoltageTier(right)) {
+    return right;
+  }
+  if (right === "NONE" && isVoltageTier(left)) {
+    return left;
+  }
+  return lowerKnownTier(left, right);
+}
+
+function isVoltageTier(tier) {
+  return tier && tier !== "NONE" && tier !== "UNKNOWN";
 }
 
 function isTimedAutomatedCraftingCatalyst(label) {
@@ -695,7 +814,12 @@ function inferCatalystKind(label, minimumTierWhenUnknown) {
   if (normalized.includes("workbench") || normalized.includes("assembler machine")) {
     return "automation";
   }
-  if (normalized.includes("multiblock") || normalized.includes("controller")) {
+  if (
+    normalized.includes("multiblock") ||
+    normalized.includes("controller") ||
+    normalized.startsWith("large ") ||
+    normalized.startsWith("industrial ")
+  ) {
     return "multiblock";
   }
   if (minimumTierWhenUnknown === "NONE") {

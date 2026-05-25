@@ -100,6 +100,7 @@ export interface MachineHandler extends MachineProfile {
   id: string;
   label: string;
   kind?: "single" | "multiblock" | "crafting" | "automation";
+  machineConfigControls?: MachineConfigControl[];
 }
 
 export interface MachineConfigTierOption {
@@ -107,6 +108,7 @@ export interface MachineConfigTierOption {
   label: string;
   heat?: number;
   durationMultiplier?: number;
+  eutMultiplier?: number;
   outputMultiplier?: number;
   parallelMultiplier?: number;
   resource: ResourceAmount;

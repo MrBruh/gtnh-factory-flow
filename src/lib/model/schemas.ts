@@ -90,12 +90,6 @@ export const machineProfileSchema = z.object({
   notes: z.string().optional(),
 });
 
-export const machineHandlerSchema = machineProfileSchema.extend({
-  id: z.string().min(1),
-  label: z.string().min(1),
-  kind: z.enum(["single", "multiblock", "crafting", "automation"]).optional(),
-});
-
 export const machineConfigControlSchema = z.object({
   id: z.string().min(1),
   label: z.string().min(1),
@@ -108,12 +102,20 @@ export const machineConfigControlSchema = z.object({
         label: z.string().min(1),
         heat: z.number().int().positive().optional(),
         durationMultiplier: z.number().positive().optional(),
+        eutMultiplier: z.number().positive().optional(),
         outputMultiplier: z.number().positive().optional(),
         parallelMultiplier: z.number().positive().optional(),
         resource: resourceAmountSchema,
       }),
     )
     .min(1),
+});
+
+export const machineHandlerSchema = machineProfileSchema.extend({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  kind: z.enum(["single", "multiblock", "crafting", "automation"]).optional(),
+  machineConfigControls: z.array(machineConfigControlSchema).optional(),
 });
 
 export const recipeSchema = z.object({

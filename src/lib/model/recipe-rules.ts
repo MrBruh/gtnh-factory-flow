@@ -61,12 +61,14 @@ export function applyMachineHandlerToRecipe(
   node: Pick<FactoryNode, "machineHandlerId">,
 ): Recipe {
   const handler = getSelectedMachineHandler(recipe, node);
+  const machineConfigControls = handler.machineConfigControls ?? recipe.machineConfigControls;
   return {
     ...recipe,
     machineType: handler.machineType,
     minimumTier: handler.minimumTier,
     durationTicks: handler.durationTicks ?? recipe.durationTicks,
     eut: handler.eut ?? recipe.eut,
+    machineConfigControls,
     machineProfile: {
       ...recipe.machineProfile,
       machineType: handler.machineType,

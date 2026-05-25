@@ -935,7 +935,9 @@ function applyUsesResourceContext<T extends RecipeSummary>(
       iconPath: selected.iconPath ?? input.iconPath,
       iconAtlas: selected.iconAtlas ?? input.iconAtlas,
       dominantColor: selected.dominantColor ?? input.dominantColor,
-      tooltip: "tooltip" in selected ? (selected.tooltip ?? input.tooltip) : input.tooltip,
+      tooltip: "tooltip" in selected ? selected.tooltip : undefined,
+      alternatives: undefined,
+      oreDictionary: undefined,
     };
   });
 

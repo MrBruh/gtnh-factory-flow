@@ -80,6 +80,19 @@ export function getMachineDurationMultiplier(
   return coilMultiplier * configMultiplier;
 }
 
+export function getMachineEutMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "coilTier" | "machineConfigTiers">,
+): number {
+  const coilControl = getRecipeCoilTierControl(recipe, node);
+  const coilMultiplier = coilControl?.current.eutMultiplier ?? 1;
+  const configMultiplier = getRecipeMachineConfigTierControls(recipe, node).reduce(
+    (multiplier, control) => multiplier * (control.current.eutMultiplier ?? 1),
+    1,
+  );
+  return coilMultiplier * configMultiplier;
+}
+
 function getTreeGrowthSimulatorOutputCategory(output: RecipeOutput) {
   const slot = output.neiSlot;
   if (slot?.x === 108 && slot.y === 36) {

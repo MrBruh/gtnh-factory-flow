@@ -648,7 +648,7 @@ function useResourcePageSize(
 
 interface IndexedResource extends Pick<
   ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip"
 > {
   recipeCount: number;
 }
@@ -1269,6 +1269,7 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     inputs: summary.inputs,
     outputs: summary.outputs,
     programmedCircuit: summary.programmedCircuit,
+    machineHandlers: summary.machineHandlers,
     machineConfigControls: summary.machineConfigControls,
     source: summary.source,
     nei: summary.nei,
@@ -1302,7 +1303,8 @@ function contextualizeRecipeForSelectedResource(
         iconPath: resource.iconPath ?? input.iconPath,
         iconAtlas: resource.iconAtlas ?? input.iconAtlas,
         dominantColor: resource.dominantColor ?? input.dominantColor,
-        alternatives: input.alternatives,
+        tooltip: resource.tooltip,
+        alternatives: undefined,
       };
     });
 

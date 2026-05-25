@@ -4,7 +4,7 @@ import {
   getRecipeCoilTierControl,
   getRecipeSpecialValue,
 } from "@/lib/model/recipe-rules";
-import { getMachineDurationMultiplier } from "./machine-effects";
+import { getMachineDurationMultiplier, getMachineEutMultiplier } from "./machine-effects";
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
@@ -57,6 +57,9 @@ export function getOverclockedRecipeStats(
   const durationMultiplier = effectiveRecipe.machineType
     ? getMachineDurationMultiplier(effectiveRecipe as Recipe, node)
     : 1;
+  const eutMultiplier = effectiveRecipe.machineType
+    ? getMachineEutMultiplier(effectiveRecipe as Recipe, node)
+    : 1;
 
   return {
     tier,
@@ -69,7 +72,11 @@ export function getOverclockedRecipeStats(
         2 ** heatOverclock.regularOverclockSteps) *
         durationMultiplier,
     ),
-    eut: effectiveRecipe.eut * heatOverclock.heatDiscountMultiplier * 4 ** overclockSteps,
+    eut:
+      effectiveRecipe.eut *
+      heatOverclock.heatDiscountMultiplier *
+      eutMultiplier *
+      4 ** overclockSteps,
   };
 }
 

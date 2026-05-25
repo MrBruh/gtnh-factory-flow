@@ -65,6 +65,47 @@ describe("recipe machine handlers", () => {
       },
     });
   });
+
+  it("applies controls from the selected machine handler", () => {
+    const recipe: Recipe = {
+      ...testRecipe("Fluid Extractor"),
+      machineHandlers: [
+        {
+          id: "large-fluid-extractor",
+          label: "Large Fluid Extractor",
+          machineType: "Large Fluid Extractor",
+          minimumTier: "EV",
+          kind: "multiblock",
+          machineConfigControls: [
+            {
+              id: "solenoidCoil",
+              label: "Solenoid",
+              minimumKey: "mv",
+              tiers: [
+                {
+                  key: "mv",
+                  label: "MV",
+                  parallelMultiplier: 16,
+                  resource: {
+                    kind: "item",
+                    id: "gregtech:gt.blockcasings.cyclotron_coils",
+                    amount: 1,
+                    displayName: "MV Solenoid Superconductor Coil",
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const effective = applyMachineHandlerToRecipe(recipe, {
+      machineHandlerId: "large-fluid-extractor",
+    });
+
+    expect(effective.machineConfigControls?.map((control) => control.id)).toEqual(["solenoidCoil"]);
+  });
 });
 
 describe("multiblock machine config controls", () => {
