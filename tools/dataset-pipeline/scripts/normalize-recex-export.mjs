@@ -70,21 +70,6 @@ const pipeCasingTiers = [
   { key: "pbi", label: "PBI", blockId: "gregtech:gt.blockcasings9" },
 ];
 
-const industrialCokeOvenCasingTiers = [
-  {
-    key: "heat_resistant",
-    label: "Heat Resistant",
-    blockId: "miscutils:miscutils.blockcasings@1",
-    parallels: 18,
-  },
-  {
-    key: "heat_proof",
-    label: "Heat Proof",
-    blockId: "gregtech:gt.blockcasings@11",
-    parallels: 30,
-  },
-];
-
 const solenoidTiers = [
   { key: "mv", label: "MV", blockId: "gregtech:gt.blockcasings.cyclotron_coils", voltageTier: 2 },
   { key: "hv", label: "HV", blockId: "gregtech:gt.blockcasings.cyclotron_coils@1", voltageTier: 3 },
@@ -283,7 +268,7 @@ function normalizeGregtechRecipes(source) {
         machineType,
         minimumTier: "UNKNOWN",
         machineHandlers: machineHandlers.length > 0 ? machineHandlers : undefined,
-        machineConfigControls: machineConfigControlsForRecipe(machineType, rawRecipe.sp),
+        machineConfigControls: machineConfigControlsForRecipe(machineType, rawRecipe.sp, machine),
         durationTicks: rawRecipe.dur,
         eut: rawRecipe.eut ?? 0,
         inputs,
@@ -414,9 +399,10 @@ function addRecipe(recipe) {
   recipes.push(recipe);
 }
 
-function machineConfigControlsForRecipe(machineType, specialValue) {
+function machineConfigControlsForRecipe(machineType, specialValue, machine) {
   const controls = [];
   const normalized = normalizeLabel(machineType);
+  controls.push(...machineConfigControlsFromRawItems(machine?.cat, { scope: "recipe" }));
 
   if (isBlastFurnaceRecipeMap(normalized) && Number.isFinite(specialValue) && specialValue > 0) {
     const minimum = coilTierForHeat(specialValue);
@@ -439,110 +425,237 @@ function machineConfigControlsForRecipe(machineType, specialValue) {
     }
   }
 
-  if (isChemicalPlantRecipeMap(normalized)) {
-    controls.push({
-      id: "heatingCoil",
-      label: "Heating Coil",
-      minimumKey: heatingCoilTiers[0].key,
-      defaultKey: heatingCoilTiers[0].key,
-      tiers: heatingCoilTiers.map((tier, index) => ({
-        key: tier.key,
-        label: tier.label,
-        heat: tier.heat,
-        durationMultiplier: 2 / (index + 2),
-        resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
-          "Heating coil tier",
-          `Heat capacity: ${tier.heat} K`,
-          `Duration multiplier: ${formatMultiplier(2 / (index + 2))}`,
-        ]),
-      })),
-    });
-    controls.push({
-      id: "pipeCasing",
-      label: "Pipe Casing",
-      minimumKey: pipeCasingTiers[0].key,
-      defaultKey: pipeCasingTiers[0].key,
-      tiers: pipeCasingTiers.map((tier, index) => ({
-        key: tier.key,
-        label: tier.label,
-        parallelMultiplier: 2 * (index + 1),
-        resource: machineConfigResource(tier.blockId, `${tier.label} Pipe Casing`, [
-          "Pipe casing tier",
-          `Parallels: ${2 * (index + 1)}`,
-          `${tier.label} pipe casing`,
-        ]),
-      })),
-    });
-  }
-
-  if (isIndustrialCokeOvenRecipeMap(normalized)) {
-    controls.push({
-      id: "industrialCokeOvenCasing",
-      label: "Casing",
-      minimumKey: industrialCokeOvenCasingTiers[0].key,
-      defaultKey: industrialCokeOvenCasingTiers[0].key,
-      tiers: industrialCokeOvenCasingTiers.map((tier) => ({
-        key: tier.key,
-        label: tier.label,
-        parallelMultiplier: tier.parallels,
-        resource: machineConfigResource(tier.blockId, `${tier.label} Casing`, [
-          "Industrial Coke Oven casing tier",
-          `Parallels: ${tier.parallels}`,
-          `${tier.label} casing`,
-        ]),
-      })),
-    });
-  }
-
   if (isTreeGrowthSimulatorRecipeMap(normalized)) {
     controls.push(...treeGrowthSimulatorToolSlots.map(treeGrowthSimulatorToolSlotControl));
   }
 
-  return controls.length > 0 ? controls : undefined;
+  return mergeMachineConfigControls(controls);
 }
 
-function machineConfigControlsForMachineHandler(label) {
-  if (normalizeLabel(label) !== "large fluid extractor") {
+function machineConfigControlsForMachineHandler(label, rawItem) {
+  return mergeMachineConfigControls(machineConfigControlsFromRawItems([rawItem], { scope: "handler" }));
+}
+
+function machineConfigControlsFromRawItems(items, { scope }) {
+  const lines = (items ?? [])
+    .flatMap((item) => (Array.isArray(item?.tt) ? item.tt : []))
+    .map((line) => text(line, "").replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+  if (lines.length === 0) {
+    return [];
+  }
+
+  const controls = [];
+  const directParallelTiers = new Map();
+
+  for (const line of lines) {
+    const perTier = /(?:^|\b)(\d+)\s+Parallels?\s+per\s+(.+?)\s+Tier\b/i.exec(line);
+    if (perTier) {
+      const factor = Number.parseInt(perTier[1], 10);
+      const tierSubject = perTier[2];
+      const tierControl = tieredParallelControlFromSubject(tierSubject, factor, line);
+      if (tierControl) {
+        controls.push(tierControl);
+      }
+      continue;
+    }
+
+    const baseAndSlice =
+      /(?:^|\b)(\d+)\s+base\s+and\s+\+(\d+)\s+Parallels?\s+per\s+extra\s+slice\s+with\s+(.+)$/i.exec(
+        line,
+      );
+    if (baseAndSlice) {
+      const parallels = Number.parseInt(baseAndSlice[1], 10);
+      addDirectParallelTier(directParallelTiers, baseAndSlice[3], parallels, line, scope);
+      continue;
+    }
+
+    const direct = /(?:^|\b)(\d+)\s+Parallels?\s+with\s+(.+)$/i.exec(line);
+    if (direct) {
+      const parallels = Number.parseInt(direct[1], 10);
+      addDirectParallelTier(directParallelTiers, direct[2], parallels, line, scope);
+    }
+  }
+
+  for (const tiers of directParallelTiers.values()) {
+    if (tiers.length === 0) {
+      continue;
+    }
+    controls.push({
+      id: scope === "recipe" ? "machineParallel" : `machineParallel${capitalize(scope)}`,
+      label: directParallelControlLabel(tiers),
+      minimumKey: tiers[0].key,
+      defaultKey: tiers[0].key,
+      tiers,
+    });
+  }
+
+  return controls;
+}
+
+function addDirectParallelTier(tiersByControl, subject, parallels, line, scope) {
+  if (!Number.isFinite(parallels) || parallels <= 1) {
+    return;
+  }
+  const label = directParallelTierLabel(subject);
+  const key = slug(label);
+  const controlKey = directParallelControlSubject(subject);
+  const resource = findRawItemResourceByLabel(label) ?? virtualMachineConfigResource(key, label);
+  const tiers = tiersByControl.get(controlKey) ?? [];
+  if (!tiers.some((tier) => tier.key === key)) {
+    tiers.push({
+      key,
+      label,
+      parallelMultiplier: parallels,
+      resource: {
+        ...resource,
+        displayName: resource.displayName ?? label,
+        tooltip: ["Imported from machine tooltip", line, `Parallels: ${parallels}`],
+      },
+    });
+  }
+  tiersByControl.set(controlKey, tiers);
+}
+
+function tieredParallelControlFromSubject(subject, factor, line) {
+  if (!Number.isFinite(factor) || factor <= 0) {
     return undefined;
   }
 
-  return [
-    {
-      id: "heatingCoil",
-      label: "Heating Coil",
-      minimumKey: heatingCoilTiers[0].key,
-      defaultKey: heatingCoilTiers[0].key,
-      tiers: heatingCoilTiers.map((tier, index) => ({
-        key: tier.key,
-        label: tier.label,
-        heat: tier.heat,
-        durationMultiplier: 1 / (1.5 + 0.1 * index),
-        eutMultiplier: 0.8 * 0.9 ** index,
-        resource: machineConfigResource(tier.blockId, `${tier.label} Coil Block`, [
-          "Heating coil tier",
-          `Heat capacity: ${tier.heat} K`,
-          `Duration multiplier: ${formatMultiplier(1 / (1.5 + 0.1 * index))}`,
-          `EU/t multiplier: ${formatMultiplier(0.8 * 0.9 ** index)}`,
-        ]),
-      })),
-    },
-    {
+  const normalized = normalizeLabel(subject);
+  if (normalized.includes("pipe casing")) {
+    return buildTieredParallelControl({
+      id: "pipeCasing",
+      label: "Pipe Casing",
+      tiers: tierResources(pipeCasingTiers, "Pipe Casing"),
+      factor: (tier, index) => factor * (index + 1),
+      line,
+      tooltipPrefix: "Pipe casing tier",
+    });
+  }
+
+  if (normalized.includes("solenoid")) {
+    return buildTieredParallelControl({
       id: "solenoidCoil",
       label: "Solenoid",
-      minimumKey: solenoidTiers[0].key,
-      defaultKey: solenoidTiers[0].key,
-      tiers: solenoidTiers.map((tier) => ({
+      tiers: tierResources(solenoidTiers, "Solenoid Superconductor Coil"),
+      factor: (tier) => factor * tier.voltageTier,
+      line,
+      tooltipPrefix: "Solenoid tier",
+    });
+  }
+
+  return undefined;
+}
+
+function buildTieredParallelControl({ id, label, tiers, factor, line, tooltipPrefix }) {
+  const options = tiers
+    .map((tier, index) => {
+      const parallelMultiplier = factor(tier, index);
+      if (!Number.isFinite(parallelMultiplier) || parallelMultiplier <= 1) {
+        return undefined;
+      }
+      const resource = tier.resource ?? virtualMachineConfigResource(tier.key, tier.displayName);
+      return {
         key: tier.key,
         label: tier.label,
-        parallelMultiplier: 8 * tier.voltageTier,
-        resource: machineConfigResource(
-          tier.blockId,
-          `${tier.label} Solenoid Superconductor Coil`,
-          ["Solenoid tier", `Parallels: ${8 * tier.voltageTier}`],
-        ),
-      })),
-    },
-  ];
+        parallelMultiplier,
+        resource: {
+          ...resource,
+          displayName: resource.displayName ?? tier.displayName,
+          tooltip: [tooltipPrefix, line, `Parallels: ${parallelMultiplier}`],
+        },
+      };
+    })
+    .filter(Boolean);
+
+  if (options.length === 0) {
+    return undefined;
+  }
+
+  return {
+    id,
+    label,
+    minimumKey: options[0].key,
+    defaultKey: options[0].key,
+    tiers: options,
+  };
+}
+
+function tierResources(knownTiers, suffix) {
+  return knownTiers.map((tier) => {
+    const displayName = `${tier.label} ${suffix}`;
+    return {
+      ...tier,
+      displayName,
+      resource: findRawItemResourceByLabel(displayName) ?? machineConfigResource(tier.blockId, displayName),
+    };
+  });
+}
+
+function directParallelControlSubject(subject) {
+  const normalized = normalizeLabel(subject);
+  if (normalized.includes("casing")) {
+    return "casing";
+  }
+  return normalized || "parallel";
+}
+
+function directParallelControlLabel(tiers) {
+  return tiers.every((tier) => normalizeLabel(tier.label).includes("casing")) ? "Casing" : "Parallel";
+}
+
+function directParallelTierLabel(subject) {
+  return text(subject, "")
+    .replace(/\bwith\b/gi, "")
+    .replace(/\bcasings\b/gi, "Casing")
+    .replace(/\bcasing\b/gi, "Casing")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findRawItemResourceByLabel(label) {
+  const wanted = labelTokens(label);
+  if (wanted.length === 0) {
+    return undefined;
+  }
+
+  return rawItemResources.find((resource) => {
+    const candidate = labelTokens(resource.displayName ?? resource.id);
+    return wanted.every((token) => candidate.includes(token));
+  });
+}
+
+function labelTokens(label) {
+  return normalizeLabel(label)
+    .replace(/\bcasings\b/g, "casing")
+    .split(" ")
+    .filter((token) => token && token !== "any");
+}
+
+function virtualMachineConfigResource(key, displayName) {
+  return machineConfigResource(`factoryflow:machine_config/${key}`, displayName);
+}
+
+function mergeMachineConfigControls(controls) {
+  const byId = new Map();
+  for (const control of controls.filter(Boolean)) {
+    const existing = byId.get(control.id);
+    if (!existing) {
+      byId.set(control.id, control);
+      continue;
+    }
+    const tiersByKey = new Map(existing.tiers.map((tier) => [tier.key, tier]));
+    for (const tier of control.tiers) {
+      tiersByKey.set(tier.key, tiersByKey.get(tier.key) ?? tier);
+    }
+    byId.set(control.id, {
+      ...existing,
+      tiers: [...tiersByKey.values()],
+    });
+  }
+  const merged = [...byId.values()];
+  return merged.length > 0 ? merged : undefined;
 }
 
 function treeGrowthSimulatorToolSlotControl(slot) {
@@ -626,12 +739,6 @@ function machineConfigResource(id, displayName, tooltip) {
   };
 }
 
-function formatMultiplier(value) {
-  return Number.isInteger(value)
-    ? `${value}x`
-    : `${value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")}x`;
-}
-
 function capitalize(value) {
   return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
 }
@@ -646,19 +753,8 @@ function isBlastFurnaceRecipeMap(normalizedMachineType) {
   );
 }
 
-function isChemicalPlantRecipeMap(normalizedMachineType) {
-  return (
-    normalizedMachineType === "chemical plant" ||
-    normalizedMachineType === "exxonmobil chemical plant"
-  );
-}
-
 function isTreeGrowthSimulatorRecipeMap(normalizedMachineType) {
   return normalizedMachineType === "tree growth simulator";
-}
-
-function isIndustrialCokeOvenRecipeMap(normalizedMachineType) {
-  return normalizedMachineType === "industrial coke oven";
 }
 
 function machineHandlersFromCatalysts(
@@ -667,11 +763,15 @@ function machineHandlersFromCatalysts(
 ) {
   const handlersByFamily = new Map();
   const seen = new Set([slug(baseMachineType)]);
+  const entries = [
+    ...(catalysts ?? []).map((catalyst) => ({
+      resource: itemAmount(catalyst, { defaultAmount: 1 }),
+      rawItem: catalyst,
+    })),
+    ...additionalResources.map((resource) => ({ resource, rawItem: undefined })),
+  ];
 
-  for (const resource of [
-    ...(catalysts ?? []).map((catalyst) => itemAmount(catalyst, { defaultAmount: 1 })),
-    ...additionalResources,
-  ]) {
+  for (const { resource, rawItem } of entries) {
     if (!resource) {
       continue;
     }
@@ -698,7 +798,7 @@ function machineHandlersFromCatalysts(
       machineType: label,
       minimumTier: inferCatalystMinimumTier(label, minimumTierWhenUnknown),
       kind: inferCatalystKind(label, minimumTierWhenUnknown),
-      machineConfigControls: machineConfigControlsForMachineHandler(label),
+      machineConfigControls: machineConfigControlsForMachineHandler(label, rawItem),
     });
   }
 
