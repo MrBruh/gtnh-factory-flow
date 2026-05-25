@@ -95,6 +95,7 @@ const EDGE_LINK_CLEARANCE = 8;
 const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
+const EDGE_ROUTE_RELAXATION_PASSES = 2;
 const EXPORT_IMAGE_PADDING = 80;
 const EXPORT_PNG_PIXEL_RATIO = 1;
 const EXPORT_PNG_MAX_PIXEL_SIDE = 4096;
@@ -120,6 +121,7 @@ type ResourceEdgeData = {
   targetStorageEndpoint: boolean;
   sourceEndpointOffset?: number;
   targetEndpointOffset?: number;
+  routeIndex: number;
   bundle?: {
     role: "primary" | "member";
     mode: "single-target" | "multi-target";
@@ -137,6 +139,22 @@ type ResourceEdgeData = {
 type ResourceFlowEdge = Edge<ResourceEdgeData, "resourceEdge">;
 
 type SlotEdgeEndpoint = { x: number; y: number; side: Position };
+type RoutedEdgePath = {
+  path: string;
+  labelX: number;
+  labelY: number;
+  points: Array<{ x: number; y: number }>;
+};
+
+const directRouteCache = new Map<
+  string,
+  {
+    signature: string;
+    routeIndex: number;
+    route: RoutedEdgePath;
+    segments: ReturnType<typeof getPolylineSegments>;
+  }
+>();
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
@@ -288,7 +306,7 @@ export function FactoryFlow() {
     const edgeBundles = getEdgeBundles(project, project.edges, result.edges);
     const endpointOffsets = getEdgeEndpointOffsets(project);
 
-    return project.edges.map((edge) => {
+    return project.edges.map((edge, edgeIndex) => {
       const edgeResult = result.edges[edge.id];
       const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
@@ -340,6 +358,7 @@ export function FactoryFlow() {
           targetStorageEndpoint: Boolean(targetHandle && targetStorage),
           sourceEndpointOffset: endpointOffsets.get(`${edge.id}:source`),
           targetEndpointOffset: endpointOffsets.get(`${edge.id}:target`),
+          routeIndex: edgeIndex,
           bundle: edgeBundles.get(edge.id),
           isFlowHighlighted,
         },
@@ -1169,6 +1188,8 @@ function ResourceEdge({
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
           })
         : getDirectEdgePath({
+            edgeId: id,
+            routeIndex: data?.routeIndex ?? 0,
             sourceNodeId: source,
             sourceCandidates: visualSourceCandidates,
             sourceX: visualSource.x,
@@ -1638,7 +1659,9 @@ function getRepeatedOutputHandleIds(
 }
 
 function getDirectEdgePath({
+  edgeId,
   laneOffset = 0,
+  routeIndex,
   sourceNodeId,
   sourceCandidates,
   sourceX,
@@ -1650,7 +1673,9 @@ function getDirectEdgePath({
   targetY,
   targetPosition,
 }: {
+  edgeId?: string;
   laneOffset?: number;
+  routeIndex?: number;
   sourceNodeId?: string;
   sourceIsRecipeNode?: boolean;
   sourceCandidates?: SlotEdgeEndpoint[];
@@ -1666,7 +1691,9 @@ function getDirectEdgePath({
 }) {
   const points =
     getBestDirectEdgePoints({
+      edgeId,
       laneOffset,
+      routeIndex,
       sourceNodeId,
       sourceCandidates,
       sourceX,
@@ -1755,7 +1782,9 @@ function getSimpleOrthogonalEdgePoints({
 }
 
 function getBestDirectEdgePoints({
+  edgeId,
   laneOffset,
+  routeIndex,
   sourceNodeId,
   sourceCandidates,
   sourceX,
@@ -1767,7 +1796,9 @@ function getBestDirectEdgePoints({
   targetY,
   targetPosition,
 }: {
+  edgeId?: string;
   laneOffset: number;
+  routeIndex?: number;
   sourceNodeId?: string;
   sourceCandidates?: SlotEdgeEndpoint[];
   sourceX: number;
@@ -1789,6 +1820,18 @@ function getBestDirectEdgePoints({
       ? targetCandidates
       : [{ x: targetX, y: targetY, side: targetPosition }];
 
+  const routeSignature = getDirectRouteSignature({
+    laneOffset,
+    sourceEndpoints,
+    targetEndpoints,
+    nodeBounds,
+  });
+  const cachedRoute = edgeId ? directRouteCache.get(edgeId) : undefined;
+  if (cachedRoute?.signature === routeSignature) {
+    return cachedRoute.route.points;
+  }
+
+  const obstacleSegments = getIndexedRouteObstacleSegments(edgeId, routeIndex, routeSignature);
   const candidates = sourceEndpoints.flatMap((sourceEndpoint) =>
     targetEndpoints.flatMap((targetEndpoint) =>
       getDirectEdgePointCandidates({
@@ -1806,12 +1849,56 @@ function getBestDirectEdgePoints({
     ),
   );
 
-  return candidates
+  const bestRoute = candidates
     .map((candidate) => ({
       points: candidate.points,
-      score: scoreEdgeRoute(candidate.points, nodeBounds) + candidate.endpointPenalty,
+      score:
+        scoreEdgeRoute(candidate.points, nodeBounds, obstacleSegments) + candidate.endpointPenalty,
     }))
     .sort((left, right) => left.score - right.score)[0]?.points;
+  if (!bestRoute) {
+    return undefined;
+  }
+
+  let optimizedRoute = bestRoute;
+  let optimizedScore = scoreEdgeRoute(bestRoute, nodeBounds, obstacleSegments);
+  for (let pass = 0; pass < EDGE_ROUTE_RELAXATION_PASSES; pass += 1) {
+    const relaxedObstacleSegments = getIndexedRouteObstacleSegments(
+      edgeId,
+      routeIndex,
+      routeSignature,
+    );
+    const relaxedRoute = candidates
+      .map((candidate) => ({
+        points: candidate.points,
+        score:
+          scoreEdgeRoute(candidate.points, nodeBounds, relaxedObstacleSegments) +
+          candidate.endpointPenalty,
+      }))
+      .sort((left, right) => left.score - right.score)[0];
+    const currentScore = scoreEdgeRoute(optimizedRoute, nodeBounds, relaxedObstacleSegments);
+    if (
+      !relaxedRoute ||
+      relaxedRoute.score >= currentScore ||
+      relaxedRoute.score >= optimizedScore
+    ) {
+      break;
+    }
+    optimizedRoute = relaxedRoute.points;
+    optimizedScore = relaxedRoute.score;
+  }
+
+  if (edgeId && routeIndex !== undefined) {
+    const route = buildRoutedEdgePath(optimizedRoute);
+    directRouteCache.set(edgeId, {
+      signature: routeSignature,
+      routeIndex,
+      route,
+      segments: getPolylineSegments(optimizedRoute),
+    });
+  }
+
+  return optimizedRoute;
 }
 
 function getDirectEdgePointCandidates({
@@ -1892,6 +1979,110 @@ function getDirectEdgePointCandidates({
   }
 
   return dedupePolylineCandidates(candidates);
+}
+
+function getDirectRouteSignature({
+  laneOffset,
+  sourceEndpoints,
+  targetEndpoints,
+  nodeBounds,
+}: {
+  laneOffset: number;
+  sourceEndpoints: SlotEdgeEndpoint[];
+  targetEndpoints: SlotEdgeEndpoint[];
+  nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>;
+}) {
+  return JSON.stringify({
+    laneOffset,
+    source: sourceEndpoints.map(serializeSlotEdgeEndpoint),
+    target: targetEndpoints.map(serializeSlotEdgeEndpoint),
+    bounds: nodeBounds.map((bounds) => ({
+      left: quantizeRouteCoord(bounds.left),
+      right: quantizeRouteCoord(bounds.right),
+      top: quantizeRouteCoord(bounds.top),
+      bottom: quantizeRouteCoord(bounds.bottom),
+    })),
+  });
+}
+
+function serializeSlotEdgeEndpoint(endpoint: SlotEdgeEndpoint) {
+  return {
+    x: quantizeRouteCoord(endpoint.x),
+    y: quantizeRouteCoord(endpoint.y),
+    side: String(endpoint.side),
+  };
+}
+
+function quantizeRouteCoord(value: number) {
+  return Math.round(value * 4) / 4;
+}
+
+function getIndexedRouteObstacleSegments(
+  edgeId: string | undefined,
+  routeIndex: number | undefined,
+  routeSignature: string,
+) {
+  if (routeIndex === undefined) {
+    return [];
+  }
+
+  const segments: Array<{
+    edgeId: string;
+    start: { x: number; y: number };
+    end: { x: number; y: number };
+    length: number;
+  }> = [];
+
+  for (const [cachedEdgeId, cachedRoute] of directRouteCache) {
+    if (cachedEdgeId === edgeId || cachedRoute.routeIndex >= routeIndex) {
+      continue;
+    }
+
+    segments.push(
+      ...cachedRoute.segments.map((segment) => ({
+        ...segment,
+        edgeId: cachedEdgeId,
+      })),
+    );
+  }
+
+  pruneStaleDirectRoutes(edgeId, routeSignature, routeIndex);
+  return segments;
+}
+
+function pruneStaleDirectRoutes(
+  edgeId: string | undefined,
+  routeSignature: string,
+  routeIndex: number,
+) {
+  if (!edgeId) {
+    return;
+  }
+
+  const cachedRoute = directRouteCache.get(edgeId);
+  if (cachedRoute && cachedRoute.signature !== routeSignature) {
+    directRouteCache.delete(edgeId);
+  }
+
+  for (const [cachedEdgeId, cachedRouteEntry] of directRouteCache) {
+    if (cachedRouteEntry.routeIndex >= routeIndex + 128) {
+      directRouteCache.delete(cachedEdgeId);
+    }
+  }
+}
+
+function buildRoutedEdgePath(points: Array<{ x: number; y: number }>): RoutedEdgePath {
+  const labelPoint = getPointAtPolylineRatio(points, 0.5) ??
+    points[Math.floor(points.length / 2)] ?? {
+      x: 0,
+      y: 0,
+    };
+  return {
+    path: pointsToSvgPath(points),
+    labelX: labelPoint.x,
+    labelY: labelPoint.y,
+    points,
+  };
 }
 
 function scoreEdgeRoute(
