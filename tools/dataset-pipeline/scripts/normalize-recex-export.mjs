@@ -569,6 +569,8 @@ function addMachineHandlerFamily(handlersByFamily, handler) {
 
 function machineHandlerFamilyLabel(label) {
   return text(label, "")
+    .replace(/^(?:Basic|Advanced|Elite)\s+/i, "")
+    .replace(/^(?:Ultimate|Epic)\s+/i, "")
     .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)$/i, "")
     .replace(/\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, "")
     .trim();
@@ -576,10 +578,10 @@ function machineHandlerFamilyLabel(label) {
 
 function lowerKnownTier(left, right) {
   if (left === "UNKNOWN") {
-    return right;
+    return "UNKNOWN";
   }
   if (right === "UNKNOWN") {
-    return left;
+    return "UNKNOWN";
   }
 
   const tiers = [
