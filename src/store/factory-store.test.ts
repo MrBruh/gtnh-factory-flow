@@ -1160,9 +1160,7 @@ describe("factory machine count optimization", () => {
     useFactoryStore.getState().optimizeMachineCount("storage-source");
 
     expect(useFactoryStore.getState().project.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ id: "storage-source", machineCount: 1 }),
-      ]),
+      expect.arrayContaining([expect.objectContaining({ id: "storage-source", machineCount: 1 })]),
     );
   });
 
@@ -1170,7 +1168,9 @@ describe("factory machine count optimization", () => {
     const project = createMultiOutputSplitInputOptimizationProject();
     useFactoryStore.getState().setProject({
       ...project,
-      nodes: project.nodes.map((node) => (node.id === "source" ? { ...node, machineCount: 41 } : node)),
+      nodes: project.nodes.map((node) =>
+        node.id === "source" ? { ...node, machineCount: 41 } : node,
+      ),
     });
 
     useFactoryStore.getState().optimizeMachineCount("source");
@@ -1195,6 +1195,20 @@ describe("factory machine count optimization", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "input-source", machineCount: 1 }),
         expect.objectContaining({ id: "storage-producer", machineCount: 1 }),
+      ]),
+    );
+  });
+
+  it("combines direct and indirect storage output when optimizing a shared producer", () => {
+    useFactoryStore.getState().setProject(createDirectAndIndirectStorageOutputProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "coke-oven", machineCount: 1 }),
+        expect.objectContaining({ id: "fluid-extractor", machineCount: 1 }),
+        expect.objectContaining({ id: "distillation-tower", machineCount: 1 }),
       ]),
     );
   });
@@ -1782,7 +1796,9 @@ function createSplitStorageInputOptimizationProject(): FactoryProject {
         },
       },
     ],
-    storages: [{ id: "dust-storage", kind: "item", resourceId: "dust", position: { x: 160, y: 120 } }],
+    storages: [
+      { id: "dust-storage", kind: "item", resourceId: "dust", position: { x: 160, y: 120 } },
+    ],
     edges: [
       {
         id: "storage-source-to-storage",
@@ -1986,6 +2002,95 @@ function createSurplusStorageConsumerInputProject(): FactoryProject {
         id: "tank-to-storage-consumer",
         source: "woodtar-tank",
         target: "storage-consumer",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createDirectAndIndirectStorageOutputProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "direct-indirect-storage-output-optimization",
+    name: "Direct and indirect storage output optimization",
+    recipes: [
+      {
+        id: "coke-oven-recipe",
+        name: "Coke Oven",
+        machineType: "Coke Oven",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [
+          { kind: "item", id: "charcoal", amount: 6.25 },
+          { kind: "fluid", id: "woodtar", amount: 468.75 },
+        ],
+      },
+      {
+        id: "fluid-extractor-recipe",
+        name: "Fluid Extractor",
+        machineType: "Fluid Extractor",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "charcoal", amount: 100 }],
+        outputs: [{ kind: "fluid", id: "woodtar", amount: 10_000 }],
+      },
+      {
+        id: "distillation-tower-recipe",
+        name: "Distillation Tower",
+        machineType: "Distillation Tower",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "woodtar", amount: 1_000 }],
+        outputs: [{ kind: "fluid", id: "benzene", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("coke-oven", "coke-oven-recipe", 0),
+      makeNode("fluid-extractor", "fluid-extractor-recipe", 240),
+      {
+        ...makeNode("distillation-tower", "distillation-tower-recipe", 520),
+        targetOutput: {
+          kind: "fluid",
+          resourceId: "benzene",
+          amountPerSecond: 1,
+        },
+      },
+    ],
+    storages: [
+      { id: "woodtar-tank", kind: "fluid", resourceId: "woodtar", position: { x: 380, y: 120 } },
+    ],
+    edges: [
+      {
+        id: "coke-to-fluid-extractor",
+        source: "coke-oven",
+        target: "fluid-extractor",
+        resourceKind: "item",
+        resourceId: "charcoal",
+      },
+      {
+        id: "coke-to-tank",
+        source: "coke-oven",
+        target: "woodtar-tank",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+      {
+        id: "fluid-extractor-to-tank",
+        source: "fluid-extractor",
+        target: "woodtar-tank",
+        resourceKind: "fluid",
+        resourceId: "woodtar",
+      },
+      {
+        id: "tank-to-distillation-tower",
+        source: "woodtar-tank",
+        target: "distillation-tower",
         resourceKind: "fluid",
         resourceId: "woodtar",
       },

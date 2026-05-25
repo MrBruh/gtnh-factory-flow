@@ -40,6 +40,7 @@ export const RESOURCE_HISTORY_STORAGE_KEY = "gtnh-factory-flow.resource-history.
 const RESOURCE_HISTORY_LIMIT = 8;
 const PROJECT_HISTORY_LIMIT = 100;
 const CYCLIC_SMALL_BOTTLENECK_UTILIZATION = 1.2;
+const OPTIMIZATION_EPSILON = 0.000001;
 
 interface FactoryStore {
   project: FactoryProject;
@@ -1953,12 +1954,8 @@ function getOptimizableMachineCount(
   nodeResult: ThroughputResult["nodes"][string],
   result: ThroughputResult,
 ): number {
-  const requiredByResource = getOptimizableRequiredRates(
-    project,
-    node,
-    result,
-    createOptimizableDemandContext(project, result),
-  );
+  const context = createOptimizableDemandContext(project, result);
+  const requiredByResource = getOptimizableRequiredRates(project, node, result, context);
   if (node.targetOutput) {
     const targetKey = `${node.targetOutput.kind}:${node.targetOutput.resourceId}`;
     requiredByResource.set(
@@ -1981,6 +1978,24 @@ function getOptimizableMachineCount(
     );
   }
 
+  for (const contribution of getCombinedStorageContributions(
+    project,
+    node,
+    nodeResult,
+    result,
+    context,
+  )) {
+    const demand = context.storageOutgoingDemand.get(contribution.resourceKey) ?? 0;
+    if (demand <= 0 || contribution.amountPerMachine <= 0) {
+      continue;
+    }
+
+    theoreticalMachinesRequired = Math.max(
+      theoreticalMachinesRequired,
+      demand / contribution.amountPerMachine,
+    );
+  }
+
   return getOptimizedMachineCount(theoreticalMachinesRequired, node.machineCount);
 }
 
@@ -1999,8 +2014,23 @@ function getOptimizableRequiredRates(
 
     const key = `${edge.resourceKind}:${edge.resourceId}`;
     const targetStorage = context.storagesById.get(edge.target);
+    if (
+      targetStorage &&
+      getIndirectStorageContributionPerMachine(
+        project,
+        node,
+        result.nodes[node.id],
+        result,
+        context,
+        `${targetStorage.kind}:${targetStorage.resourceId}` as ResourceKey,
+      ) > OPTIMIZATION_EPSILON
+    ) {
+      continue;
+    }
+
     const requiredRate = targetStorage
-      ? (context.storageOutgoingDemand.get(key) ?? 0) / (context.storageIncomingCounts.get(key) ?? 1)
+      ? (context.storageOutgoingDemand.get(key) ?? 0) /
+        (context.storageIncomingCounts.get(key) ?? 1)
       : getOptimizableDirectEdgeDemand(project, edge, result, context);
 
     if (requiredRate > 0) {
@@ -2009,6 +2039,131 @@ function getOptimizableRequiredRates(
   }
 
   return requiredByResource;
+}
+
+type CombinedStorageContribution = {
+  resourceKey: ResourceKey;
+  amountPerMachine: number;
+};
+
+function getCombinedStorageContributions(
+  project: FactoryProject,
+  node: FactoryNode,
+  nodeResult: ThroughputResult["nodes"][string],
+  result: ThroughputResult,
+  context: OptimizableDemandContext,
+): CombinedStorageContribution[] {
+  const currentMachineCount = Math.max(1, node.machineCount);
+  const directByStorageResource = new Map<ResourceKey, number>();
+
+  for (const edge of project.edges) {
+    const storage = context.storagesById.get(edge.target);
+    if (edge.source !== node.id || !storage) {
+      continue;
+    }
+
+    const edgeKey = `${edge.resourceKind}:${edge.resourceId}` as ResourceKey;
+    const storageKey = `${storage.kind}:${storage.resourceId}` as ResourceKey;
+    const directPerMachine =
+      (nodeResult.outputs[edgeKey]?.amountPerSecond ?? 0) / currentMachineCount;
+    if (directPerMachine <= OPTIMIZATION_EPSILON) {
+      continue;
+    }
+
+    directByStorageResource.set(
+      storageKey,
+      (directByStorageResource.get(storageKey) ?? 0) + directPerMachine,
+    );
+  }
+
+  const contributions: CombinedStorageContribution[] = [];
+  for (const [resourceKey, directPerMachine] of directByStorageResource) {
+    const indirectPerMachine = getIndirectStorageContributionPerMachine(
+      project,
+      node,
+      nodeResult,
+      result,
+      context,
+      resourceKey,
+    );
+    if (indirectPerMachine <= OPTIMIZATION_EPSILON) {
+      continue;
+    }
+
+    contributions.push({
+      resourceKey,
+      amountPerMachine: directPerMachine + indirectPerMachine,
+    });
+  }
+
+  return contributions;
+}
+
+function getIndirectStorageContributionPerMachine(
+  project: FactoryProject,
+  node: FactoryNode,
+  nodeResult: ThroughputResult["nodes"][string] | undefined,
+  result: ThroughputResult,
+  context: OptimizableDemandContext,
+  storageResourceKey: ResourceKey,
+): number {
+  if (!nodeResult) {
+    return 0;
+  }
+
+  const currentMachineCount = Math.max(1, node.machineCount);
+  const countedConsumers = new Set<string>();
+  let contributionPerMachine = 0;
+
+  for (const edge of project.edges) {
+    if (edge.source !== node.id || context.storagesById.has(edge.target)) {
+      continue;
+    }
+
+    const sourceOutputKey = `${edge.resourceKind}:${edge.resourceId}` as ResourceKey;
+    const sourceOutputPerMachine =
+      (nodeResult.outputs[sourceOutputKey]?.amountPerSecond ?? 0) / currentMachineCount;
+    if (sourceOutputPerMachine <= OPTIMIZATION_EPSILON) {
+      continue;
+    }
+
+    const consumerResult = result.nodes[edge.target];
+    const consumerInputKey = (getEdgeTargetDemandKey(project, edge) ??
+      sourceOutputKey) as ResourceKey;
+    const consumerInput = consumerResult?.inputs[consumerInputKey]?.amountPerSecond ?? 0;
+    if (!consumerResult || consumerInput <= OPTIMIZATION_EPSILON) {
+      continue;
+    }
+
+    for (const consumerEdge of project.edges) {
+      const outputStorage = context.storagesById.get(consumerEdge.target);
+      if (consumerEdge.source !== edge.target || !outputStorage) {
+        continue;
+      }
+
+      const consumerOutputKey =
+        `${consumerEdge.resourceKind}:${consumerEdge.resourceId}` as ResourceKey;
+      const consumerStorageKey = `${outputStorage.kind}:${outputStorage.resourceId}` as ResourceKey;
+      if (consumerStorageKey !== storageResourceKey) {
+        continue;
+      }
+
+      const countedKey = `${edge.target}|${consumerInputKey}|${consumerOutputKey}`;
+      if (countedConsumers.has(countedKey)) {
+        continue;
+      }
+
+      const consumerOutput = consumerResult.outputs[consumerOutputKey]?.amountPerSecond ?? 0;
+      if (consumerOutput <= OPTIMIZATION_EPSILON) {
+        continue;
+      }
+
+      countedConsumers.add(countedKey);
+      contributionPerMachine += sourceOutputPerMachine * (consumerOutput / consumerInput);
+    }
+  }
+
+  return contributionPerMachine;
 }
 
 type OptimizableDemandContext = {
@@ -2057,7 +2212,8 @@ function getOptimizableDirectEdgeDemand(
     result,
     context,
   );
-  const incomingCount = context.incomingRecipeEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
+  const incomingCount =
+    context.incomingRecipeEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1;
   return (targetInput.amountPerSecond * targetUtilization) / incomingCount;
 }
 

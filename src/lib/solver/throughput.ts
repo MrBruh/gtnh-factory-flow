@@ -576,7 +576,13 @@ function refreshEdgeResultsFromNodeUtilization(
       sourceStorage || !sourceResult
         ? Number.POSITIVE_INFINITY
         : getEffectiveFlowRate(sourceResult.outputs[key], sourceResult.utilization);
-    const sourceCapacity = targetStorage ? sourceFullCapacity : sourceEffectiveCapacity;
+    const sourceCapacity = targetStorage
+      ? Math.max(
+          0,
+          sourceEffectiveCapacity -
+            (directDemandBySourceResource.get(`${edge.source}|${key}`) ?? 0),
+        ) / (storageSinkCounts.get(`${edge.source}|${key}`) ?? 1)
+      : sourceEffectiveCapacity;
     const targetCount = targetStorage
       ? (storageIncomingCounts.get(key) ?? 1)
       : (incomingEdgeCounts.get(`${edge.target}|${targetDemandKey}`) ?? 1);
@@ -727,12 +733,7 @@ function refreshNodeUtilizationFromEdgeResults(
       continue;
     }
 
-    addRequiredRate(
-      requiredByNodeAndResource,
-      edge.source,
-      key,
-      edgeResult.demandPerSecond,
-    );
+    addRequiredRate(requiredByNodeAndResource, edge.source, key, edgeResult.demandPerSecond);
   }
   applyProjectTarget(project, nodes, requiredByNodeAndResource);
 

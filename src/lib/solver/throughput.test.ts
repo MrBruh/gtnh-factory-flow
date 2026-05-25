@@ -393,7 +393,7 @@ describe("calculateThroughput", () => {
     expect(result.storages["dust-drawer"].netPerSecond).toBeCloseTo(6);
   });
 
-  it("displays producer surplus through storage sinks without forcing upstream usage", () => {
+  it("tracks effective storage transfer without forcing upstream usage", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "storage-effective-rate-project",
@@ -483,10 +483,10 @@ describe("calculateThroughput", () => {
     expect(result.nodes.consumer.utilization).toBeCloseTo(0.1);
     expect(result.nodes.source.utilization).toBeCloseTo(0.1);
     expect(result.edges["source-to-drawer"].demandPerSecond).toBeCloseTo(10);
-    expect(result.edges["source-to-drawer"].transferredPerSecond).toBeCloseTo(10);
-    expect(result.storages["dust-drawer-out"].producedPerSecond).toBeCloseTo(10);
+    expect(result.edges["source-to-drawer"].transferredPerSecond).toBeCloseTo(1);
+    expect(result.storages["dust-drawer-out"].producedPerSecond).toBeCloseTo(1);
     expect(result.storages["dust-drawer-out"].consumedPerSecond).toBeCloseTo(1);
-    expect(result.storages["dust-drawer-out"].netPerSecond).toBeCloseTo(9);
+    expect(result.storages["dust-drawer-out"].netPerSecond).toBeCloseTo(0);
     expect(result.resources["item:dust"].netPerSecond).toBeCloseTo(0);
   });
 
@@ -596,13 +596,13 @@ describe("calculateThroughput", () => {
     expect(result.edges["large-to-tank"].demandPerSecond).toBeCloseTo(25_600);
     expect(result.edges["tank-to-consumer"].demandPerSecond).toBeCloseTo(1_000);
     expect(result.edges["tank-to-consumer"].transferredPerSecond).toBeCloseTo(1_000);
-    expect(result.storages["woodtar-tank"].producedPerSecond).toBeCloseTo(26_100);
+    expect(result.storages["woodtar-tank"].producedPerSecond).toBeCloseTo(1_000);
     expect(result.storages["woodtar-tank"].consumedPerSecond).toBeCloseTo(1_000);
     expect(result.nodes["small-source"].utilization).toBeCloseTo(1);
     expect(result.nodes.consumer.utilization).toBeCloseTo(1);
   });
 
-  it("displays only remaining producer capacity to storage when consumers are directly connected", () => {
+  it("does not display unproduced remaining capacity to storage when consumers are directly connected", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "storage-direct-surplus-project",
@@ -680,8 +680,8 @@ describe("calculateThroughput", () => {
 
     expect(result.nodes.source.utilization).toBeCloseTo(0.2);
     expect(result.edges["source-to-consumer"].transferredPerSecond).toBeCloseTo(2);
-    expect(result.edges["source-to-drawer"].transferredPerSecond).toBeCloseTo(8);
-    expect(result.storages["dust-drawer"].netPerSecond).toBeCloseTo(8);
+    expect(result.edges["source-to-drawer"].transferredPerSecond).toBeCloseTo(0);
+    expect(result.storages["dust-drawer"].netPerSecond).toBeCloseTo(0);
   });
 
   it("does not add global target demand on top of output fully routed to storage", () => {
@@ -894,10 +894,10 @@ describe("calculateThroughput", () => {
     const result = calculateThroughput(project, { generatedAt: "fixed" });
 
     for (const storageId of ["dust-drawer-a", "dust-drawer-b"]) {
-      expect(result.storages[storageId].producedPerSecond).toBeCloseTo(5);
+      expect(result.storages[storageId].producedPerSecond).toBeCloseTo(2);
       expect(result.storages[storageId].consumedPerSecond).toBeCloseTo(2);
-      expect(result.storages[storageId].netPerSecond).toBeCloseTo(3);
-      expect(result.storages[storageId].status).toBe("filling");
+      expect(result.storages[storageId].netPerSecond).toBeCloseTo(0);
+      expect(result.storages[storageId].status).toBe("balanced");
     }
     expect(result.nodes.consumer.utilization).toBeCloseTo(1);
   });
