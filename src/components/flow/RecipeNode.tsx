@@ -370,6 +370,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
             suppressSlotHover={(slot) =>
               Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
             }
+            suppressConsumedState={(slot) =>
+              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
+            }
             getSlotZIndex={(slot) => {
               const control = getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls);
               if (!control) {

@@ -202,21 +202,24 @@ export function RecipeBrowser() {
 
   const handleAddRecipe = useCallback(
     async (recipeId: string) => {
-      const recipe = await getFullRecipe(recipeId, Boolean(activeResource));
-      addNodeForRecipe(
-        recipe,
-        activeResource
-          ? {
-              kind: activeResource.kind,
-              id: activeResource.id,
-              displayName: activeResource.displayName,
-              mode: browserMode,
-            }
-          : undefined,
+      const contextRecipe = filteredRecipes.find((recipe) => recipe.id === recipeId);
+      const contextResource = getRecipeAddContextResource(
+        activeResource,
+        browserMode,
+        contextRecipe,
       );
+      const recipe = await getFullRecipe(recipeId, Boolean(activeResource));
+      addNodeForRecipe(recipe, contextResource);
       clearResourceBrowser();
     },
-    [activeResource, addNodeForRecipe, browserMode, clearResourceBrowser, getFullRecipe],
+    [
+      activeResource,
+      addNodeForRecipe,
+      browserMode,
+      clearResourceBrowser,
+      filteredRecipes,
+      getFullRecipe,
+    ],
   );
 
   useEffect(() => {
@@ -1322,6 +1325,44 @@ function contextualizePreviewRecipe(
   });
 
   return changed ? { ...recipe, inputs, outputs } : recipe;
+}
+
+function getRecipeAddContextResource(
+  activeResource: (IndexedResource & { anchorNodeId?: string }) | undefined,
+  mode: "recipes" | "uses",
+  contextRecipe: RecipeSummary | undefined,
+):
+  | (Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+      mode: "recipes" | "uses";
+    })
+  | undefined {
+  if (!activeResource) {
+    return undefined;
+  }
+
+  if (mode === "uses") {
+    const contextInput = contextRecipe?.inputs.find(
+      (input) =>
+        input.kind === activeResource.kind &&
+        (input.id === activeResource.id ||
+          resourceMatchesInput({ kind: activeResource.kind, id: activeResource.id }, input)),
+    );
+    if (contextInput && !contextInput.id.startsWith("oredict:")) {
+      return {
+        kind: contextInput.kind,
+        id: contextInput.id,
+        displayName: contextInput.displayName ?? activeResource.displayName,
+        mode,
+      };
+    }
+  }
+
+  return {
+    kind: activeResource.kind,
+    id: activeResource.id,
+    displayName: activeResource.displayName,
+    mode,
+  };
 }
 
 function recipeHasRenderableIcons(recipe: Recipe) {

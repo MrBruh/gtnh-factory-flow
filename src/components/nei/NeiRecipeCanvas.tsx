@@ -25,6 +25,7 @@ interface NeiRecipeCanvasProps {
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
   suppressSlotHover?: (slot: NeiPositionedSlot) => boolean;
+  suppressConsumedState?: (slot: NeiPositionedSlot) => boolean;
   getSlotZIndex?: (slot: NeiPositionedSlot) => number | undefined;
   slotTooltip?: boolean;
 }
@@ -41,6 +42,7 @@ export function NeiRecipeCanvas({
   getSlotConnectionAttributes,
   onSlotClick,
   suppressSlotHover,
+  suppressConsumedState,
   getSlotZIndex,
   slotTooltip = true,
 }: NeiRecipeCanvasProps) {
@@ -105,6 +107,7 @@ export function NeiRecipeCanvas({
               getSlotConnectionAttributes={getSlotConnectionAttributes}
               onSlotClick={onSlotClick}
               suppressSlotHover={suppressSlotHover}
+              suppressConsumedState={suppressConsumedState}
               slotTooltip={slotTooltip}
               onOverflowClick={
                 frame.action === "overflow"
@@ -344,6 +347,7 @@ function NeiSlotFrameView({
   getSlotConnectionAttributes,
   onSlotClick,
   suppressSlotHover,
+  suppressConsumedState,
   slotTooltip,
   onOverflowClick,
   onCollapseClick,
@@ -354,6 +358,7 @@ function NeiSlotFrameView({
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
   suppressSlotHover?: (slot: NeiPositionedSlot) => boolean;
+  suppressConsumedState?: (slot: NeiPositionedSlot) => boolean;
   slotTooltip: boolean;
   onOverflowClick?: () => void;
   onCollapseClick?: () => void;
@@ -362,6 +367,7 @@ function NeiSlotFrameView({
   const isOverflow = frame.action === "overflow";
   const isCollapse = frame.action === "collapse";
   const shouldSuppressSlotHover = slot ? suppressSlotHover?.(slot) : false;
+  const shouldSuppressConsumedState = slot ? suppressConsumedState?.(slot) : false;
   const connectionAttributes = slot ? getSlotConnectionAttributes?.(slot) : undefined;
   const backgroundStyle = {
     backgroundImage: `url('${getSlotTexture(frame)}')`,
@@ -434,7 +440,7 @@ function NeiSlotFrameView({
           className="!h-full !w-full"
           iconPixelSize={iconPixelSize}
           tooltip={slotTooltip}
-          showConsumedState={false}
+          showConsumedState={!shouldSuppressConsumedState}
           bare
         />
       ) : null}

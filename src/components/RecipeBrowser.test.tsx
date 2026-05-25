@@ -47,6 +47,14 @@ const cokeOvenSummary: RecipeSummary = {
   ...cokeOvenRecipe,
   recipeMap: "Coke Oven",
   slots: [],
+  inputs: [
+    {
+      kind: "item",
+      id: "minecraft:log@1",
+      amount: 16,
+      displayName: "Spruce Log",
+    },
+  ],
 };
 
 vi.mock("@/lib/datasets/browser-loader", () => ({
