@@ -12,6 +12,7 @@ import {
 import {
   getChanceMultiplier,
   getResourceKey,
+  isOreDictionaryResource,
   isRecipeInputConsumed,
   resourceMatchesInput,
   resourceLabel,
@@ -301,7 +302,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       const recipesById = new Map(recipes.map((recipe) => [recipe.id, recipe] as const));
       const project = {
         ...state.project,
-        recipes: state.project.recipes.map((recipe) => recipesById.get(recipe.id) ?? recipe),
+        recipes: state.project.recipes.map((recipe) => {
+          const refreshedRecipe = recipesById.get(recipe.id);
+          return refreshedRecipe ? mergeRefreshedRecipe(recipe, refreshedRecipe) : recipe;
+        }),
         nodes: state.project.nodes.map((node) => {
           const recipe = state.project.recipes.find((entry) => entry.id === node.recipeId);
           const refreshedRecipe = recipe ? recipesById.get(recipe.id) : undefined;
@@ -1267,6 +1271,48 @@ function mergeRecipe(existing: Recipe, incoming: Recipe): Recipe {
     machineHandlers: incoming.machineHandlers ?? existing.machineHandlers,
     machineConfigControls: incoming.machineConfigControls ?? existing.machineConfigControls,
   };
+}
+
+function mergeRefreshedRecipe(existing: Recipe, incoming: Recipe): Recipe {
+  return {
+    ...incoming,
+    inputs: preserveContextualInputs(existing.inputs, incoming.inputs),
+  };
+}
+
+function preserveContextualInputs(
+  existingInputs: Recipe["inputs"],
+  refreshedInputs: Recipe["inputs"],
+): Recipe["inputs"] {
+  return refreshedInputs.map((refreshedInput, index) => {
+    const existingInput = existingInputs[index];
+    if (!existingInput || !shouldPreserveContextualInput(existingInput, refreshedInput)) {
+      return refreshedInput;
+    }
+
+    return {
+      ...refreshedInput,
+      id: existingInput.id,
+      displayName: existingInput.displayName ?? refreshedInput.displayName,
+      iconPath: existingInput.iconPath ?? refreshedInput.iconPath,
+      iconAtlas: existingInput.iconAtlas ?? refreshedInput.iconAtlas,
+      dominantColor: existingInput.dominantColor ?? refreshedInput.dominantColor,
+      tooltip: existingInput.tooltip ?? refreshedInput.tooltip,
+      alternatives: undefined,
+    };
+  });
+}
+
+function shouldPreserveContextualInput(
+  existingInput: Recipe["inputs"][number],
+  refreshedInput: Recipe["inputs"][number],
+): boolean {
+  return (
+    existingInput.kind === refreshedInput.kind &&
+    existingInput.id !== refreshedInput.id &&
+    !isOreDictionaryResource(existingInput) &&
+    resourceMatchesInput({ kind: existingInput.kind, id: existingInput.id }, refreshedInput)
+  );
 }
 
 function pruneOrphanStorages(project: FactoryProject): FactoryProject {

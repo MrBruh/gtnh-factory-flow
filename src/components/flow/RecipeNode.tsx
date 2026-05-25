@@ -701,7 +701,7 @@ function TreeGrowthSimulatorToolSlotMenu({
                 role="button"
                 tabIndex={0}
                 className={[
-                  "grid h-10 w-10 place-items-center border-2 text-[18px] font-bold leading-none",
+                  "grid h-12 w-12 place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
                   tier.key === control.current.key
                     ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
                     : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
@@ -732,8 +732,8 @@ function TreeGrowthSimulatorToolSlotMenu({
                     tooltip={false}
                     showAmount={false}
                     showConsumedState={false}
-                    iconPixelSize={46}
-                    className="h-9 w-9 !overflow-visible"
+                    iconPixelSize={36}
+                    className="h-10 w-10"
                   />
                 )}
               </span>

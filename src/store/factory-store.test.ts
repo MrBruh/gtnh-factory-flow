@@ -444,6 +444,75 @@ describe("project recipe refresh", () => {
     expect(useFactoryStore.getState().project.recipes[0]?.machineHandlers).toBeUndefined();
     expect(useFactoryStore.getState().project.nodes[0]?.machineHandlerId).toBeUndefined();
   });
+
+  it("preserves a concrete ore dictionary input selected on a recipe node", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "refresh-context-test",
+      name: "Refresh context test",
+      fuelProfiles: [],
+      recipes: [
+        {
+          id: "coke-oven-log",
+          name: "Coke Oven: Charcoal",
+          machineType: "Coke Oven",
+          minimumTier: "MV",
+          durationTicks: 256,
+          eut: 96,
+          inputs: [
+            {
+              kind: "item",
+              id: "minecraft:log@1",
+              amount: 16,
+              displayName: "Spruce Log",
+            },
+          ],
+          outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "node-1",
+          recipeId: "coke-oven-log",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "MV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+    });
+
+    useFactoryStore.getState().refreshProjectRecipes([
+      {
+        id: "coke-oven-log",
+        name: "Coke Oven: Charcoal",
+        machineType: "Coke Oven",
+        minimumTier: "MV",
+        durationTicks: 256,
+        eut: 96,
+        inputs: [
+          {
+            kind: "item",
+            id: "oredict:logWood",
+            amount: 16,
+            displayName: "Oak Log",
+            alternatives: [{ kind: "item", id: "minecraft:log@1" }],
+          },
+        ],
+        outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20 }],
+      },
+    ]);
+
+    expect(useFactoryStore.getState().project.recipes[0]?.inputs[0]).toEqual(
+      expect.objectContaining({
+        id: "minecraft:log@1",
+        displayName: "Spruce Log",
+        alternatives: undefined,
+      }),
+    );
+  });
 });
 
 describe("factory machine count optimization", () => {
@@ -511,9 +580,7 @@ describe("factory machine count optimization", () => {
 
     useFactoryStore.getState().optimizeMachineCounts();
 
-    const machineCounts = useFactoryStore
-      .getState()
-      .project.nodes.map((node) => node.machineCount);
+    const machineCounts = useFactoryStore.getState().project.nodes.map((node) => node.machineCount);
 
     expect(machineCounts.every((machineCount) => Number.isInteger(machineCount))).toBe(true);
     expect(Math.max(...machineCounts)).toBeLessThanOrEqual(2);
@@ -526,9 +593,7 @@ describe("factory machine count optimization", () => {
     useFactoryStore.getState().optimizeMachineCounts();
     useFactoryStore.getState().optimizeMachineCounts();
 
-    const machineCounts = useFactoryStore
-      .getState()
-      .project.nodes.map((node) => node.machineCount);
+    const machineCounts = useFactoryStore.getState().project.nodes.map((node) => node.machineCount);
 
     expect(machineCounts.every((machineCount) => Number.isInteger(machineCount))).toBe(true);
     expect(Math.max(...machineCounts)).toBeLessThanOrEqual(2);
