@@ -77,7 +77,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
   const machineHandlers = getRecipeMachineHandlers(recipe);
   const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
-  const effectiveRecipe = applyMachineHandlerToRecipe(recipe, projectNode);
+  const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
+  const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, projectNode);
   const recipePowerTier = getRecipePowerTier(effectiveRecipe);
   const tierControl = getNodeTierControl(effectiveRecipe, projectNode);
   const coilControl = getRecipeCoilTierControl(effectiveRecipe, projectNode);
@@ -95,7 +96,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const statsMachineConfigControls = machineConfigControls.filter(
     (control) => !isTreeGrowthSimulatorToolControl(control),
   );
-  const overclockedStats = getOverclockedRecipeStats(recipe, projectNode);
+  const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
   const displayRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
   const adjustedRecipe = applyMachineOutputMultipliers(
     displayRecipe,
@@ -495,6 +496,32 @@ function recipeContainsResourceKey(recipe: Recipe, resourceKey: string | undefin
 
 function normalizeSearch(value: string) {
   return value.trim().toLowerCase();
+}
+
+function applyRecipeInputOverrides(recipe: Recipe, node: FactoryNode): Recipe {
+  if (!node.recipeInputOverrides) {
+    return recipe;
+  }
+
+  let changed = false;
+  const inputs = recipe.inputs.map((input, index) => {
+    const override = node.recipeInputOverrides?.[String(index)];
+    if (!override) {
+      return input;
+    }
+    changed = true;
+    return {
+      ...input,
+      ...override,
+      amount: input.amount,
+      optional: input.optional,
+      consumed: input.consumed,
+      neiSlot: input.neiSlot,
+      alternatives: undefined,
+    };
+  });
+
+  return changed ? { ...recipe, inputs } : recipe;
 }
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;

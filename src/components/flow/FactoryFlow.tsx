@@ -87,6 +87,7 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
+const EDGE_LINK_CLEARANCE = 8;
 const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
@@ -1142,12 +1143,16 @@ function ResourceEdge({
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
           })
         : getDirectEdgePath({
+            edgeId: id,
+            sourceNodeId: source,
             sourceX: visualSource.x,
             sourceY: visualSource.y,
             sourcePosition: visualSource.side,
+            targetNodeId: target,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
+            laneOffset: getEdgeLaneOffset(id),
           });
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
@@ -1598,13 +1603,18 @@ function getRepeatedOutputHandleIds(
 }
 
 function getDirectEdgePath({
+  edgeId,
+  laneOffset = 0,
+  sourceNodeId,
   sourceX,
   sourceY,
   sourcePosition,
+  targetNodeId,
   targetX,
   targetY,
   targetPosition,
 }: {
+  edgeId?: string;
   laneOffset?: number;
   sourceNodeId?: string;
   sourceIsRecipeNode?: boolean;
@@ -1617,14 +1627,27 @@ function getDirectEdgePath({
   targetY: number;
   targetPosition: Position;
 }) {
-  const points = getSimpleOrthogonalEdgePoints({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+  const points =
+    getBestDirectEdgePoints({
+      edgeId,
+      laneOffset,
+      sourceNodeId,
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetNodeId,
+      targetX,
+      targetY,
+      targetPosition,
+    }) ??
+    getSimpleOrthogonalEdgePoints({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    });
   const labelPoint = getPointAtPolylineRatio(points, 0.5) ?? {
     x: (sourceX + targetX) / 2,
     y: (sourceY + targetY) / 2,
@@ -1691,6 +1714,170 @@ function getSimpleOrthogonalEdgePoints({
     targetExit,
     target,
   ]);
+}
+
+function getBestDirectEdgePoints({
+  edgeId,
+  laneOffset,
+  sourceNodeId,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetNodeId,
+  targetX,
+  targetY,
+  targetPosition,
+}: {
+  edgeId?: string;
+  laneOffset: number;
+  sourceNodeId?: string;
+  sourceX: number;
+  sourceY: number;
+  sourcePosition: Position;
+  targetNodeId?: string;
+  targetX: number;
+  targetY: number;
+  targetPosition: Position;
+}) {
+  const candidates = getDirectEdgePointCandidates({
+    laneOffset,
+    sourceX,
+    sourceY,
+    sourcePosition,
+    targetX,
+    targetY,
+    targetPosition,
+  });
+  const nodeBounds = getMeasuredAvoidanceNodeBounds([sourceNodeId, targetNodeId]);
+  const existingEdges = getMeasuredExistingEdgePoints(edgeId);
+
+  return candidates
+    .map((points) => ({
+      points,
+      score: scoreEdgeRoute(points, nodeBounds, existingEdges),
+    }))
+    .sort((left, right) => left.score - right.score)[0]?.points;
+}
+
+function getDirectEdgePointCandidates({
+  laneOffset,
+  sourceX,
+  sourceY,
+  sourcePosition,
+  targetX,
+  targetY,
+  targetPosition,
+}: {
+  laneOffset: number;
+  sourceX: number;
+  sourceY: number;
+  sourcePosition: Position;
+  targetX: number;
+  targetY: number;
+  targetPosition: Position;
+}) {
+  const source = { x: sourceX, y: sourceY };
+  const target = { x: targetX, y: targetY };
+  const sourceExit = offsetPointFromSide(source, sourcePosition, DIRECT_EDGE_NODE_CLEARANCE);
+  const targetExit = offsetPointFromSide(target, targetPosition, DIRECT_EDGE_NODE_CLEARANCE);
+  const lane = Math.max(EDGE_LINK_CLEARANCE, laneOffset);
+  const minX = Math.min(sourceExit.x, targetExit.x);
+  const maxX = Math.max(sourceExit.x, targetExit.x);
+  const minY = Math.min(sourceExit.y, targetExit.y);
+  const maxY = Math.max(sourceExit.y, targetExit.y);
+  const routeXs = [
+    (sourceExit.x + targetExit.x) / 2,
+    minX - 56 - lane,
+    maxX + 56 + lane,
+    sourceExit.x + (targetExit.x >= sourceExit.x ? 72 + lane : -72 - lane),
+    targetExit.x + (targetExit.x >= sourceExit.x ? -72 - lane : 72 + lane),
+  ];
+  const routeYs = [
+    (sourceExit.y + targetExit.y) / 2,
+    minY - 56 - lane,
+    maxY + 56 + lane,
+    sourceExit.y + (targetExit.y >= sourceExit.y ? 72 + lane : -72 - lane),
+    targetExit.y + (targetExit.y >= sourceExit.y ? -72 - lane : 72 + lane),
+  ];
+  const candidates = [
+    getSimpleOrthogonalEdgePoints({
+      sourceX,
+      sourceY,
+      sourcePosition,
+      targetX,
+      targetY,
+      targetPosition,
+    }),
+  ];
+
+  for (const routeX of routeXs) {
+    candidates.push(
+      compactPolylinePoints([
+        source,
+        sourceExit,
+        { x: routeX, y: sourceExit.y },
+        { x: routeX, y: targetExit.y },
+        targetExit,
+        target,
+      ]),
+    );
+  }
+
+  for (const routeY of routeYs) {
+    candidates.push(
+      compactPolylinePoints([
+        source,
+        sourceExit,
+        { x: sourceExit.x, y: routeY },
+        { x: targetExit.x, y: routeY },
+        targetExit,
+        target,
+      ]),
+    );
+  }
+
+  return dedupePolylineCandidates(candidates);
+}
+
+function scoreEdgeRoute(
+  points: Array<{ x: number; y: number }>,
+  nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>,
+  existingEdges: Array<Array<{ x: number; y: number }>>,
+) {
+  const segments = getPolylineSegments(points);
+  const length = segments.reduce((sum, segment) => sum + segment.length, 0);
+  let nodeHits = 0;
+  let linkHits = 0;
+  let nearLinks = 0;
+
+  for (const segment of segments) {
+    for (const bounds of nodeBounds) {
+      if (
+        segmentIntersectsRect(segment.start, segment.end, expandBounds(bounds, EDGE_LINK_CLEARANCE))
+      ) {
+        nodeHits += 1;
+      }
+    }
+
+    for (const edgePoints of existingEdges) {
+      for (const edgeSegment of getPolylineSegments(edgePoints)) {
+        const distance = segmentDistance(
+          segment.start,
+          segment.end,
+          edgeSegment.start,
+          edgeSegment.end,
+        );
+        if (distance < 0.5) {
+          linkHits += 1;
+        } else if (distance < EDGE_LINK_CLEARANCE) {
+          nearLinks += 1;
+        }
+      }
+    }
+  }
+
+  const turns = countPolylineTurns(points);
+  return nodeHits * 1_000_000 + linkHits * 80_000 + nearLinks * 6_000 + turns * 700 + length;
 }
 
 function offsetPointFromSide(point: { x: number; y: number }, side: Position, distance: number) {
@@ -2311,6 +2498,196 @@ function getPolylineSegments(points: Array<{ x: number; y: number }>) {
   return segments;
 }
 
+function dedupePolylineCandidates(candidates: Array<Array<{ x: number; y: number }>>) {
+  const seen = new Set<string>();
+  return candidates.filter((points) => {
+    const key = points.map((point) => `${Math.round(point.x)}:${Math.round(point.y)}`).join("|");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return points.length >= 2;
+  });
+}
+
+function countPolylineTurns(points: Array<{ x: number; y: number }>) {
+  let turns = 0;
+  for (let index = 2; index < points.length; index += 1) {
+    const previous = points[index - 2];
+    const current = points[index - 1];
+    const next = points[index];
+    const previousHorizontal = Math.abs(previous.y - current.y) < 0.5;
+    const nextHorizontal = Math.abs(current.y - next.y) < 0.5;
+    if (previousHorizontal !== nextHorizontal) {
+      turns += 1;
+    }
+  }
+  return turns;
+}
+
+function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
+  const excluded = new Set(excludedNodeIds.filter((id): id is string => Boolean(id)));
+  return [...document.querySelectorAll<HTMLElement>(".react-flow__node")]
+    .filter((element) => {
+      const id = element.dataset.id;
+      return id && !excluded.has(id);
+    })
+    .map((element) => getMeasuredNodeBounds(element.dataset.id ?? ""))
+    .filter((bounds): bounds is { left: number; right: number; top: number; bottom: number } =>
+      Boolean(bounds),
+    );
+}
+
+function getMeasuredExistingEdgePoints(currentEdgeId: string | undefined) {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
+  return [...document.querySelectorAll<SVGPathElement>(".react-flow__edge path")]
+    .filter((path) => path.closest<SVGGElement>(".react-flow__edge")?.dataset.id !== currentEdgeId)
+    .map((path) => parseLinePathPoints(path.getAttribute("d") ?? ""))
+    .filter((points) => points.length >= 2);
+}
+
+function parseLinePathPoints(path: string) {
+  const matches = [...path.matchAll(/[ML]\s*(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/g)];
+  return matches.map((match) => ({
+    x: Number.parseFloat(match[1]),
+    y: Number.parseFloat(match[2]),
+  }));
+}
+
+function expandBounds(
+  bounds: { left: number; right: number; top: number; bottom: number },
+  amount: number,
+) {
+  return {
+    left: bounds.left - amount,
+    right: bounds.right + amount,
+    top: bounds.top - amount,
+    bottom: bounds.bottom + amount,
+  };
+}
+
+function segmentIntersectsRect(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  bounds: { left: number; right: number; top: number; bottom: number },
+) {
+  if (
+    pointInBounds(start, bounds) ||
+    pointInBounds(end, bounds) ||
+    segmentsIntersect(
+      start,
+      end,
+      { x: bounds.left, y: bounds.top },
+      { x: bounds.right, y: bounds.top },
+    ) ||
+    segmentsIntersect(
+      start,
+      end,
+      { x: bounds.right, y: bounds.top },
+      { x: bounds.right, y: bounds.bottom },
+    ) ||
+    segmentsIntersect(
+      start,
+      end,
+      { x: bounds.right, y: bounds.bottom },
+      { x: bounds.left, y: bounds.bottom },
+    ) ||
+    segmentsIntersect(
+      start,
+      end,
+      { x: bounds.left, y: bounds.bottom },
+      { x: bounds.left, y: bounds.top },
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function pointInBounds(
+  point: { x: number; y: number },
+  bounds: { left: number; right: number; top: number; bottom: number },
+) {
+  return (
+    point.x >= bounds.left &&
+    point.x <= bounds.right &&
+    point.y >= bounds.top &&
+    point.y <= bounds.bottom
+  );
+}
+
+function segmentDistance(
+  firstStart: { x: number; y: number },
+  firstEnd: { x: number; y: number },
+  secondStart: { x: number; y: number },
+  secondEnd: { x: number; y: number },
+) {
+  if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) {
+    return 0;
+  }
+
+  return Math.sqrt(
+    Math.min(
+      getClosestPointOnSegment(firstStart, secondStart, secondEnd).distanceSquared,
+      getClosestPointOnSegment(firstEnd, secondStart, secondEnd).distanceSquared,
+      getClosestPointOnSegment(secondStart, firstStart, firstEnd).distanceSquared,
+      getClosestPointOnSegment(secondEnd, firstStart, firstEnd).distanceSquared,
+    ),
+  );
+}
+
+function segmentsIntersect(
+  firstStart: { x: number; y: number },
+  firstEnd: { x: number; y: number },
+  secondStart: { x: number; y: number },
+  secondEnd: { x: number; y: number },
+) {
+  const d1 = direction(secondStart, secondEnd, firstStart);
+  const d2 = direction(secondStart, secondEnd, firstEnd);
+  const d3 = direction(firstStart, firstEnd, secondStart);
+  const d4 = direction(firstStart, firstEnd, secondEnd);
+
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+    return true;
+  }
+
+  return (
+    (Math.abs(d1) < 0.001 && pointOnSegment(firstStart, secondStart, secondEnd)) ||
+    (Math.abs(d2) < 0.001 && pointOnSegment(firstEnd, secondStart, secondEnd)) ||
+    (Math.abs(d3) < 0.001 && pointOnSegment(secondStart, firstStart, firstEnd)) ||
+    (Math.abs(d4) < 0.001 && pointOnSegment(secondEnd, firstStart, firstEnd))
+  );
+}
+
+function direction(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  point: { x: number; y: number },
+) {
+  return (point.x - start.x) * (end.y - start.y) - (point.y - start.y) * (end.x - start.x);
+}
+
+function pointOnSegment(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+) {
+  return (
+    point.x >= Math.min(start.x, end.x) - 0.001 &&
+    point.x <= Math.max(start.x, end.x) + 0.001 &&
+    point.y >= Math.min(start.y, end.y) - 0.001 &&
+    point.y <= Math.max(start.y, end.y) + 0.001
+  );
+}
+
 function getClosestPointOnSegment(
   point: { x: number; y: number },
   start: { x: number; y: number },
@@ -2504,7 +2881,7 @@ function getRecipeSlotEdgeSideTowardPoint({
     return logicalSide;
   }
 
-  return Position.Top;
+  return distanceY >= 0 ? Position.Bottom : Position.Top;
 }
 
 function getMeasuredSlotEndpoint({

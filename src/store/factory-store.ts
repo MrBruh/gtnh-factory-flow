@@ -1234,6 +1234,7 @@ function addConnectedRecipeNodeToState(
     machineCount: 1,
     parallel: 1,
     overclockTier: recipe.minimumTier,
+    recipeInputOverrides: buildRecipeInputOverrides(recipe, resource),
     enabled: true,
     position:
       resource.mode === "recipes"
@@ -1259,6 +1260,32 @@ function addConnectedRecipeNodeToState(
     selectedRecipeId: recipe.id,
     lastResult: calculateThroughput(project),
   });
+}
+
+function buildRecipeInputOverrides(
+  recipe: Recipe,
+  resource: Pick<ResourceAmount, "kind" | "id" | "displayName"> & {
+    mode: RecipeBrowserMode;
+  },
+): FactoryNode["recipeInputOverrides"] {
+  if (resource.mode !== "uses") {
+    return undefined;
+  }
+
+  const overrides: NonNullable<FactoryNode["recipeInputOverrides"]> = {};
+  recipe.inputs.forEach((input, index) => {
+    if (input.kind !== resource.kind || input.id !== resource.id) {
+      return;
+    }
+
+    overrides[String(index)] = {
+      ...input,
+      displayName: input.displayName ?? resource.displayName,
+      alternatives: undefined,
+    };
+  });
+
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
 function mergeRecipe(existing: Recipe, incoming: Recipe): Recipe {

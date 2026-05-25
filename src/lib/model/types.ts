@@ -193,6 +193,7 @@ export interface FactoryNode {
   machineHandlerId?: string;
   coilTier?: string;
   machineConfigTiers?: Record<string, string>;
+  recipeInputOverrides?: Record<string, RecipeInput>;
   targetOutput?: TargetRate;
   enabled: boolean;
   position: {
