@@ -971,6 +971,25 @@ describe("calculateThroughput", () => {
                 },
               ],
             },
+            {
+              id: "tgsToolSlot2",
+              label: "Tool Slot 2",
+              minimumKey: "none",
+              defaultKey: "none",
+              tiers: [
+                {
+                  key: "none",
+                  label: "-",
+                  resource: { kind: "item", id: "empty", amount: 1 },
+                },
+                {
+                  key: "log:chainsaw",
+                  label: "Chainsaw",
+                  outputMultiplier: 4,
+                  resource: { kind: "item", id: "chainsaw", amount: 1 },
+                },
+              ],
+            },
           ],
           source: { recipeMap: "Tree Growth Simulator" },
         },
@@ -997,5 +1016,91 @@ describe("calculateThroughput", () => {
     expect(result.nodes.node.outputs["item:minecraft:log"].amountPerSecond).toBeCloseTo(7.2);
     expect(result.nodes.node.outputs["item:minecraft:sapling"].amountPerSecond).toBeCloseTo(1.8);
     expect(result.nodes.node.euT).toBe(0);
+  });
+
+  it("uses the first matching Tree Growth Simulator tool per output mode", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "tgs-tool-order-project",
+      name: "TGS tool order test",
+      recipes: [
+        {
+          id: "tgs-oak",
+          name: "Tree Growth Simulator: Oak Log",
+          machineType: "Tree Growth Simulator",
+          minimumTier: "UNKNOWN",
+          durationTicks: 100,
+          eut: 0,
+          inputs: [{ kind: "item", id: "minecraft:sapling", amount: 1, consumed: false }],
+          outputs: [
+            {
+              kind: "item",
+              id: "minecraft:log",
+              amount: 5,
+              neiSlot: { x: 108, y: 36 },
+            },
+          ],
+          machineConfigControls: [
+            {
+              id: "tgsToolSlot1",
+              label: "Tool Slot 1",
+              minimumKey: "none",
+              defaultKey: "none",
+              tiers: [
+                {
+                  key: "none",
+                  label: "-",
+                  resource: { kind: "item", id: "empty", amount: 1 },
+                },
+                {
+                  key: "log:saw",
+                  label: "Saw",
+                  outputMultiplier: 1,
+                  resource: { kind: "item", id: "saw", amount: 1 },
+                },
+              ],
+            },
+            {
+              id: "tgsToolSlot2",
+              label: "Tool Slot 2",
+              minimumKey: "none",
+              defaultKey: "none",
+              tiers: [
+                {
+                  key: "none",
+                  label: "-",
+                  resource: { kind: "item", id: "empty", amount: 1 },
+                },
+                {
+                  key: "log:chainsaw",
+                  label: "Chainsaw",
+                  outputMultiplier: 4,
+                  resource: { kind: "item", id: "chainsaw", amount: 1 },
+                },
+              ],
+            },
+          ],
+          source: { recipeMap: "Tree Growth Simulator" },
+        },
+      ],
+      nodes: [
+        {
+          id: "node",
+          recipeId: "tgs-oak",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          machineConfigTiers: { tgsToolSlot1: "log:saw", tgsToolSlot2: "log:chainsaw" },
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.node.outputs["item:minecraft:log"].amountPerSecond).toBeCloseTo(1.8);
   });
 });

@@ -685,7 +685,7 @@ function TreeGrowthSimulatorToolSlotMenu({
       </span>
       {isOpen ? (
         <span
-          className="absolute left-0 top-[calc(100%+4px)] z-[120] grid grid-cols-3 gap-2 border-2 border-[#252525] bg-[#c6c6c6] p-2 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
+          className="absolute left-0 top-[calc(100%+6px)] z-[120] grid w-[190px] grid-cols-[repeat(3,52px)] gap-3 border-2 border-[#252525] bg-[#c6c6c6] p-3 shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555,4px_4px_0_rgba(0,0,0,0.35)]"
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => {
             event.preventDefault();
@@ -701,7 +701,7 @@ function TreeGrowthSimulatorToolSlotMenu({
                 role="button"
                 tabIndex={0}
                 className={[
-                  "grid h-12 w-12 place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
+                  "grid h-[52px] w-[52px] place-items-center overflow-hidden border-2 text-[18px] font-bold leading-none",
                   tier.key === control.current.key
                     ? "border-[#6b4fd1] bg-[#8b70dd] text-white"
                     : "border-[#777] bg-[#d8d8d8] text-black hover:bg-white",
@@ -723,25 +723,38 @@ function TreeGrowthSimulatorToolSlotMenu({
                   onOpenChange(false);
                 }}
               >
-                {isEmpty ? (
-                  <span>-</span>
-                ) : (
-                  <ResourceIcon
-                    resource={resource}
-                    bare
-                    tooltip={false}
-                    showAmount={false}
-                    showConsumedState={false}
-                    iconPixelSize={36}
-                    className="h-10 w-10"
-                  />
-                )}
+                {isEmpty ? <span>-</span> : <TreeGrowthSimulatorMenuIcon resource={resource} />}
               </span>
             );
           })}
         </span>
       ) : null}
     </span>
+  );
+}
+
+function TreeGrowthSimulatorMenuIcon({ resource }: { resource: ResourceAmount }) {
+  if (resource.iconPath) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={resource.iconPath}
+        alt={resource.displayName ?? resource.id}
+        className="h-9 w-9 object-contain"
+      />
+    );
+  }
+
+  return (
+    <ResourceIcon
+      resource={resource}
+      bare
+      tooltip={false}
+      showAmount={false}
+      showConsumedState={false}
+      iconPixelSize={36}
+      className="h-9 w-9"
+    />
   );
 }
 

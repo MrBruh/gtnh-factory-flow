@@ -52,13 +52,12 @@ function getTreeGrowthSimulatorToolMultiplier(
 
   const normalizedCategory = category.toLowerCase();
   const controls = getRecipeMachineConfigTierControls(recipe, node);
-  const slotMultipliers = controls
+  const slotControl = controls
     .filter((entry) => /^tgsToolSlot\d+$/.test(entry.id))
-    .filter((entry) => getTreeGrowthSimulatorToolCategory(entry.current.key) === normalizedCategory)
-    .map((entry) => entry.current.outputMultiplier ?? 1);
+    .find((entry) => getTreeGrowthSimulatorToolCategory(entry.current.key) === normalizedCategory);
   const categoryControl = controls.find((entry) => entry.id === `tgs${category}Tool`);
 
-  return Math.max(1, categoryControl?.current.outputMultiplier ?? 1, ...slotMultipliers);
+  return slotControl?.current.outputMultiplier ?? categoryControl?.current.outputMultiplier ?? 1;
 }
 
 export function getMachineParallelMultiplier(
