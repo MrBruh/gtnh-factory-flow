@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isVirtualChoiceResource, resourceLabel } from "./resources";
+import { isVirtualChoiceResource, resourceLabel, trimTrailingDecimalZeros } from "./resources";
 
 describe("resource helpers", () => {
   it("identifies virtual choice resources that should stay out of resource pickers", () => {
@@ -22,5 +22,12 @@ describe("resource helpers", () => {
     expect(resourceLabel({ id: "oredict:stickWood", displayName: "Ore Dictionary: stickWood" })).toBe(
       "stickWood",
     );
+  });
+
+  it("trims only decimal zeros from formatted numbers", () => {
+    expect(trimTrailingDecimalZeros("90.0")).toBe("90");
+    expect(trimTrailingDecimalZeros("500")).toBe("500");
+    expect(trimTrailingDecimalZeros("11.50")).toBe("11.5");
+    expect(trimTrailingDecimalZeros("1.25")).toBe("1.25");
   });
 });

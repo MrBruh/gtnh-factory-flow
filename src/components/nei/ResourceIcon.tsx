@@ -1,7 +1,11 @@
 "use client";
 
 import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
-import { resourceLabel, stripOreDictionaryPrefix } from "@/lib/model/resources";
+import {
+  resourceLabel,
+  stripOreDictionaryPrefix,
+  trimTrailingDecimalZeros,
+} from "@/lib/model/resources";
 import { MinecraftTooltip } from "./MinecraftTooltip";
 
 type DisplayResourceAmount = Pick<
@@ -213,5 +217,5 @@ function trimAmount(amount: number): string {
     return String(amount);
   }
 
-  return amount.toFixed(2).replace(/\.?0+$/, "");
+  return trimTrailingDecimalZeros(amount.toFixed(2));
 }

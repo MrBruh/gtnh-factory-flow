@@ -3,7 +3,7 @@
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { CSSProperties } from "react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
-import { formatRate, makeResourceKey } from "@/lib/model";
+import { formatRate, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { useFactoryStore } from "@/store/factory-store";
 import { makeResourceHandleId } from "./resource-handles";
@@ -340,5 +340,5 @@ function formatCompact(value: number, unit: string, options?: { forceSign?: bool
 function trimFlow(value: number) {
   const abs = Math.abs(value);
   const decimals = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return value.toFixed(decimals).replace(/\.?0+$/, "");
+  return trimTrailingDecimalZeros(value.toFixed(decimals));
 }

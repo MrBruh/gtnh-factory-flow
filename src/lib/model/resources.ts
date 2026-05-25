@@ -76,6 +76,10 @@ export function formatRate(value: number, digits = 2): string {
   return value.toFixed(digits);
 }
 
+export function trimTrailingDecimalZeros(value: string): string {
+  return value.replace(/(\.\d*[1-9])0+$/, "$1").replace(/\.0+$/, "");
+}
+
 export function formatResourceRate(flow: ResourceFlow | undefined): string {
   if (!flow) {
     return "none";

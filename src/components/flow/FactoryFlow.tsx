@@ -46,6 +46,7 @@ import {
   isRecipeInputConsumed,
   makeResourceKey,
   resourceMatchesInput,
+  trimTrailingDecimalZeros,
 } from "@/lib/model";
 import type {
   FactoryEdge,
@@ -2707,7 +2708,7 @@ function formatEdgeValue(valueText: string) {
 function trimEdgeNumber(value: number) {
   const abs = Math.abs(value);
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return value.toFixed(digits).replace(/\.?0+$/, "");
+  return trimTrailingDecimalZeros(value.toFixed(digits));
 }
 
 function isPointerOverIncompatibleFlowHandle(
