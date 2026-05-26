@@ -4,11 +4,10 @@ export async function register() {
   }
 
   const { prewarmLatestDatasetVersions } = await import("@/lib/server/dataset-query");
-  void prewarmLatestDatasetVersions()
-    .then(() => {
-      console.info("GTNH dataset cache prewarmed.");
-    })
-    .catch((error) => {
-      console.error("GTNH dataset cache prewarm failed.", error);
-    });
+  try {
+    await prewarmLatestDatasetVersions();
+    console.info("GTNH dataset cache prewarmed.");
+  } catch (error) {
+    console.error("GTNH dataset cache prewarm failed.", error);
+  }
 }
