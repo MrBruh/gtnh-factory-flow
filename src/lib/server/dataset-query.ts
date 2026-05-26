@@ -442,13 +442,18 @@ export async function prewarmDatasetVersion(
 
 export async function prewarmLatestDatasetVersions(): Promise<void> {
   const manifest = await loadManifest();
-  const versionIds = [
-    manifest.latestStableVersion,
-    manifest.latestDailyVersion,
-    manifest.versions[0]?.id,
-  ].filter((versionId, index, versionIds): versionId is string => {
-    return Boolean(versionId) && versionIds.indexOf(versionId) === index;
-  });
+  const versionIds =
+    process.env.GTNH_PREWARM_ALL_DATASETS === "1"
+      ? [
+          manifest.latestStableVersion,
+          manifest.latestDailyVersion,
+          manifest.versions[0]?.id,
+        ].filter((versionId, index, versionIds): versionId is string => {
+          return Boolean(versionId) && versionIds.indexOf(versionId) === index;
+        })
+      : [
+          manifest.latestStableVersion ?? manifest.latestDailyVersion ?? manifest.versions[0]?.id,
+        ].filter((versionId): versionId is string => Boolean(versionId));
 
   const includeShards = process.env.GTNH_PREWARM_FULL_DATASETS === "1";
   for (const versionId of versionIds) {

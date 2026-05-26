@@ -311,13 +311,11 @@ jobs:
             manifest_url="http://127.0.0.1:8580/datasets/gtnh/datasets.manifest.json"
             manifest="$(curl -fsS --retry 20 --retry-delay 1 --retry-connrefused "$manifest_url")"
             stable_version="$(printf '%s' "$manifest" | grep -o '"latestStableVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestStableVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
-            daily_version="$(printf '%s' "$manifest" | grep -o '"latestDailyVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestDailyVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
-            for dataset_version in "$stable_version" "$daily_version"; do
-              [ -n "$dataset_version" ] || continue
-              echo "Prewarming dataset $dataset_version on main"
+            if [ -n "$stable_version" ]; then
+              echo "Prewarming dataset $stable_version on main"
               curl -fsS --max-time 300 --retry 3 --retry-delay 1 --retry-connrefused \
-                "http://127.0.0.1:8580/api/datasets/$dataset_version/prewarm" >/dev/null
-            done
+                "http://127.0.0.1:8580/api/datasets/$stable_version/prewarm" >/dev/null
+            fi
           fi
 
           if [ -f "$dataset_root/datasets.manifest.json" ]; then
