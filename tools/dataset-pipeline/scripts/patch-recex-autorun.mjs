@@ -224,6 +224,18 @@ if (!exporterSource.includes("import java.lang.reflect.Method;")) {
     "import java.lang.reflect.Field;\nimport java.lang.reflect.Method;\n",
   );
 }
+if (!exporterSource.includes("import java.util.HashMap;")) {
+  exporterSource = exporterSource.replace(
+    "import java.util.List;\n",
+    "import java.util.HashMap;\nimport java.util.List;\n",
+  );
+}
+if (!exporterSource.includes("import java.util.Map;")) {
+  exporterSource = exporterSource.replace(
+    "import java.util.List;\n",
+    "import java.util.List;\nimport java.util.Map;\n",
+  );
+}
 exporterSource = exporterSource.replace(
   "import gregtech.api.recipe.RecipeMap;",
   [
@@ -302,7 +314,7 @@ exporterSource = exporterSource.replace(
   '        temp.put("type", "shapedOreDict");\n        temp.put("recipes", oredictShapedRecipes);',
   '        temp.put("type", "shapedOreDict");\n        temp.put("recipes", oredictShapedRecipes);\n        temp.put("catalysts", getNeiCatalysts("crafting"));\n        temp.put("handlers", getNeiRecipeHandlers("crafting"));',
 );
-if (!exporterSource.includes('getPassiveNeiRecipes()')) {
+if (!exporterSource.includes("getPassiveNeiRecipes()")) {
   exporterSource = exporterSource.replace(
     "        return sources;\n",
     [
@@ -786,7 +798,7 @@ exporterSource = exporterSource.replace(
     "            return;",
     "        }",
     "",
-    "        Integer maxParallels = getMetaTileEntityInteger(mte, \"getMaxParallelRecipes\");",
+    '        Integer maxParallels = getMetaTileEntityInteger(mte, "getMaxParallelRecipes");',
     "        if (maxParallels != null && maxParallels > 1) {",
     "            item.mp = maxParallels;",
     "        }",
@@ -811,8 +823,8 @@ exporterSource = exporterSource.replace(
     "",
     "    private static List<String> getMetaTileEntityTooltipLines(Object mte) {",
     "        List<String> lines = new ArrayList<String>();",
-    "        appendMetaTileEntityTooltipMethod(lines, mte, \"getPrimaryDescription\");",
-    "        appendMetaTileEntityTooltipMethod(lines, mte, \"getDescription\");",
+    '        appendMetaTileEntityTooltipMethod(lines, mte, "getPrimaryDescription");',
+    '        appendMetaTileEntityTooltipMethod(lines, mte, "getDescription");',
     "        return lines;",
     "    }",
     "",
@@ -865,7 +877,7 @@ exporterSource = exporterSource.replace(
     "    }",
     "",
     "    private static void appendTooltipLine(List<String> lines, String line) {",
-    "        String clean = EnumChatFormatting.getTextWithoutFormattingCodes(line == null ? \"\" : line).trim();",
+    '        String clean = EnumChatFormatting.getTextWithoutFormattingCodes(line == null ? "" : line).trim();',
     "        if (!clean.isEmpty() && !lines.contains(clean)) {",
     "            lines.add(clean);",
     "        }",
@@ -1044,8 +1056,8 @@ exporterSource = exporterSource.replace(
     "    }",
     "",
     "    private static Map<String, Object> exportPassiveNeiRecipe(Object cachedRecipe) {",
-    "        List<Item> inputs = formatPositionedStacks(invokePositionedStackList(cachedRecipe, \"getIngredients\"));",
-    "        PositionedStack resultStack = invokePositionedStack(cachedRecipe, \"getResult\");",
+    '        List<Item> inputs = formatPositionedStacks(invokePositionedStackList(cachedRecipe, "getIngredients"));',
+    '        PositionedStack resultStack = invokePositionedStack(cachedRecipe, "getResult");',
     "        List<Item> outputs = new ArrayList<Item>();",
     "        Item result = formatPositionedStack(resultStack);",
     "        if (result != null) {",
