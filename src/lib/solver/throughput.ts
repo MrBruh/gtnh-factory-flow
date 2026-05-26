@@ -642,19 +642,8 @@ function refreshEdgeResultsFromNodeUtilization(
             (directDemandBySourceResource.get(`${edge.source}|${key}`) ?? 0),
         ) / (storageSinkCounts.get(`${edge.source}|${key}`) ?? 1)
       : sourceEffectiveCapacity;
-    const storageSurplusDemand = targetStorage
-      ? Math.max(
-          0,
-          sourceFullCapacity - (directDemandBySourceResource.get(`${edge.source}|${key}`) ?? 0),
-        ) / (storageSinkCounts.get(`${edge.source}|${key}`) ?? 1)
-      : 0;
-    const storageConsumerDemand = targetStorage
-      ? (storageOutgoingDemand.get(key) ?? 0) / targetCount
-      : 0;
     const targetDemand = targetStorage
-      ? canRunForStorageSurplus(project, recipesById, edge.source)
-        ? storageSurplusDemand
-        : storageConsumerDemand
+      ? sourceCapacity
       : !targetResult
         ? sourceCapacity
         : getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetResult.utilization) /

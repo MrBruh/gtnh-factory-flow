@@ -335,6 +335,66 @@ describe("calculateThroughput", () => {
     expect(result.storages["dust-drawer"].status).toBe("filling");
   });
 
+  it("lets terminal storage absorb output from recipes with consumed inputs", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "consumed-input-terminal-storage-project",
+      name: "Consumed input terminal storage test",
+      recipes: [
+        {
+          id: "chemical-plant-recipe",
+          name: "Chemical Plant",
+          machineType: "Chemical Plant",
+          minimumTier: "EV",
+          durationTicks: 20,
+          eut: 480,
+          inputs: [
+            { kind: "fluid", id: "benzene", amount: 1_000 },
+            { kind: "fluid", id: "nitric_acid", amount: 1_000 },
+          ],
+          outputs: [{ kind: "fluid", id: "nitrobenzene", amount: 1_000 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "chemical-plant",
+          recipeId: "chemical-plant-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "EV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      storages: [
+        {
+          id: "nitrobenzene-tank",
+          kind: "fluid",
+          resourceId: "nitrobenzene",
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "chemical-plant-to-tank",
+          source: "chemical-plant",
+          target: "nitrobenzene-tank",
+          resourceKind: "fluid",
+          resourceId: "nitrobenzene",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes["chemical-plant"].utilization).toBeCloseTo(1);
+    expect(result.edges["chemical-plant-to-tank"].transferredPerSecond).toBeCloseTo(1_000);
+    expect(result.storages["nitrobenzene-tank"].producedPerSecond).toBeCloseTo(1_000);
+    expect(result.storages["nitrobenzene-tank"].consumedPerSecond).toBeCloseTo(0);
+    expect(result.storages["nitrobenzene-tank"].netPerSecond).toBeCloseTo(1_000);
+  });
+
   it("updates storage link throughput from current machine capacity instead of stale edge rates", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
