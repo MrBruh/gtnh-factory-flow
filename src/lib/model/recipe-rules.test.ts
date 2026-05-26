@@ -56,6 +56,85 @@ describe("recipe machine handlers", () => {
     ]);
   });
 
+  it("folds GT voltage-tier display names into the canonical machine family", () => {
+    const recipe: Recipe = {
+      ...testRecipe("Centrifuge"),
+      machineHandlers: [
+        {
+          id: "turbo-centrifuge",
+          label: "Turbo Centrifuge",
+          machineType: "Turbo Centrifuge",
+          minimumTier: "HV",
+          kind: "single",
+        },
+        {
+          id: "molecular-separator",
+          label: "Molecular Separator",
+          machineType: "Molecular Separator",
+          minimumTier: "EV",
+          kind: "single",
+        },
+        {
+          id: "molecular-cyclone",
+          label: "Molecular Cyclone",
+          machineType: "Molecular Cyclone",
+          minimumTier: "IV",
+          kind: "single",
+        },
+        {
+          id: "molecular-tornado",
+          label: "Epic Molecular Tornado IV",
+          machineType: "Epic Molecular Tornado IV",
+          minimumTier: "UMV",
+          kind: "single",
+        },
+        {
+          id: "steam-separator",
+          label: "Steam Separator",
+          machineType: "Steam Separator",
+          minimumTier: "LV",
+          kind: "single",
+        },
+      ],
+    };
+
+    expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
+      "Centrifuge",
+      "Steam Separator",
+    ]);
+  });
+
+  it("folds renamed late-tier machines across GT machine families", () => {
+    const cases: Array<[string, string]> = [
+      ["Alloy Smelter", "Epic Alloy Integrator IV"],
+      ["Assembler", "Ultimate Assembly Constructor"],
+      ["Chemical Reactor", "Epic Chemical Performer II"],
+      ["Electrolyzer", "Molecular Disintegrator E-4908"],
+      ["Ore Washer", "Repurposed Laundry-Washer I-360"],
+      ["Thermal Centrifuge", "Blaze Sweatshop T-6350"],
+      ["Macerator", "Ultimate Shape Eliminator"],
+    ];
+
+    for (const [machineType, handlerLabel] of cases) {
+      const recipe: Recipe = {
+        ...testRecipe(machineType),
+        machineHandlers: [
+          {
+            id: handlerLabel,
+            label: handlerLabel,
+            machineType: handlerLabel,
+            minimumTier: "UV",
+            kind: "single",
+          },
+        ],
+      };
+
+      expect(getRecipeMachineHandlers(recipe).map((handler) => handler.label)).toEqual([
+        machineType,
+      ]);
+    }
+  });
+
   it("applies the selected handler to the effective recipe", () => {
     const recipe = {
       ...testRecipe("Shaped Crafting", "NONE"),

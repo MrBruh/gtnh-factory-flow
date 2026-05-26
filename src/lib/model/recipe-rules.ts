@@ -208,16 +208,79 @@ function normalizeMachineHandler(handler: MachineHandler): MachineHandler {
 }
 
 function machineHandlerFamilyLabel(label: string): string {
-  const familyLabel = label
-    .replace(/^(?:Basic|Advanced|Elite)\s+/i, "")
-    .replace(/^(?:Ultimate|Epic)\s+/i, "")
+  const tierlessLabel = label
     .replace(/\s+\((?:ULV|LV|MV|HV|EV|IV|LuV|ZPM|UV|UHV|UEV|UIV|UXV|OpV|MAX)\)$/i, "")
     .replace(/\s+(?:I|II|III|IV|V|VI|VII|VIII|IX|X)$/i, "")
+    .trim();
+  const directAlias = MACHINE_HANDLER_FAMILY_ALIASES.get(normalizeMachineLabel(tierlessLabel));
+  if (directAlias) {
+    return directAlias;
+  }
+
+  const familyLabel = tierlessLabel
+    .replace(/^(?:Basic|Advanced|Elite|Ultimate|Epic|MAX|Turbo|Quick|Instant|Universal)\s+/i, "")
     .trim();
   return MACHINE_HANDLER_FAMILY_ALIASES.get(normalizeMachineLabel(familyLabel)) ?? familyLabel;
 }
 
-const MACHINE_HANDLER_FAMILY_ALIASES = new Map([["liquefying sucker", "Fluid Extractor"]]);
+const MACHINE_HANDLER_FAMILY_ALIASES = new Map([
+  ["alloy integrator", "Alloy Smelter"],
+  ["amplifabricator", "Matter Amplifier"],
+  ["amplicreator", "Matter Amplifier"],
+  ["assembling machine", "Assembler"],
+  ["assembly constructor", "Assembler"],
+  ["atom stimulator", "Electric Furnace"],
+  ["blaze sweatshop t-6350", "Thermal Centrifuge"],
+  ["can operator", "Canner"],
+  ["centrifuge", "Centrifuge"],
+  ["chemical dunktron", "Chemical Bath"],
+  ["chemical perforer", "Chemical Reactor"],
+  ["chemical performer", "Chemical Reactor"],
+  ["circuit assembling machine", "Circuit Assembler"],
+  ["electric oven", "Ore Washer"],
+  ["exact photon cannon", "Laser Engraver"],
+  ["extractinator", "Extractor"],
+  ["fermentation hastener", "Fermenter"],
+  ["fire cyclone", "Thermal Centrifuge"],
+  ["fluid petrificator", "Fluid Solidifier"],
+  ["fraction splitter", "Distillery"],
+  ["heat infuser", "Fluid Heater"],
+  ["impact modulator", "Forge Hammer"],
+  ["ionizer", "Electrolyzer"],
+  ["liquid can actuator", "Fluid Canner"],
+  ["liquefying sucker", "Fluid Extractor"],
+  ["magnetar separator", "Electromagnetic Separator"],
+  ["magnetism inducer", "Electromagnetic Polarizer"],
+  ["matter constrictor", "Compressor"],
+  ["matter organizer", "Mixer"],
+  ["molecular cyclone", "Centrifuge"],
+  ["molecular disintegrator e-4908", "Electrolyzer"],
+  ["molecular separator", "Centrifuge"],
+  ["molecular tornado", "Centrifuge"],
+  ["object divider", "Cutting Machine"],
+  ["oblitterator", "Recycler"],
+  ["ore washing machine", "Ore Washer"],
+  ["ore washing plant", "Ore Washer"],
+  ["polarizer", "Electromagnetic Polarizer"],
+  ["precision laser engraver", "Laser Engraver"],
+  ["pressure cooker", "Autoclave"],
+  ["pulsation filter", "Sifter"],
+  ["pulverizer", "Macerator"],
+  ["repurposed laundry-washer i-360", "Ore Washer"],
+  ["scrap-o-matic", "Recycler"],
+  ["shape driver", "Extruder"],
+  ["shape eliminator", "Macerator"],
+  ["short circuit heater", "Arc Furnace"],
+  ["sifting machine", "Sifter"],
+  ["singularity compressor", "Compressor"],
+  ["surface shifter", "Forming Press"],
+  ["the oblitterator", "Recycler"],
+  ["turn-o-matic", "Lathe"],
+  ["ufo engine", "Microwave"],
+  ["unboxinator", "Unpackager"],
+  ["vacuum extractor", "Extractor"],
+  ["wire transfigurator", "Wiremill"],
+]);
 
 function slug(value: string): string {
   return normalizeRecipeMapName(value).replace(/[^a-z0-9]+/g, "-");
