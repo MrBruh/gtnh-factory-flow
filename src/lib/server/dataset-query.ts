@@ -1381,15 +1381,9 @@ function resourceSearchTerms(
   resourcesByKey?: Map<string, DatasetResource | DatasetResourceIndexEntry>,
 ): string[] {
   const indexed = resourcesByKey?.get(`${resource.kind}:${resource.id}`);
-  return [
-    resource.displayName,
-    indexed?.displayName,
-    resource.id,
-    resource.kind,
-    ...(resource.alternatives ?? []).flatMap((alternative) =>
-      resourceSearchTerms(alternative, resourcesByKey),
-    ),
-  ].filter((term): term is string => Boolean(term));
+  return [resource.displayName, indexed?.displayName, resource.id, resource.kind].filter(
+    (term): term is string => Boolean(term),
+  );
 }
 
 function normalizeResourceSearchText(resource: DatasetResourceIndexEntry): string {

@@ -189,15 +189,7 @@ function buildRecipeSearchText(recipe, resourcesByKey = new Map()) {
 
 function resourceSearchTerms(resource, resourcesByKey) {
   const indexed = resourcesByKey.get(`${resource.kind}:${resource.id}`);
-  return [
-    resource.displayName,
-    indexed?.displayName,
-    resource.id,
-    resource.kind,
-    ...(resource.alternatives ?? []).flatMap((alternative) =>
-      resourceSearchTerms(alternative, resourcesByKey),
-    ),
-  ].filter(Boolean);
+  return [resource.displayName, indexed?.displayName, resource.id, resource.kind].filter(Boolean);
 }
 
 function recipeIconScore(recipe, resourcesByKey = new Map()) {
