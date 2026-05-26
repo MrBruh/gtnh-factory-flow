@@ -60,7 +60,7 @@ const recipeIndex = {
   recipes: dataset.recipes.map(toRecipeSummary),
 };
 
-const recipeLookupIndex = buildRecipeLookupIndex(recipeIndex);
+const recipeLookupIndex = buildRecipeLookupIndex(dataset.recipes, recipeIndex);
 const resourceCatalog = {
   schemaVersion: 1,
   datasetVersionId: versionId,
@@ -86,7 +86,7 @@ console.log(
   `Wrote resource catalog, recipe index with ${recipeIndex.recipes.length} summaries, compact lookup index, and ${shards.length} shard(s).`,
 );
 
-function buildRecipeLookupIndex(recipeIndex) {
+function buildRecipeLookupIndex(recipes, recipeIndex) {
   const recipeMaps = [
     ...new Set((recipeIndex.recipes ?? []).map((recipe) => recipe.recipeMap).filter(Boolean)),
   ].sort((a, b) => a.localeCompare(b));
@@ -96,23 +96,24 @@ function buildRecipeLookupIndex(recipeIndex) {
   const iconScores = [];
   const entries = new Map();
 
-  recipeIndex.recipes.forEach((recipe, recipeIndex) => {
-    const recipeMapId = recipeMapIds.get(recipe.recipeMap);
+  recipes.forEach((recipe, index) => {
+    const summary = recipeIndex.recipes[index];
+    const recipeMapId = recipeMapIds.get(summary?.recipeMap);
     if (recipeMapId === undefined) {
       return;
     }
 
-    recipeIds[recipeIndex] = recipe.id;
-    tierIndexes[recipeIndex] = tierIndex(recipe);
-    iconScores[recipeIndex] = recipeIconScore(recipe);
+    recipeIds[index] = recipe.id;
+    tierIndexes[index] = tierIndex(summary ?? recipe);
+    iconScores[index] = recipeIconScore(summary ?? recipe);
 
     for (const output of recipe.outputs ?? []) {
-      addLookupRecipe(entries, output, "recipes", recipeMapId, recipeIndex);
+      addLookupRecipe(entries, output, "recipes", recipeMapId, index);
     }
     for (const input of recipe.inputs ?? []) {
-      addLookupRecipe(entries, input, "uses", recipeMapId, recipeIndex);
+      addLookupRecipe(entries, input, "uses", recipeMapId, index);
       for (const alternative of input.alternatives ?? []) {
-        addLookupRecipe(entries, alternative, "uses", recipeMapId, recipeIndex);
+        addLookupRecipe(entries, alternative, "uses", recipeMapId, index);
       }
     }
   });
@@ -337,19 +338,6 @@ function toCompactResource(resource) {
     chance: resource.chance,
     byproduct: resource.byproduct,
     neiSlot: resource.neiSlot,
-    alternatives: resource.alternatives?.map(toCompactResourceAlternative),
-  });
-}
-
-function toCompactResourceAlternative(resource) {
-  return removeUndefined({
-    kind: resource.kind,
-    id: resource.id,
-    displayName: resource.displayName,
-    iconPath: resource.iconPath,
-    iconAtlas: resource.iconAtlas,
-    dominantColor: resource.dominantColor,
-    tooltip: resource.tooltip,
   });
 }
 
