@@ -140,8 +140,9 @@ class MachineCountOptimizer {
 
     if (!hasExplicitDemand) {
       const seededFromProducedOutput = this.seedMaximumProducedOutputDemands();
-      if (!seededFromProducedOutput) {
-        this.seedImplicitTerminalDemands();
+      this.seedImplicitTerminalDemands();
+      if (seededFromProducedOutput) {
+        this.flushStorageOutputConsumers(new Set());
       }
     }
 
@@ -193,12 +194,25 @@ class MachineCountOptimizer {
   private seedImplicitTerminalDemands() {
     for (const node of this.context.project.nodes) {
       const plan = this.context.ratePlans.get(node.id);
-      if (!plan?.enabled || !plan.valid || (this.context.adjacency.get(node.id) ?? []).length > 0) {
+      if (!plan?.enabled || !plan.valid || !this.isImplicitTerminalNode(node.id)) {
         continue;
       }
 
       this.ensureNodeOperations(node.id, normalizeMachineCount(node.machineCount), new Set());
     }
+  }
+
+  private isImplicitTerminalNode(nodeId: string): boolean {
+    if ((this.context.nodeToNodeEdges.get(nodeId) ?? []).length > 0) {
+      return false;
+    }
+
+    return (this.context.nodeToStorageEdges.get(nodeId) ?? []).every((edge) => {
+      const storageKey = this.context.storageResourceById.get(edge.target);
+      return (
+        !storageKey || (this.context.storageConsumersByResource.get(storageKey) ?? []).length === 0
+      );
+    });
   }
 
   private satisfyLooseOutputDemand(resourceKey: ResourceKey, amountPerSecond: number) {
@@ -378,6 +392,7 @@ class MachineCountOptimizer {
 
         changed = true;
         this.storageForwardRouted.set(resourceKey, routableAmount);
+        this.consumeStorageCredit(resourceKey, nextAmount);
         const sharePerConsumer = nextAmount / consumers.length;
         const sourceEndpoint = storageBusId(resourceKey);
         for (const consumer of consumers) {
@@ -613,7 +628,8 @@ class MachineCountOptimizer {
       return;
     }
 
-    const exactMachineDemand = amountPerSecond / contribution.amountPerMachine;
+    const exactMachineDemand =
+      (this.operationDemand.get(nodeId) ?? 0) + amountPerSecond / contribution.amountPerMachine;
     const appliedDelta = this.ensureNodeOperations(nodeId, exactMachineDemand, new Set());
     if (appliedDelta <= EPSILON) {
       return;
@@ -661,7 +677,8 @@ class MachineCountOptimizer {
       return;
     }
 
-    const exactMachineDemand = amountPerSecond / inputRate;
+    const exactMachineDemand =
+      (this.operationDemand.get(nodeId) ?? 0) + amountPerSecond / inputRate;
     const appliedDelta = this.ensureNodeOperations(nodeId, exactMachineDemand, new Set([inputKey]));
     if (appliedDelta <= EPSILON) {
       return;

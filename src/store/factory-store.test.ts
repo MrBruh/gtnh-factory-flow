@@ -1222,6 +1222,19 @@ describe("factory machine count optimization", () => {
     );
   });
 
+  it("scales producers to fill one configured parallel terminal consumer", () => {
+    useFactoryStore.getState().setProject(createImplicitParallelTerminalStorageDemandProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "parallel-source", machineCount: 256 }),
+        expect.objectContaining({ id: "parallel-consumer", machineCount: 1 }),
+      ]),
+    );
+  });
+
   it("combines direct and indirect storage output for implicit terminal demand", () => {
     useFactoryStore.getState().setProject(createImplicitDirectAndIndirectStorageOutputProject());
 
@@ -2187,6 +2200,84 @@ function createImplicitTerminalStorageDemandProject(): FactoryProject {
         id: "implicit-tank-to-consumer",
         source: "implicit-oil-tank",
         target: "implicit-consumer",
+        resourceKind: "fluid",
+        resourceId: "oil",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createImplicitParallelTerminalStorageDemandProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "implicit-parallel-terminal-storage-demand",
+    name: "Implicit parallel terminal storage demand",
+    recipes: [
+      {
+        id: "parallel-source-recipe",
+        name: "Parallel Source",
+        machineType: "Source",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [{ kind: "fluid", id: "oil", amount: 1 }],
+      },
+      {
+        id: "parallel-consumer-recipe",
+        name: "Parallel Consumer",
+        machineType: "Mega Distillation Tower",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "oil", amount: 1 }],
+        outputs: [{ kind: "fluid", id: "fuel", amount: 1 }],
+        machineConfigControls: [
+          {
+            id: "machineParallel",
+            label: "Parallel",
+            minimumKey: "x1",
+            tiers: [
+              {
+                key: "x1",
+                label: "1x",
+                parallelMultiplier: 1,
+                resource: { kind: "item", id: "parallel_1", amount: 1 },
+              },
+              {
+                key: "x256",
+                label: "256x",
+                parallelMultiplier: 256,
+                resource: { kind: "item", id: "parallel_256", amount: 1 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    nodes: [
+      makeNode("parallel-source", "parallel-source-recipe", 0),
+      {
+        ...makeNode("parallel-consumer", "parallel-consumer-recipe", 320),
+        machineConfigTiers: { machineParallel: "x256" },
+      },
+    ],
+    storages: [
+      { id: "parallel-oil-tank", kind: "fluid", resourceId: "oil", position: { x: 160, y: 0 } },
+    ],
+    edges: [
+      {
+        id: "parallel-source-to-tank",
+        source: "parallel-source",
+        target: "parallel-oil-tank",
+        resourceKind: "fluid",
+        resourceId: "oil",
+      },
+      {
+        id: "parallel-tank-to-consumer",
+        source: "parallel-oil-tank",
+        target: "parallel-consumer",
         resourceKind: "fluid",
         resourceId: "oil",
       },
