@@ -10,6 +10,7 @@ import type {
 } from "@/lib/datasets/types";
 import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
 import {
+  enrichPassiveProductionRecipe,
   getRecipePowerTier,
   GT_VOLTAGE_TIERS,
   isOreDictionaryResource,
@@ -482,15 +483,16 @@ export async function getDatasetRecipe(
     return undefined;
   }
   const resourcesByKey = getCatalogResourcesByKey(catalog);
+  const enrichedRecipe = enrichPassiveProductionRecipe(recipe);
   return {
-    ...recipe,
+    ...enrichedRecipe,
     machineConfigControls: hydrateMachineConfigControls(
-      recipe.machineConfigControls,
+      enrichedRecipe.machineConfigControls,
       resourcesByKey,
     ),
-    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
-    inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
-    outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    machineHandlers: hydrateMachineHandlers(enrichedRecipe.machineHandlers, resourcesByKey),
+    inputs: enrichedRecipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    outputs: enrichedRecipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
   };
 }
 
@@ -634,8 +636,9 @@ async function loadShard(version: DatasetVersion, shard: RecipeIndexShard): Prom
 
   const promise = readGzipJson<RecipeShardPayload>(publicPathToFile(shard.path))
     .then((payload) => {
-      loadedShards.set(key, payload.recipes);
-      return payload.recipes;
+      const recipes = payload.recipes.map(enrichPassiveProductionRecipe);
+      loadedShards.set(key, recipes);
+      return recipes;
     })
     .finally(() => {
       pendingShardLoads.delete(key);
@@ -697,16 +700,22 @@ function publicPathToFile(publicPath: string): string {
 
 function hydrateSummaries(recipes: RecipeSummary[], catalog: LoadedRecipeIndex): RecipeSummary[] {
   const resourcesByKey = getCatalogResourcesByKey(catalog);
-  return recipes.map((recipe) => ({
-    ...recipe,
-    machineConfigControls: hydrateMachineConfigControls(
-      recipe.machineConfigControls,
-      resourcesByKey,
-    ),
-    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
-    inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
-    outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
-  }));
+  return recipes.map((recipe) => {
+    const enrichedRecipe = enrichPassiveProductionRecipe(recipe as Recipe);
+    return {
+      ...recipe,
+      machineType: enrichedRecipe.machineType,
+      minimumTier: enrichedRecipe.minimumTier,
+      eut: enrichedRecipe.eut,
+      machineConfigControls: hydrateMachineConfigControls(
+        enrichedRecipe.machineConfigControls,
+        resourcesByKey,
+      ),
+      machineHandlers: hydrateMachineHandlers(enrichedRecipe.machineHandlers, resourcesByKey),
+      inputs: enrichedRecipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+      outputs: enrichedRecipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    };
+  });
 }
 
 function hydrateResource<T extends ResourceAmount>(
@@ -816,24 +825,27 @@ function toRecipeSummary(
   recipe: Recipe,
   resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
 ): RecipeSummary {
+  const enrichedRecipe = enrichPassiveProductionRecipe(recipe);
   return {
-    id: recipe.id,
-    name: recipe.name,
-    recipeMap: recipe.source?.recipeMap ?? recipe.machineType,
-    machineType: recipe.machineType,
-    minimumTier: recipe.minimumTier,
-    durationTicks: recipe.durationTicks,
-    eut: recipe.eut,
-    programmedCircuit: recipe.programmedCircuit,
-    machineHandlers: hydrateMachineHandlers(recipe.machineHandlers, resourcesByKey),
+    id: enrichedRecipe.id,
+    name: enrichedRecipe.name,
+    recipeMap: enrichedRecipe.source?.recipeMap ?? enrichedRecipe.machineType,
+    machineType: enrichedRecipe.machineType,
+    minimumTier: enrichedRecipe.minimumTier,
+    durationTicks: enrichedRecipe.durationTicks,
+    eut: enrichedRecipe.eut,
+    programmedCircuit: enrichedRecipe.programmedCircuit,
+    machineHandlers: hydrateMachineHandlers(enrichedRecipe.machineHandlers, resourcesByKey),
     machineConfigControls: hydrateMachineConfigControls(
-      recipe.machineConfigControls,
+      enrichedRecipe.machineConfigControls,
       resourcesByKey,
     ),
-    inputs: recipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
-    outputs: recipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
-    source: recipe.source?.recipeMap ? { recipeMap: recipe.source.recipeMap } : undefined,
-    nei: recipe.nei,
+    inputs: enrichedRecipe.inputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    outputs: enrichedRecipe.outputs.map((resource) => hydrateResource(resource, resourcesByKey)),
+    source: enrichedRecipe.source?.recipeMap
+      ? { recipeMap: enrichedRecipe.source.recipeMap }
+      : undefined,
+    nei: enrichedRecipe.nei,
     slots: [],
   };
 }

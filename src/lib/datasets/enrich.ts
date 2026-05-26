@@ -1,6 +1,7 @@
 import type { DatasetResource, DatasetResourceIndexEntry, RecipeDataset } from "./types";
 import type { Recipe, ResourceAmount } from "../model/types";
 import { expandMachineRecipeVariants } from "../model/recipe-rules";
+import { enrichPassiveProductionRecipe } from "../model/passive-production";
 import {
   knownRecipeMapSlotCapacity,
   mergeRecipeMapSlotCapacity,
@@ -15,7 +16,9 @@ export function enrichDatasetRecipes(dataset: RecipeDataset): RecipeDataset {
 
   const recipes = expandMachineRecipeVariants(
     dataset.recipes.map((recipe) =>
-      enrichRecipe(recipe, resourcesByKey, slotCapacitiesByRecipeMap),
+      enrichPassiveProductionRecipe(
+        enrichRecipe(recipe, resourcesByKey, slotCapacitiesByRecipeMap),
+      ),
     ),
   );
 

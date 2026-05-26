@@ -15,14 +15,18 @@ export function getMachineOutputMultiplier(
   output: RecipeOutput,
   tier: VoltageTier,
 ): number {
+  const configMultiplier = getRecipeMachineConfigTierControls(recipe, node)
+    .filter((control) => !isTreeGrowthSimulatorToolControl(control.id))
+    .reduce((multiplier, control) => multiplier * (control.current.outputMultiplier ?? 1), 1);
+
   if (!isTreeGrowthSimulatorRecipe(recipe)) {
-    return 1;
+    return configMultiplier;
   }
 
   const tierOrdinal = getVoltageTierIndex(tier) + 1;
   const tierMultiplier = (2 * tierOrdinal ** 2 - 2 * tierOrdinal + 5) / TGS_BASE_OUTPUT_MULTIPLIER;
   const toolMultiplier = getTreeGrowthSimulatorToolMultiplier(recipe, node, output);
-  return tierMultiplier * toolMultiplier;
+  return configMultiplier * tierMultiplier * toolMultiplier;
 }
 
 export function applyMachineOutputMultipliers(
@@ -132,6 +136,12 @@ function getTreeGrowthSimulatorOutputCategory(output: RecipeOutput) {
 function getTreeGrowthSimulatorToolCategory(key: string): string | undefined {
   const [category] = key.split(":");
   return category && category !== "none" ? category : undefined;
+}
+
+function isTreeGrowthSimulatorToolControl(controlId: string): boolean {
+  return (
+    /^tgsToolSlot\d+$/.test(controlId) || /^tgs(?:Log|Sapling|Leaves|Fruit)Tool$/.test(controlId)
+  );
 }
 
 function getTreeGrowthSimulatorSlotCategory(controlId: string): string | undefined {

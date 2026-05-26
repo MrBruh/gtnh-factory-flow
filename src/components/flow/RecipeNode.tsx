@@ -19,6 +19,7 @@ import {
   formatRate,
   applyMachineHandlerToRecipe,
   getAdjacentMachineConfigTier,
+  getCropStatsPreset,
   GT_VOLTAGE_TIERS,
   getRecipeMachineHandlers,
   getRecipeMachineConfigTierControls,
@@ -28,6 +29,10 @@ import {
   getSelectedMachineHandler,
   getVoltageTierIndex,
   isRecipeInputConsumed,
+  isBeeProductionConfigControl,
+  isBeeProductionRecipe,
+  isCropProductionConfigControl,
+  isCropProductionRecipe,
   isVoltageTierAbove,
   makeResourceKey,
   resourceMatchesInput,
@@ -96,10 +101,19 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...control,
     resource: resolveDatasetMachineConfigResource(control.resource, dataset),
   }));
+  const cropProductionControls = isCropProductionRecipe(effectiveRecipe)
+    ? machineConfigControls.filter((control) => isCropProductionConfigControl(control.id))
+    : [];
+  const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
+    ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
+    : [];
   const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
   const statsMachineConfigControls = machineConfigControls.filter(
     (control) =>
-      !isTreeGrowthSimulatorToolControl(control) && !isDisplayOnlyParallelControl(control),
+      !isTreeGrowthSimulatorToolControl(control) &&
+      !isDisplayOnlyParallelControl(control) &&
+      !isCropProductionConfigControl(control.id) &&
+      !isBeeProductionConfigControl(control.id),
   );
   const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
   const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
@@ -147,6 +161,20 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
       },
     });
   };
+  const passiveProductionPanel =
+    cropProductionControls.length > 0 ? (
+      <PassiveProductionConfigPanel
+        title="Crop setup"
+        controls={cropProductionControls}
+        onSelect={updateMachineConfigTier}
+      />
+    ) : beeProductionControls.length > 0 ? (
+      <PassiveProductionConfigPanel
+        title="Bee setup"
+        controls={beeProductionControls}
+        onSelect={updateMachineConfigTier}
+      />
+    ) : undefined;
   const updateMachineHandler = (machineHandlerId: string) => {
     if (machineHandlers.length <= 1) {
       return;
@@ -380,12 +408,17 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
             suppressSlotHover={(slot) =>
-              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
+              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls)) ||
+              isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)
             }
             suppressConsumedState={(slot) =>
-              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
+              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls)) ||
+              isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)
             }
             getSlotZIndex={(slot) => {
+              if (isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)) {
+                return 95;
+              }
               const control = getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls);
               if (!control) {
                 return undefined;
@@ -409,6 +442,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                     onSelect={(nextTier) => updateMachineConfigTier(tgsToolControl.id, nextTier)}
                   />
                 );
+              }
+              if (isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)) {
+                return <CropSeedConfigOverlay controls={cropProductionControls} />;
               }
 
               const isInput = slot.side === "input";
@@ -461,6 +497,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
           />
+          {passiveProductionPanel}
         </div>
 
         <div
@@ -816,6 +853,141 @@ function TreeGrowthSimulatorMenuIcon({ resource }: { resource: ResourceAmount })
   );
 }
 
+function isCropSeedSlot(
+  slot: NeiPositionedSlot,
+  recipe: Recipe,
+  controls: MachineConfigTierControl[],
+) {
+  if (controls.length === 0 || slot.side !== "input" || slot.kind !== "item") {
+    return false;
+  }
+
+  const firstItemInputIndex = recipe.inputs.findIndex((input) => input.kind === "item");
+  return slot.resourceIndex === firstItemInputIndex;
+}
+
+function CropSeedConfigOverlay({ controls }: { controls: MachineConfigTierControl[] }) {
+  const statsControl = controls.find((control) => control.id === "cropStats");
+  const hydration = controls.find((control) => control.id === "cropHydration");
+  const soil = controls.find((control) => control.id === "cropSoil");
+  const depth = controls.find((control) => control.id === "cropSoilDepth");
+  const air = controls.find((control) => control.id === "cropAirQuality");
+  const stats = getCropStatsPreset(statsControl?.current.key);
+
+  return (
+    <span className="pointer-events-none absolute inset-0 z-[95] block">
+      {air ? (
+        <span className="absolute bottom-[calc(100%+4px)] left-1/2 min-w-10 -translate-x-1/2 border border-[#555] bg-[#d8d8d8] px-1 text-center text-[8px] font-black leading-3 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a]">
+          {compactConfigLabel(air.current.label)}
+        </span>
+      ) : null}
+      {hydration ? (
+        <span className="absolute right-[calc(100%+4px)] top-1 min-w-9 border border-[#555] bg-[#d8d8d8] px-1 text-center text-[8px] font-black leading-3 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a]">
+          {compactConfigLabel(hydration.current.label)}
+        </span>
+      ) : null}
+      {soil ? (
+        <span className="absolute left-[calc(100%+4px)] top-1 min-w-12 border border-[#555] bg-[#d8d8d8] px-1 text-center text-[8px] font-black leading-3 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a]">
+          {compactConfigLabel(soil.current.label)}
+          {depth ? ` ${depth.current.label}` : ""}
+        </span>
+      ) : null}
+      {stats ? (
+        <span className="absolute left-1/2 top-[calc(100%+4px)] grid -translate-x-1/2 grid-cols-3 gap-1 text-center text-[8px] font-black leading-3 text-black">
+          <CropStatBadge label="Gr" value={stats.growth} />
+          <CropStatBadge label="Ga" value={stats.gain} />
+          <CropStatBadge label="R" value={stats.resistance} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function PassiveProductionConfigPanel({
+  title,
+  controls,
+  onSelect,
+}: {
+  title: string;
+  controls: MachineConfigTierControl[];
+  onSelect: (controlId: string, nextTier: string) => void;
+}) {
+  if (controls.length === 0) {
+    return null;
+  }
+
+  const statsControl = controls.find((control) => control.id === "cropStats");
+  const regularControls = controls.filter((control) => control.id !== "cropStats");
+  const stats = getCropStatsPreset(statsControl?.current.key);
+
+  return (
+    <div className="nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
+        <div className="truncate text-[9px] font-bold uppercase leading-3 text-[#424242]">
+          {title}
+        </div>
+        {stats ? (
+          <div className="grid shrink-0 grid-cols-3 gap-1 text-center text-[9px] font-black leading-3">
+            <CropStatBadge label="Gr" value={stats.growth} />
+            <CropStatBadge label="Ga" value={stats.gain} />
+            <CropStatBadge label="R" value={stats.resistance} />
+          </div>
+        ) : null}
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {controls.map((control) => (
+          <label
+            key={control.id}
+            className={control === statsControl && regularControls.length > 0 ? "col-span-2" : ""}
+          >
+            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[#4a4a4a]">
+              {control.label}
+            </span>
+            <select
+              value={control.current.key}
+              onChange={(event) => onSelect(control.id, event.target.value)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              className="h-6 w-full min-w-0 border border-[#555] bg-[#d8d8d8] px-1 text-[10px] font-bold leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white"
+              title={`${control.label}: ${control.current.label}`}
+              aria-label={control.label}
+            >
+              {control.tiers.map((tier) => (
+                <option key={tier.key} value={tier.key}>
+                  {tier.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function CropStatBadge({ label, value }: { label: string; value: number }) {
+  return (
+    <span className="min-w-7 border border-[#555] bg-[#d8d8d8] px-1 shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a]">
+      {label}
+      {value}
+    </span>
+  );
+}
+
+function compactConfigLabel(label: string) {
+  if (label.length <= 5) {
+    return label;
+  }
+
+  return label
+    .split(/\s+|-/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
+}
+
 function MachineConfigButton({
   resource,
   title,
@@ -843,17 +1015,37 @@ function MachineConfigButton({
       title={title}
       aria-label={ariaLabel}
     >
-      <ResourceIcon
-        resource={resource}
-        bare
-        tooltip={false}
-        showAmount={false}
-        showConsumedState={false}
-        iconPixelSize={46}
-        className="h-10 w-10 !overflow-visible"
-      />
+      {resource.iconPath ? (
+        <ResourceIcon
+          resource={resource}
+          bare
+          tooltip={false}
+          showAmount={false}
+          showConsumedState={false}
+          iconPixelSize={46}
+          className="h-10 w-10 !overflow-visible"
+        />
+      ) : (
+        <span className="max-w-full truncate px-0.5 text-center text-[9px] font-black leading-3 text-white [text-shadow:1px_1px_0_#000]">
+          {shortConfigLabel(resource)}
+        </span>
+      )}
     </button>
   );
+}
+
+function shortConfigLabel(resource: ResourceAmount) {
+  const label = resource.displayName ?? resource.id;
+  if (/^\d+\/\d+\/\d+$/.test(label)) {
+    return label;
+  }
+  return label
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 4)
+    .toUpperCase();
 }
 
 function MachineParallelIndicator({ multiplier }: { multiplier: number }) {

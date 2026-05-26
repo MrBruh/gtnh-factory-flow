@@ -175,6 +175,47 @@ describe("enrichDatasetRecipes", () => {
 
     expect(enriched.recipes[0]?.inputs).toHaveLength(1);
   });
+
+  it("adds first-pass IC2 crop production controls without manual harvest", () => {
+    const dataset = baseDataset([
+      {
+        id: "ic2-crop-stickle",
+        name: "IC2 Crop: Stickreed",
+        machineType: "IC2 Crop",
+        minimumTier: "NONE",
+        durationTicks: 1200,
+        eut: 0,
+        inputs: [
+          {
+            kind: "item",
+            id: "IC2:itemCropSeed@1",
+            amount: 1,
+            displayName: "Stickreed Seeds",
+            consumed: false,
+          },
+        ],
+        outputs: [{ kind: "item", id: "IC2:itemHarz", amount: 1, displayName: "Sticky Resin" }],
+        source: { recipeMap: "IC2 Crop" },
+      },
+    ]);
+
+    const recipe = enrichDatasetRecipes(dataset).recipes[0];
+    const statControl = recipe?.machineConfigControls?.find(
+      (control) => control.id === "cropStats",
+    );
+
+    expect(recipe).toMatchObject({
+      machineType: "Crop Manager",
+      minimumTier: "LV",
+      eut: 8,
+    });
+    expect(recipe?.machineHandlers?.map((handler) => handler.label)).not.toContain("Manual");
+    expect(recipe?.machineHandlers?.map((handler) => handler.label)).toContain(
+      "Forestry Multifarm",
+    );
+    expect(statControl?.defaultKey).toBe("23-31-0");
+    expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
+  });
 });
 
 function baseDataset(recipes: RecipeDataset["recipes"]): RecipeDataset {
