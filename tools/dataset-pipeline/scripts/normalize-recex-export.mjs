@@ -211,9 +211,12 @@ function normalizeGregtechRecipes(source) {
       baseMachineType: machineType,
       minimumTierWhenUnknown: "UNKNOWN",
     });
-    const machineConfigControls = machineConfigControlsFromRawItems(machine.cat, {
-      scope: "recipe",
-    });
+    const machineConfigControls = machineConfigControlsFromRawItems(
+      baseMachineCatalysts(machine.cat, machineType),
+      {
+        scope: "recipe",
+      },
+    );
     recipeMaps.push(machineType);
 
     for (const [index, rawRecipe] of (machine.recs ?? []).entries()) {
@@ -446,6 +449,14 @@ function machineConfigControlsForRecipe(machineType, specialValue, machineConfig
 
 function machineConfigControlsForMachineHandler(label, rawItem) {
   return mergeMachineConfigControls(machineConfigControlsFromRawItems([rawItem], { scope: "handler" }));
+}
+
+function baseMachineCatalysts(catalysts, baseMachineType) {
+  const normalizedBase = normalizeLabel(baseMachineType);
+  return (catalysts ?? []).filter((catalyst) => {
+    const label = text(catalyst?.lN, catalyst?.id ?? "");
+    return normalizeLabel(machineHandlerFamilyLabel(label)) === normalizedBase;
+  });
 }
 
 function machineConfigControlsFromRawItems(items, { scope }) {
