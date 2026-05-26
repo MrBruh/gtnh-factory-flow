@@ -292,6 +292,7 @@ jobs:
           WorkingDirectory=$app_root/current
           Environment=NODE_ENV=production
           Environment=PORT=8580
+          Environment=GTNH_PREWARM_FULL_DATASETS=1
           ExecStart=/usr/bin/npm run start -- --hostname 0.0.0.0 --port 8580
           Restart=always
           RestartSec=5
@@ -315,8 +316,8 @@ jobs:
             for dataset_version in "$stable_version" "$daily_version"; do
               [ -n "$dataset_version" ] || continue
               echo "Prewarming dataset $dataset_version on main"
-              curl -fsS --max-time 180 --retry 3 --retry-delay 1 --retry-connrefused \
-                "http://127.0.0.1:8580/api/datasets/$dataset_version/catalog" >/dev/null
+              curl -fsS --max-time 900 --retry 3 --retry-delay 1 --retry-connrefused \
+                "http://127.0.0.1:8580/api/datasets/$dataset_version/prewarm?includeShards=1" >/dev/null
             done
           fi
 

@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { gunzipSync } from "node:zlib";
+import { promisify } from "node:util";
+import { gunzip } from "node:zlib";
 import type {
   DatasetManifest,
   DatasetResource,
@@ -111,6 +112,7 @@ const loadedShards = new Map<string, Recipe[]>();
 const pendingShardLoads = new Map<string, Promise<Recipe[]>>();
 const pendingPrewarmLoads = new Map<string, Promise<void>>();
 let manifestCache: DatasetManifest | undefined;
+const gunzipAsync = promisify(gunzip);
 
 export async function getDatasetCatalog(versionId: string) {
   const catalog = await loadCatalog(versionId);
@@ -421,16 +423,20 @@ async function queryDatasetRecipesFromLookup(
   };
 }
 
-export async function prewarmDatasetVersion(versionId: string): Promise<void> {
-  const pending = pendingPrewarmLoads.get(versionId);
+export async function prewarmDatasetVersion(
+  versionId: string,
+  options: { includeShards?: boolean } = {},
+): Promise<void> {
+  const cacheKey = `${versionId}:${options.includeShards ? "full" : "indexes"}`;
+  const pending = pendingPrewarmLoads.get(cacheKey);
   if (pending) {
     return pending;
   }
 
-  const promise = prewarmDatasetVersionOnce(versionId).finally(() => {
-    pendingPrewarmLoads.delete(versionId);
+  const promise = prewarmDatasetVersionOnce(versionId, options).finally(() => {
+    pendingPrewarmLoads.delete(cacheKey);
   });
-  pendingPrewarmLoads.set(versionId, promise);
+  pendingPrewarmLoads.set(cacheKey, promise);
   return promise;
 }
 
@@ -444,11 +450,18 @@ export async function prewarmLatestDatasetVersions(): Promise<void> {
     return Boolean(versionId) && versionIds.indexOf(versionId) === index;
   });
 
-  await Promise.all(versionIds.map((versionId) => prewarmDatasetVersion(versionId)));
+  const includeShards = process.env.GTNH_PREWARM_FULL_DATASETS === "1";
+  await Promise.all(
+    versionIds.map((versionId) => prewarmDatasetVersion(versionId, { includeShards })),
+  );
 }
 
-async function prewarmDatasetVersionOnce(versionId: string): Promise<void> {
+async function prewarmDatasetVersionOnce(
+  versionId: string,
+  { includeShards = false }: { includeShards?: boolean },
+): Promise<void> {
   const catalog = await loadCatalog(versionId);
+  getCatalogResourcesByKey(catalog);
   ensureResourceIndexes(catalog);
 
   if (catalog.version.recipeLookupIndexPath) {
@@ -457,6 +470,10 @@ async function prewarmDatasetVersionOnce(versionId: string): Promise<void> {
 
   const recipeCatalog = await loadRecipeIndex(versionId);
   ensureIndexes(recipeCatalog);
+
+  if (includeShards) {
+    await prewarmRecipeShards(recipeCatalog);
+  }
 }
 
 export async function getDatasetRecipe(
@@ -675,6 +692,19 @@ async function getRecipesByRawRecipeId(catalog: LoadedRecipeIndex): Promise<Map<
   return recipesByRawRecipeId;
 }
 
+async function prewarmRecipeShards(catalog: LoadedRecipeIndex): Promise<void> {
+  const batchSize = Number.parseInt(process.env.GTNH_PREWARM_SHARD_CONCURRENCY ?? "4", 10);
+  const concurrency = Number.isInteger(batchSize) && batchSize > 0 ? batchSize : 4;
+
+  for (let index = 0; index < catalog.shards.length; index += concurrency) {
+    await Promise.all(
+      catalog.shards
+        .slice(index, index + concurrency)
+        .map((shard) => loadShard(catalog.version, shard)),
+    );
+  }
+}
+
 function outputsAreCompatible(
   importedOutputs: Array<Pick<RecipeOutput, "kind" | "id">>,
   candidateOutputs: RecipeOutput[],
@@ -691,7 +721,8 @@ function outputsAreCompatible(
 
 async function readGzipJson<T>(filePath: string): Promise<T> {
   const data = await fs.readFile(filePath);
-  return JSON.parse(gunzipSync(data).toString("utf8")) as T;
+  const unzipped = await gunzipAsync(data);
+  return JSON.parse(unzipped.toString("utf8")) as T;
 }
 
 function publicPathToFile(publicPath: string): string {
