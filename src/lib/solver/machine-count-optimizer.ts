@@ -987,8 +987,67 @@ class MachineCountOptimizer {
 export function optimizeMachineCountsForProject(
   project: FactoryProject,
 ): MachineCountOptimizationResult {
-  const context = buildGraphContext(project);
-  return new MachineCountOptimizer(context).optimize();
+  const maxPasses = Math.max(1, project.nodes.length + (project.storages?.length ?? 0) + 1);
+  const seenInputHashes = new Set<string>();
+  let workingProject = project;
+  let lastResult: MachineCountOptimizationResult | undefined;
+
+  for (let pass = 1; pass <= maxPasses; pass += 1) {
+    const inputHash = hashProjectMachineCounts(workingProject);
+    if (seenInputHashes.has(inputHash)) {
+      lastResult?.diagnostics.push(`optimizer:stabilization-cycle:${pass}`);
+      break;
+    }
+    seenInputHashes.add(inputHash);
+
+    const context = buildGraphContext(workingProject);
+    const result = new MachineCountOptimizer(context).optimize();
+    lastResult = result;
+
+    const outputHash = hashMachineCounts(project.nodes, result.machineCounts);
+    if (outputHash === inputHash) {
+      result.diagnostics.push(`optimizer:stabilized:${pass}`);
+      return result;
+    }
+
+    workingProject = applyMachineCountsToProject(workingProject, result.machineCounts);
+  }
+
+  lastResult?.diagnostics.push(`optimizer:stabilization-cap:${maxPasses}`);
+  return (
+    lastResult ?? {
+      machineCounts: new Map(),
+      diagnostics: [`optimizer:stabilization-cap:${maxPasses}`],
+    }
+  );
+}
+
+function applyMachineCountsToProject(
+  project: FactoryProject,
+  machineCounts: Map<string, number>,
+): FactoryProject {
+  return {
+    ...project,
+    nodes: project.nodes.map((node) => ({
+      ...node,
+      machineCount: machineCounts.get(node.id) ?? node.machineCount,
+    })),
+  };
+}
+
+function hashProjectMachineCounts(project: FactoryProject): string {
+  return project.nodes
+    .map((node) => `${node.id}:${normalizeMachineCount(node.machineCount)}`)
+    .join("|");
+}
+
+function hashMachineCounts(nodes: FactoryNode[], machineCounts: Map<string, number>): string {
+  return nodes
+    .map(
+      (node) =>
+        `${node.id}:${normalizeMachineCount(machineCounts.get(node.id) ?? node.machineCount)}`,
+    )
+    .join("|");
 }
 
 function buildGraphContext(project: FactoryProject): GraphContext {

@@ -1235,6 +1235,29 @@ describe("factory machine count optimization", () => {
     );
   });
 
+  it("stabilizes rounded implicit source output in one click", () => {
+    useFactoryStore.getState().setProject(createImplicitRoundedSourceProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+    const firstCounts = useFactoryStore
+      .getState()
+      .project.nodes.map((node) => [node.id, node.machineCount]);
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(
+      useFactoryStore.getState().project.nodes.map((node) => [node.id, node.machineCount]),
+    ).toEqual(firstCounts);
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "rounded-source", machineCount: 4 }),
+        expect.objectContaining({ id: "rounded-producer", machineCount: 20 }),
+        expect.objectContaining({ id: "rounded-indirect", machineCount: 20 }),
+        expect.objectContaining({ id: "rounded-terminal", machineCount: 1 }),
+      ]),
+    );
+  });
+
   it("combines direct and indirect storage output for implicit terminal demand", () => {
     useFactoryStore.getState().setProject(createImplicitDirectAndIndirectStorageOutputProject());
 
@@ -2280,6 +2303,106 @@ function createImplicitParallelTerminalStorageDemandProject(): FactoryProject {
         target: "parallel-consumer",
         resourceKind: "fluid",
         resourceId: "oil",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createImplicitRoundedSourceProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "implicit-rounded-source",
+    name: "Implicit rounded source",
+    recipes: [
+      {
+        id: "rounded-source-recipe",
+        name: "Rounded Source",
+        machineType: "Source",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [],
+        outputs: [{ kind: "item", id: "input", amount: 5 }],
+      },
+      {
+        id: "rounded-producer-recipe",
+        name: "Rounded Producer",
+        machineType: "Producer",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "input", amount: 1 }],
+        outputs: [
+          { kind: "fluid", id: "product", amount: 1 },
+          { kind: "item", id: "byproduct", amount: 1 },
+        ],
+      },
+      {
+        id: "rounded-indirect-recipe",
+        name: "Rounded Indirect",
+        machineType: "Indirect",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "byproduct", amount: 1 }],
+        outputs: [{ kind: "fluid", id: "product", amount: 5 }],
+      },
+      {
+        id: "rounded-terminal-recipe",
+        name: "Rounded Terminal",
+        machineType: "Terminal",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "product", amount: 100 }],
+        outputs: [{ kind: "fluid", id: "done", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("rounded-source", "rounded-source-recipe", 0),
+      makeNode("rounded-producer", "rounded-producer-recipe", 180),
+      makeNode("rounded-indirect", "rounded-indirect-recipe", 360),
+      makeNode("rounded-terminal", "rounded-terminal-recipe", 540),
+    ],
+    storages: [
+      { id: "rounded-tank", kind: "fluid", resourceId: "product", position: { x: 360, y: 160 } },
+    ],
+    edges: [
+      {
+        id: "rounded-source-to-producer",
+        source: "rounded-source",
+        target: "rounded-producer",
+        resourceKind: "item",
+        resourceId: "input",
+      },
+      {
+        id: "rounded-producer-to-indirect",
+        source: "rounded-producer",
+        target: "rounded-indirect",
+        resourceKind: "item",
+        resourceId: "byproduct",
+      },
+      {
+        id: "rounded-producer-to-tank",
+        source: "rounded-producer",
+        target: "rounded-tank",
+        resourceKind: "fluid",
+        resourceId: "product",
+      },
+      {
+        id: "rounded-indirect-to-tank",
+        source: "rounded-indirect",
+        target: "rounded-tank",
+        resourceKind: "fluid",
+        resourceId: "product",
+      },
+      {
+        id: "rounded-tank-to-terminal",
+        source: "rounded-tank",
+        target: "rounded-terminal",
+        resourceKind: "fluid",
+        resourceId: "product",
       },
     ],
     fuelProfiles: [],
