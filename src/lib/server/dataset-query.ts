@@ -451,9 +451,9 @@ export async function prewarmLatestDatasetVersions(): Promise<void> {
   });
 
   const includeShards = process.env.GTNH_PREWARM_FULL_DATASETS === "1";
-  await Promise.all(
-    versionIds.map((versionId) => prewarmDatasetVersion(versionId, { includeShards })),
-  );
+  for (const versionId of versionIds) {
+    await prewarmDatasetVersion(versionId, { includeShards });
+  }
 }
 
 async function prewarmDatasetVersionOnce(
