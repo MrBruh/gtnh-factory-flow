@@ -292,6 +292,7 @@ jobs:
           WorkingDirectory=$app_root/current
           Environment=NODE_ENV=production
           Environment=PORT=8580
+          Environment=GTNH_PREWARM_ALL_DATASETS=1
           ExecStart=/usr/bin/npm run start -- --hostname 0.0.0.0 --port 8580
           Restart=always
           RestartSec=5
@@ -311,11 +312,18 @@ jobs:
             manifest_url="http://127.0.0.1:8580/datasets/gtnh/datasets.manifest.json"
             manifest="$(curl -fsS --retry 20 --retry-delay 1 --retry-connrefused "$manifest_url")"
             stable_version="$(printf '%s' "$manifest" | grep -o '"latestStableVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestStableVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
-            if [ -n "$stable_version" ]; then
-              echo "Prewarming dataset $stable_version on main"
+            daily_version="$(printf '%s' "$manifest" | grep -o '"latestDailyVersion"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"latestDailyVersion"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/' || true)"
+            prewarmed_versions=""
+            for dataset_version in "$stable_version" "$daily_version"; do
+              [ -n "$dataset_version" ] || continue
+              case " $prewarmed_versions " in
+                *" $dataset_version "*) continue ;;
+              esac
+              prewarmed_versions="$prewarmed_versions $dataset_version"
+              echo "Prewarming dataset $dataset_version on main"
               curl -fsS --max-time 300 --retry 3 --retry-delay 1 --retry-connrefused \
-                "http://127.0.0.1:8580/api/datasets/$stable_version/prewarm" >/dev/null
-            fi
+                "http://127.0.0.1:8580/api/datasets/$dataset_version/prewarm" >/dev/null
+            done
           fi
 
           if [ -f "$dataset_root/datasets.manifest.json" ]; then
