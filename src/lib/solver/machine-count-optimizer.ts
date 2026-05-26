@@ -517,6 +517,21 @@ class MachineCountOptimizer {
       return;
     }
 
+    if (this.isInternalCyclicDemand(supplier.source, nodeId)) {
+      if (supplier.sourceNodeId) {
+        const suppliedInputKeys = this.getInternalCyclicStorageInputKeys(supplier.sourceNodeId);
+        if (suppliedInputKeys.size > 0) {
+          this.requireInternalCyclicNodeOutput(
+            supplier.sourceNodeId,
+            supplier.resourceKey,
+            amountPerSecond,
+            suppliedInputKeys,
+          );
+        }
+      }
+      return;
+    }
+
     if (supplier.sourceNodeId) {
       this.requireNodeOutput(supplier.sourceNodeId, supplier.resourceKey, amountPerSecond, nodeId);
       return;
@@ -530,9 +545,12 @@ class MachineCountOptimizer {
     inputKey: ResourceKey,
     amountPerSecond: number,
   ): Supplier | undefined {
-    const suppliers = (
-      this.context.incomingSuppliersByNodeResource.get(makeDemandKey(nodeId, inputKey)) ?? []
-    ).filter((supplier) => !this.isInternalCyclicDemand(supplier.source, nodeId));
+    const allSuppliers =
+      this.context.incomingSuppliersByNodeResource.get(makeDemandKey(nodeId, inputKey)) ?? [];
+    const externalSuppliers = allSuppliers.filter(
+      (supplier) => !this.isInternalCyclicDemand(supplier.source, nodeId),
+    );
+    const suppliers = externalSuppliers.length > 0 ? externalSuppliers : allSuppliers;
 
     return suppliers
       .map((supplier) => ({
@@ -552,6 +570,48 @@ class MachineCountOptimizer {
         nodeId: supplier.sourceNodeId ?? supplier.sourceStorageBusId ?? supplier.source,
       }))
       .sort(compareCandidateScores)[0]?.supplier;
+  }
+
+  private requireInternalCyclicNodeOutput(
+    nodeId: string,
+    resourceKey: ResourceKey,
+    amountPerSecond: number,
+    suppliedInputKeys: Set<ResourceKey>,
+  ) {
+    const plan = this.context.ratePlans.get(nodeId);
+    const outputRate = plan?.outputs.get(resourceKey) ?? 0;
+    if (!plan?.enabled || !plan.valid || outputRate <= EPSILON || amountPerSecond <= EPSILON) {
+      return;
+    }
+
+    const demandKey = makeDemandKey(nodeId, resourceKey);
+    const nextDemand = (this.outputDemand.get(demandKey) ?? 0) + amountPerSecond;
+    this.outputDemand.set(demandKey, nextDemand);
+
+    this.ensureNodeOperations(nodeId, nextDemand / outputRate, suppliedInputKeys);
+  }
+
+  private getInternalCyclicStorageInputKeys(nodeId: string): Set<ResourceKey> {
+    const internalInputs = new Set<ResourceKey>();
+    const plan = this.context.ratePlans.get(nodeId);
+    if (!plan) {
+      return internalInputs;
+    }
+
+    for (const inputKey of plan.inputs.keys()) {
+      const suppliers =
+        this.context.incomingSuppliersByNodeResource.get(makeDemandKey(nodeId, inputKey)) ?? [];
+      if (
+        suppliers.some(
+          (supplier) =>
+            supplier.sourceStorageBusId && this.isInternalCyclicDemand(supplier.source, nodeId),
+        )
+      ) {
+        internalInputs.add(inputKey);
+      }
+    }
+
+    return internalInputs;
   }
 
   private satisfyStorageDemand(

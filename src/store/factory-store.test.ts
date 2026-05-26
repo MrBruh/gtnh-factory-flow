@@ -1151,6 +1151,29 @@ describe("factory machine count optimization", () => {
     ).toBeLessThanOrEqual(51);
   });
 
+  it("sizes internal suppliers in catalyst loops from downstream demand", () => {
+    useFactoryStore.getState().setProject(createCatalystLoopOptimizationProject());
+
+    useFactoryStore.getState().optimizeMachineCounts();
+    const firstCounts = useFactoryStore
+      .getState()
+      .project.nodes.map((node) => [node.id, node.machineCount]);
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(
+      useFactoryStore.getState().project.nodes.map((node) => [node.id, node.machineCount]),
+    ).toEqual(firstCounts);
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "loop-compressor", machineCount: 5 }),
+        expect.objectContaining({ id: "loop-centrifuge", machineCount: 1 }),
+        expect.objectContaining({ id: "loop-canner", machineCount: 1 }),
+        expect.objectContaining({ id: "loop-terminal", machineCount: 1 }),
+      ]),
+    );
+  });
+
   it("keeps global optimization idempotent across repeated clicks", () => {
     useFactoryStore.getState().setProject(createStorageBusCycleProject());
 
@@ -1845,6 +1868,122 @@ function createSmallCyclicBottleneckProject(): FactoryProject {
         targetHandle: makeResourceHandleId("input", { kind: "item", id: "seed" }, 0),
         resourceKind: "item",
         resourceId: "seed",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createCatalystLoopOptimizationProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "catalyst-loop-optimization",
+    name: "Catalyst loop optimization",
+    recipes: [
+      {
+        id: "loop-compressor-recipe",
+        name: "Loop Compressor",
+        machineType: "Compressor",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "empty_cell", amount: 1 }],
+        outputs: [{ kind: "item", id: "compressed_air_cell", amount: 1 }],
+      },
+      {
+        id: "loop-centrifuge-recipe",
+        name: "Loop Centrifuge",
+        machineType: "Centrifuge",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "compressed_air_cell", amount: 5 }],
+        outputs: [
+          { kind: "fluid", id: "nitrogen", amount: 1_000 },
+          { kind: "item", id: "empty_cell", amount: 4 },
+          { kind: "item", id: "oxygen_cell", amount: 1 },
+        ],
+      },
+      {
+        id: "loop-canner-recipe",
+        name: "Loop Canner",
+        machineType: "Fluid Canner",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "oxygen_cell", amount: 1 }],
+        outputs: [
+          { kind: "item", id: "empty_cell", amount: 1 },
+          { kind: "fluid", id: "oxygen", amount: 1_000 },
+        ],
+      },
+      {
+        id: "loop-terminal-recipe",
+        name: "Loop Terminal",
+        machineType: "Consumer",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "fluid", id: "nitrogen", amount: 1_000 }],
+        outputs: [{ kind: "fluid", id: "product", amount: 1 }],
+      },
+    ],
+    nodes: [
+      makeNode("loop-compressor", "loop-compressor-recipe", 0),
+      makeNode("loop-centrifuge", "loop-centrifuge-recipe", 240),
+      makeNode("loop-canner", "loop-canner-recipe", 480),
+      makeNode("loop-terminal", "loop-terminal-recipe", 720),
+    ],
+    storages: [
+      {
+        id: "loop-empty-cell-buffer",
+        kind: "item",
+        resourceId: "empty_cell",
+        position: { x: 160, y: 120 },
+      },
+    ],
+    edges: [
+      {
+        id: "loop-compressor-to-centrifuge",
+        source: "loop-compressor",
+        target: "loop-centrifuge",
+        resourceKind: "item",
+        resourceId: "compressed_air_cell",
+      },
+      {
+        id: "loop-centrifuge-to-terminal",
+        source: "loop-centrifuge",
+        target: "loop-terminal",
+        resourceKind: "fluid",
+        resourceId: "nitrogen",
+      },
+      {
+        id: "loop-centrifuge-to-canner",
+        source: "loop-centrifuge",
+        target: "loop-canner",
+        resourceKind: "item",
+        resourceId: "oxygen_cell",
+      },
+      {
+        id: "loop-centrifuge-to-buffer",
+        source: "loop-centrifuge",
+        target: "loop-empty-cell-buffer",
+        resourceKind: "item",
+        resourceId: "empty_cell",
+      },
+      {
+        id: "loop-canner-to-buffer",
+        source: "loop-canner",
+        target: "loop-empty-cell-buffer",
+        resourceKind: "item",
+        resourceId: "empty_cell",
+      },
+      {
+        id: "loop-buffer-to-compressor",
+        source: "loop-empty-cell-buffer",
+        target: "loop-compressor",
+        resourceKind: "item",
+        resourceId: "empty_cell",
       },
     ],
     fuelProfiles: [],
