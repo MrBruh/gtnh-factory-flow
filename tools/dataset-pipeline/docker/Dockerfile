@@ -1,4 +1,4 @@
-FROM azul/zulu-openjdk:17-jdk AS jdk17
+FROM azul/zulu-openjdk:17 AS jdk17
 FROM eclipse-temurin:25-jdk-jammy AS jdk25
 
 FROM eclipse-temurin:21-jdk-jammy
