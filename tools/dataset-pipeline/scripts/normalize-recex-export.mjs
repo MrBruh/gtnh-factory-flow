@@ -544,36 +544,67 @@ function synthesizeIc2CropRecipes() {
     return [];
   }
 
-  const seed = virtualPassiveInput(
+  const seedVisual = passiveInputVisualFallback([
+    "IC2:itemCropSeed",
+    "IC2:itemCropSeed@32767",
+    "cropsnh:genericSeed",
+    "minecraft:wheat_seeds",
+  ]);
+  const stickreedSeed = virtualPassiveInput(
     "factoryflow:ic2_crop_seed:stickreed",
-    "Stickreed Seeds",
-    passiveInputVisualFallback([
-      "IC2:itemCropSeed",
-      "IC2:itemCropSeed@32767",
-      "cropsnh:genericSeed",
-      "minecraft:wheat_seeds",
-    ]),
+    "Stickreed Seeds (#4269)",
+    seedVisual,
+    { tooltip: ["IC2:itemCropSeed"] },
   );
-  const outputs = [
-    resourceForPassiveRecipe("item", "IC2:itemHarz", { displayName: "Sticky Resin" }),
-  ].filter(Boolean);
+  const recipes = [];
+  const stickyResin = resourceForPassiveRecipe("item", "IC2:itemHarz", {
+    displayName: "Sticky Resin",
+  });
 
-  return outputs.map((output) =>
-    addSyntheticPassiveRecipe({
-      machineType: "IC2 Crop",
-      input: seed,
-      output,
-      index: 0,
-      durationTicks: 1200,
-      eut: 0,
-      minimumTier: "NONE",
-      note: "Synthesized from exported GTNH resources because RecEx does not expose IC2 crop NEI recipes.",
-    }),
-  );
+  if (stickyResin) {
+    recipes.push(
+      addSyntheticPassiveRecipe({
+        machineType: "IC2 Crop",
+        input: stickreedSeed,
+        output: stickyResin,
+        index: 0,
+        durationTicks: 1200,
+        eut: 0,
+        minimumTier: "NONE",
+        note: "Synthesized from exported GTNH resources because RecEx does not expose IC2 crop NEI recipes.",
+      }),
+    );
+  }
+
+  if (!usesLegacyIc2Crops()) {
+    return recipes;
+  }
+
+  const outputs = passiveResourceValues()
+    .filter(isLegacyIc2CropPassiveOutputResource)
+    .sort(compareById)
+    .slice(0, 500);
+
+  outputs.forEach((output, index) => {
+    recipes.push(
+      addSyntheticPassiveRecipe({
+        machineType: "IC2 Crop",
+        input: legacyIc2SeedInputForOutput(output, seedVisual),
+        output: passiveOutputAmount(output),
+        index: index + 1,
+        durationTicks: 1200,
+        eut: 0,
+        minimumTier: "NONE",
+        note: "Synthesized from exported GTNH resources because RecEx does not expose IC2 crop NEI recipes.",
+      }),
+    );
+  });
+
+  return recipes;
 }
 
 function synthesizeCropNhRecipes() {
-  if (hasRecipeMap("CropNH")) {
+  if (hasRecipeMap("CropNH") || usesLegacyIc2Crops()) {
     return [];
   }
 
@@ -602,6 +633,44 @@ function synthesizeCropNhRecipes() {
       minimumTier: "NONE",
       note: "Synthesized from exported CropNH resources because RecEx does not expose CropNH passive NEI recipes.",
     }),
+  );
+}
+
+function legacyIc2SeedInputForOutput(output, visual) {
+  const bonsai = legacyBonsaiTreeInfo(output);
+  const displayName = `${bonsai?.cropName ?? cropNhSeedNameFromOutput(output)} Seeds (#4269)`;
+  const idSource = bonsai?.key ?? `${output.kind}:${output.id}`;
+  return virtualPassiveInput(`factoryflow:ic2_crop_seed:${slug(idSource)}`, displayName, visual, {
+    tooltip: ["IC2:itemCropSeed"],
+  });
+}
+
+function usesLegacyIc2Crops() {
+  return cropNhSeedCatalog.length === 0;
+}
+
+function isLegacyIc2CropPassiveOutputResource(resource) {
+  return isCropNhPassiveOutputResource(resource) || Boolean(legacyBonsaiTreeInfo(resource));
+}
+
+function legacyBonsaiTreeInfo(resource) {
+  if (!cropNhBonsaiOutputLike(resource)) {
+    return undefined;
+  }
+
+  const normalizedName = normalizeLabel(resource.displayName ?? "");
+  const candidates = [
+    { token: "dark oak", key: "bonsai-dark-oak", cropName: "Dark Oak Bonsai" },
+    { token: "acacia", key: "bonsai-acacia", cropName: "Acacia Bonsai" },
+    { token: "birch", key: "bonsai-birch", cropName: "Birch Bonsai" },
+    { token: "jungle", key: "bonsai-jungle", cropName: "Jungle Bonsai" },
+    { token: "rubber", key: "bonsai-rubber", cropName: "Rubber Bonsai" },
+    { token: "slimy", key: "bonsai-slimy", cropName: "Slimy Bonsai" },
+    { token: "spruce", key: "bonsai-spruce", cropName: "Spruce Bonsai" },
+    { token: "oak", key: "bonsai-oak", cropName: "Oak Bonsai" },
+  ];
+  return candidates.find(({ token }) =>
+    new RegExp(`\\b${escapeRegExp(token)}\\b`).test(normalizedName),
   );
 }
 
