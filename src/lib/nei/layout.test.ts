@@ -158,6 +158,81 @@ describe("NEI layout", () => {
     ]);
   });
 
+  it("uses a dedicated NEI layout for the Component Assembly Line", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Component Assembly Line",
+        sourceRecipeMap: "Component Assembly Line",
+        inputs: [
+          { kind: "item", id: "component-a", amount: 1, neiSlot: { x: 97, y: 17 } },
+          { kind: "item", id: "component-b", amount: 1, neiSlot: { x: 115, y: 17 } },
+          { kind: "fluid", id: "solder", amount: 144, neiSlot: { x: 97, y: 35 } },
+        ],
+        outputs: [{ kind: "item", id: "assembled", amount: 1, neiSlot: { x: 142, y: 17 } }],
+        nei: {
+          itemInputGrid: { width: 3, height: 4 },
+          fluidInputGrid: { width: 4, height: 3 },
+          slots: [
+            { side: "input", kind: "item", slotIndex: 0, x: 97, y: 17 },
+            { side: "input", kind: "fluid", slotIndex: 0, x: 97, y: 35 },
+            { side: "output", kind: "item", slotIndex: 0, x: 142, y: 17 },
+          ],
+          progressBars: [{ x: 80, y: 44, width: 20, height: 18, direction: "right" }],
+        },
+      }),
+    );
+
+    expect(layout.id).toBe("component-assembly-line");
+    expect(layout.canvas).toEqual({ width: 170, height: 112 });
+    expect(layout.progressBars).toEqual([]);
+    expect(layout.labels).toEqual([
+      { text: "F", x: 78, y: 25, color: "#3f94ff" },
+      { text: "M", x: 78, y: 43, color: "#e53935" },
+      { text: "E", x: 78, y: 61, color: "#24b47e" },
+    ]);
+    expect(
+      layout.frames
+        .filter((frame) => frame.side === "input" && frame.kind === "item")
+        .map((frame) => [frame.x, frame.y]),
+    ).toEqual([
+      [16, 17],
+      [34, 17],
+      [52, 17],
+      [16, 35],
+      [34, 35],
+      [52, 35],
+      [16, 53],
+      [34, 53],
+      [52, 53],
+      [16, 71],
+      [34, 71],
+      [52, 71],
+    ]);
+    expect(
+      layout.frames
+        .filter((frame) => frame.side === "input" && frame.kind === "fluid")
+        .map((frame) => [frame.x, frame.y]),
+    ).toEqual([
+      [97, 35],
+      [115, 35],
+      [133, 35],
+      [151, 35],
+      [97, 53],
+      [115, 53],
+      [133, 53],
+      [151, 53],
+      [97, 71],
+      [115, 71],
+      [133, 71],
+      [151, 71],
+    ]);
+    expect(
+      layout.frames
+        .filter((frame) => frame.side === "output" && frame.kind === "item")
+        .map((frame) => [frame.x, frame.y]),
+    ).toEqual([[151, 17]]);
+  });
+
   it("uses distillation tower output column ordering", () => {
     const layout = getNeiRecipeLayout(
       recipe({

@@ -54,6 +54,13 @@ export interface NeiProgressBar {
   texture: NeiProgressTexture;
 }
 
+export interface NeiLabel {
+  text: string;
+  x: number;
+  y: number;
+  color: string;
+}
+
 export interface NeiRecipeLayout {
   id: string;
   canvas: NeiSize;
@@ -62,6 +69,7 @@ export interface NeiRecipeLayout {
   slots: NeiPositionedSlot[];
   overflowGroups: NeiOverflowGroup[];
   progressBars: NeiProgressBar[];
+  labels: NeiLabel[];
   logo: NeiPoint;
 }
 
@@ -78,6 +86,7 @@ interface RecipeMapLayoutDefinition {
   fluidInputPositions?: PositionGetter;
   fluidOutputPositions?: PositionGetter;
   progressBars?: NeiProgressBar[];
+  labels?: NeiLabel[];
 }
 
 type PositionGetter = (count: number, definition: RequiredRecipeMapLayoutDefinition) => NeiPoint[];
@@ -111,6 +120,23 @@ const BEE_PRODUCE_LAYOUT: RecipeMapLayoutDefinition = {
   itemInputPositions: (count) => gridPositions(count, 48, 35, 1, 1),
   itemOutputPositions: beeOutputPositions,
   progressBars: [{ x: 80, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" }],
+};
+const COMPONENT_ASSEMBLY_LINE_LAYOUT: RecipeMapLayoutDefinition = {
+  id: "component-assembly-line",
+  canvas: { width: 170, height: 112 },
+  maxItemInputs: 12,
+  maxItemOutputs: 1,
+  maxFluidInputs: 12,
+  maxFluidOutputs: 0,
+  itemInputPositions: (count) => gridPositions(count, 16, 17, 3, 4),
+  itemOutputPositions: (count) => (count > 0 ? [{ x: 151, y: 17 }] : []),
+  fluidInputPositions: (count) => gridPositions(count, 97, 35, 4, 3),
+  progressBars: [],
+  labels: [
+    { text: "F", x: 78, y: 25, color: "#3f94ff" },
+    { text: "M", x: 78, y: 43, color: "#e53935" },
+    { text: "E", x: 78, y: 61, color: "#24b47e" },
+  ],
 };
 
 const LARGE_NEI_MAPS = new Set([
@@ -248,7 +274,8 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   const itemOutputs = withResourceIndexes(recipe.outputs, "item");
   const fluidOutputs = withResourceIndexes(recipe.outputs, "fluid");
 
-  const shouldUseRecipeMapLayout = definition.id === "bee-produce";
+  const shouldUseRecipeMapLayout =
+    definition.id === "bee-produce" || definition.id === "component-assembly-line";
   const explicitFrames = shouldUseRecipeMapLayout
     ? undefined
     : getExplicitSlotFrames(recipe, {
@@ -323,6 +350,7 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
       recipeMap,
       explicitProgressBars ?? definition.progressBars,
     ),
+    labels: definition.labels ?? [],
     logo: definition.logo ?? { x: 152, y: 63 },
   };
 }
@@ -475,6 +503,10 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
 function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLayoutDefinition {
   const exact = findRecipeMapLayout(recipeMap);
   if (exact && recipeMapMatches(recipeMap, "Blast Furnace")) return exact;
+
+  if (recipeMapMatches(recipeMap, "Component Assembly Line")) {
+    return COMPONENT_ASSEMBLY_LINE_LAYOUT;
+  }
 
   if (matchesKnownRecipeMap(recipeMap, CRAFTING_TABLE_MAPS)) {
     return craftingTableLayout(recipe);
