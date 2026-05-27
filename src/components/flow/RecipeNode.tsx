@@ -51,7 +51,7 @@ import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
 import { GT_TIER_COLORS } from "./tier-colors";
 
-const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[378px]";
+const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
