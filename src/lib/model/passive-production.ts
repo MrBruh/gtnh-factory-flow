@@ -217,9 +217,6 @@ function cropProductionControls(recipe: PassiveProductionRecipeLabel) {
             durationMultiplier: 0.95,
           },
         ),
-        option("cropmatron", "Crop-Matron", "ic2:blockCropmatron", "Crop-Matron Managed Soil", {
-          durationMultiplier: 0.9,
-        }),
       ],
     }),
     selectControl({
