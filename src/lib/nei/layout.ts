@@ -97,15 +97,20 @@ const DEFAULT_PROGRESS_BARS: NeiProgressBar[] = [
 const CROP_PROGRESS_BARS: NeiProgressBar[] = [
   { x: 78, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" },
 ];
+const beeOutputPositions: PositionGetter = (count) =>
+  Array.from({ length: count }, (_, index) => ({
+    x: 106 + (index % 3) * SLOT_SIZE,
+    y: 17 + Math.floor(index / 3) * SLOT_SIZE * 2,
+  }));
 const BEE_PRODUCE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "bee-produce",
   maxItemInputs: 1,
   maxItemOutputs: 6,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
-  itemInputPositions: (count) => gridPositions(count, 48, 42, 1, 1),
-  itemOutputPositions: (count) => gridPositions(count, 106, 26, 3),
-  progressBars: [{ x: 80, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  itemInputPositions: (count) => gridPositions(count, 48, 35, 1, 1),
+  itemOutputPositions: beeOutputPositions,
+  progressBars: [{ x: 80, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" }],
 };
 
 const LARGE_NEI_MAPS = new Set([
