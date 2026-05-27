@@ -14,7 +14,6 @@ import {
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import {
   GT_VOLTAGE_TIERS,
-  isBeeProductionRecipe,
   isVirtualChoiceResource,
   resourceLabel,
   resourceMatchesInput,
@@ -1324,7 +1323,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
         <NeiRecipeWindow
           recipe={previewRecipe}
           scale={2}
-          compactSlotPixelSize={isBeeProductionRecipe(previewRecipe) ? 26 : undefined}
           compact
           contextResource={contextResource}
           className="mx-auto"
