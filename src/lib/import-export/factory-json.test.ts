@@ -58,6 +58,53 @@ describe("factory JSON import/export", () => {
     expect(project.nodes[0]?.parallel).toBe(1);
   });
 
+  it("accepts zero output machine config tiers for disabled production states", () => {
+    const project = parseFactoryProjectJson(
+      JSON.stringify({
+        schemaVersion: 1,
+        id: "zero-output-control",
+        name: "Zero output control",
+        recipes: [
+          {
+            id: "bee-recipe",
+            name: "Bee Produce: Test Bee",
+            machineType: "Apiary",
+            minimumTier: "NONE",
+            durationTicks: 550,
+            eut: 0,
+            inputs: [{ kind: "item", id: "factoryflow:bee_species:test", amount: 1 }],
+            outputs: [{ kind: "item", id: "test:comb", amount: 1 }],
+            machineConfigControls: [
+              {
+                id: "beeEnvironment",
+                label: "Climate",
+                minimumKey: "wrong",
+                defaultKey: "preferred",
+                tiers: [
+                  {
+                    key: "wrong",
+                    label: "Wrong",
+                    outputMultiplier: 0,
+                    resource: {
+                      kind: "item",
+                      id: "factoryflow:bee_environment_wrong",
+                      amount: 1,
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+        nodes: [],
+        edges: [],
+        fuelProfiles: [],
+      }),
+    );
+
+    expect(project.recipes[0]?.machineConfigControls?.[0]?.tiers[0]?.outputMultiplier).toBe(0);
+  });
+
   it("validates normalized recipe datasets", () => {
     const dataset = parseRecipeDatasetJson(
       JSON.stringify({
