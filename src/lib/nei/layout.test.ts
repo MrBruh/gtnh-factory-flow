@@ -198,14 +198,14 @@ describe("NEI layout", () => {
     );
 
     expect(layout.id).toBe("bee-produce");
-    expect(layout.canvas.width).toBe(250);
+    expect(layout.canvas.width).toBe(170);
     expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
-      ["item", "input", 58, 42],
-      ["item", "output", 150, 26],
-      ["item", "output", 168, 26],
+      ["item", "input", 34, 42],
+      ["item", "output", 106, 26],
+      ["item", "output", 124, 26],
     ]);
     expect(layout.frames.filter((frame) => frame.side === "output")).toHaveLength(6);
-    expect(layout.progressBars[0]).toMatchObject({ x: 98, y: 42, texture: "arrow" });
+    expect(layout.progressBars[0]).toMatchObject({ x: 66, y: 42, texture: "arrow" });
   });
 
   it("reuses the Bee Produce surface for bee machines", () => {
@@ -219,8 +219,8 @@ describe("NEI layout", () => {
 
     expect(layout.id).toBe("bee-produce");
     expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
-      ["item", "input", 58, 42],
-      ["item", "output", 150, 26],
+      ["item", "input", 34, 42],
+      ["item", "output", 106, 26],
     ]);
     expect(layout.frames.filter((frame) => frame.side === "output")).toHaveLength(6);
   });
