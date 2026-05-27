@@ -212,6 +212,111 @@ const treeGrowthSimulatorToolSlots = [
   { id: "tgsToolSlot4", label: "Fruit Tool", category: "fruit", x: 54, y: 54 },
 ];
 
+const BONSAI_LOGS_PER_HARVEST = 10;
+const VANILLA_BONSAI_CROPS = [
+  {
+    key: "bonsai-oak",
+    cropName: "Oak Bonsai",
+    chances: [100, 50, 10],
+    drops: [
+      { id: "minecraft:log", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling", baseAmount: 1 },
+      { id: "minecraft:apple", baseAmount: 1 },
+    ],
+  },
+  {
+    key: "bonsai-spruce",
+    cropName: "Spruce Bonsai",
+    chances: [80, 30],
+    drops: [
+      { id: "minecraft:log@1", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling@1", baseAmount: 1 },
+    ],
+  },
+  {
+    key: "bonsai-birch",
+    cropName: "Birch Bonsai",
+    chances: [80, 30],
+    drops: [
+      { id: "minecraft:log@2", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling@2", baseAmount: 1 },
+    ],
+  },
+  {
+    key: "bonsai-jungle",
+    cropName: "Jungle Bonsai",
+    chances: [80, 30],
+    drops: [
+      { id: "minecraft:log@3", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling@3", baseAmount: 1 },
+    ],
+  },
+  {
+    key: "bonsai-acacia",
+    cropName: "Acacia Bonsai",
+    chances: [80, 30],
+    drops: [
+      { id: "minecraft:log2", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling@4", baseAmount: 1 },
+    ],
+  },
+  {
+    key: "bonsai-dark-oak",
+    cropName: "Dark Oak Bonsai",
+    chances: [80, 30],
+    drops: [
+      { id: "minecraft:log2@1", baseAmount: BONSAI_LOGS_PER_HARVEST },
+      { id: "minecraft:sapling@5", baseAmount: 1 },
+    ],
+  },
+].map((bonsai) => ({
+  ...bonsai,
+  drops: bonsai.drops.map((drop, index) => ({
+    ...drop,
+    amount: roundSyntheticAmount(expectedBonsaiDropAmount(bonsai.chances, index, drop.baseAmount)),
+  })),
+}));
+const VANILLA_BONSAI_OUTPUTS = new Map(
+  VANILLA_BONSAI_CROPS.flatMap((bonsai) =>
+    bonsai.drops.map((drop) => [`item:${drop.id}`, { bonsai, drop }]),
+  ),
+);
+
+function expectedBonsaiDropAmount(chances, dropIndex, baseAmount) {
+  const maxChance = Math.max(...chances);
+  let matchingRolls = 0;
+
+  for (let roll = 0; roll < maxChance; roll += 1) {
+    for (let index = chances.length - 1; index >= 0; index -= 1) {
+      if (chances[index] >= roll) {
+        if (index === dropIndex) {
+          matchingRolls += 1;
+        }
+        break;
+      }
+    }
+  }
+
+  return (matchingRolls / maxChance) * expectedPositiveBonsaiStackSize(baseAmount);
+}
+
+function expectedPositiveBonsaiStackSize(baseAmount) {
+  let total = 0;
+  let rolls = 0;
+  for (let delta = -3; delta <= 3; delta += 1) {
+    const amount = baseAmount + delta;
+    if (amount > 0) {
+      total += amount;
+    }
+    rolls += 1;
+  }
+  return total / rolls;
+}
+
+function roundSyntheticAmount(value) {
+  return Math.round(value * 10000) / 10000;
+}
+
 const sources = Array.isArray(raw.sources) ? raw.sources : [];
 const gregtechSource = sources.find((source) => source.type === "gregtech");
 
@@ -552,7 +657,7 @@ function synthesizeIc2CropRecipes() {
   ]);
   const stickreedSeed = virtualPassiveInput(
     "factoryflow:ic2_crop_seed:stickreed",
-    "Stickreed Seeds (#4269)",
+    "Stickreed Seeds",
     seedVisual,
     { tooltip: ["IC2:itemCropSeed"] },
   );
@@ -584,13 +689,18 @@ function synthesizeIc2CropRecipes() {
     .filter(isLegacyIc2CropPassiveOutputResource)
     .sort(compareById)
     .slice(0, 500);
+  const outputGroups = groupSyntheticOutputsByInput(
+    outputs,
+    (output) => legacyIc2SeedInputForOutput(output, seedVisual),
+    legacyIc2CropOutputAmount,
+  );
 
-  outputs.forEach((output, index) => {
+  outputGroups.forEach((group, index) => {
     recipes.push(
       addSyntheticPassiveRecipe({
         machineType: "IC2 Crop",
-        input: legacyIc2SeedInputForOutput(output, seedVisual),
-        output: passiveOutputAmount(output),
+        input: group.input,
+        outputs: group.outputs,
         index: index + 1,
         durationTicks: 1200,
         eut: 0,
@@ -621,12 +731,17 @@ function synthesizeCropNhRecipes() {
     )
     .sort(compareById)
     .slice(0, 500);
+  const outputGroups = groupSyntheticOutputsByInput(
+    outputs,
+    (output) => cropNhSeedInputForOutput(output, seedVisual),
+    cropNhCropOutputAmount,
+  );
 
-  return outputs.map((output, index) =>
+  return outputGroups.map((group, index) =>
     addSyntheticPassiveRecipe({
       machineType: "CropNH",
-      input: cropNhSeedInputForOutput(output, seedVisual),
-      output: passiveOutputAmount(output),
+      input: group.input,
+      outputs: group.outputs,
       index,
       durationTicks: 1200,
       eut: 0,
@@ -636,9 +751,29 @@ function synthesizeCropNhRecipes() {
   );
 }
 
+function groupSyntheticOutputsByInput(
+  outputs,
+  inputForOutput,
+  outputForResource = passiveOutputAmount,
+) {
+  const groups = new Map();
+  for (const output of outputs) {
+    const input = inputForOutput(output);
+    const recipeOutput = outputForResource(output);
+    const key = `${input.kind}:${input.id}`;
+    const group = groups.get(key);
+    if (group) {
+      group.outputs.push(recipeOutput);
+    } else {
+      groups.set(key, { input, outputs: [recipeOutput] });
+    }
+  }
+  return [...groups.values()];
+}
+
 function legacyIc2SeedInputForOutput(output, visual) {
   const bonsai = legacyBonsaiTreeInfo(output);
-  const displayName = `${bonsai?.cropName ?? cropNhSeedNameFromOutput(output)} Seeds (#4269)`;
+  const displayName = `${bonsai?.cropName ?? cropNhSeedNameFromOutput(output)} Seeds`;
   const idSource = bonsai?.key ?? `${output.kind}:${output.id}`;
   return virtualPassiveInput(`factoryflow:ic2_crop_seed:${slug(idSource)}`, displayName, visual, {
     tooltip: ["IC2:itemCropSeed"],
@@ -650,28 +785,25 @@ function usesLegacyIc2Crops() {
 }
 
 function isLegacyIc2CropPassiveOutputResource(resource) {
-  return isCropNhPassiveOutputResource(resource) || Boolean(legacyBonsaiTreeInfo(resource));
+  return isCropNhPassiveOutputResource(resource) || Boolean(vanillaBonsaiOutputInfo(resource));
 }
 
 function legacyBonsaiTreeInfo(resource) {
-  if (!cropNhBonsaiOutputLike(resource)) {
-    return undefined;
-  }
+  return vanillaBonsaiOutputInfo(resource)?.bonsai;
+}
 
-  const normalizedName = normalizeLabel(resource.displayName ?? "");
-  const candidates = [
-    { token: "dark oak", key: "bonsai-dark-oak", cropName: "Dark Oak Bonsai" },
-    { token: "acacia", key: "bonsai-acacia", cropName: "Acacia Bonsai" },
-    { token: "birch", key: "bonsai-birch", cropName: "Birch Bonsai" },
-    { token: "jungle", key: "bonsai-jungle", cropName: "Jungle Bonsai" },
-    { token: "rubber", key: "bonsai-rubber", cropName: "Rubber Bonsai" },
-    { token: "slimy", key: "bonsai-slimy", cropName: "Slimy Bonsai" },
-    { token: "spruce", key: "bonsai-spruce", cropName: "Spruce Bonsai" },
-    { token: "oak", key: "bonsai-oak", cropName: "Oak Bonsai" },
-  ];
-  return candidates.find(({ token }) =>
-    new RegExp(`\\b${escapeRegExp(token)}\\b`).test(normalizedName),
-  );
+function vanillaBonsaiOutputInfo(resource) {
+  return VANILLA_BONSAI_OUTPUTS.get(`${resource.kind}:${resource.id}`);
+}
+
+function legacyIc2CropOutputAmount(resource) {
+  const bonsaiOutput = vanillaBonsaiOutputInfo(resource);
+  return passiveOutputAmount(resource, { amount: bonsaiOutput?.drop.amount });
+}
+
+function cropNhCropOutputAmount(resource) {
+  const bonsaiOutput = vanillaBonsaiOutputInfo(resource);
+  return passiveOutputAmount(resource, { amount: bonsaiOutput?.drop.amount });
 }
 
 function synthesizeBeeProductionRecipes() {
@@ -709,6 +841,7 @@ function addSyntheticPassiveRecipe({
   machineType,
   input,
   output,
+  outputs,
   index,
   durationTicks,
   eut,
@@ -719,37 +852,71 @@ function addSyntheticPassiveRecipe({
     recipeMaps.push(machineType);
   }
 
+  const recipeOutputs = outputs ?? [output];
+  const outputSignature = recipeOutputs.map((entry) => `${entry.kind}:${entry.id}`).join("|");
+  const itemOutputCount = recipeOutputs.filter((entry) => entry.kind === "item").length;
+  const fluidOutputCount = recipeOutputs.filter((entry) => entry.kind === "fluid").length;
+  const slotCapacity = { maxItemInputs: 1 };
+  if (itemOutputCount > 0) {
+    slotCapacity.maxItemOutputs = itemOutputCount;
+  }
+  if (fluidOutputCount > 0) {
+    slotCapacity.maxFluidOutputs = fluidOutputCount;
+  }
+
   const recipe = {
     id: `recex:${datasetVersionId}:${slug(machineType)}:synthetic:${hashRecipe(machineType, index, {
-      output: `${output.kind}:${output.id}`,
+      outputs: outputSignature,
     })}`,
-    name: `${machineType}: ${output.displayName ?? output.id}`,
+    name:
+      recipeOutputs.length === 1
+        ? `${machineType}: ${recipeOutputs[0].displayName ?? recipeOutputs[0].id}`
+        : `${machineType}: ${input.displayName ?? input.id}`,
     machineType,
     minimumTier,
     durationTicks,
     eut,
     inputs: [{ ...input, amount: 1, consumed: false, neiSlot: { x: 34, y: 35 } }],
-    outputs: [{ ...output, neiSlot: { x: 124, y: 35 } }],
+    outputs: recipeOutputs.map((entry, slotIndex) => ({
+      ...entry,
+      neiSlot: syntheticPassiveOutputPosition(slotIndex, recipeOutputs.length),
+    })),
     notes: note,
     source: {
       datasetVersionId,
       recipeMap: machineType,
       exporter: "recex",
-      rawRecipeId: `syntheticPassive:${machineType}:${index}:${output.kind}:${output.id}`,
+      rawRecipeId: `syntheticPassive:${machineType}:${index}:${outputSignature}`,
     },
     nei: {
       slots: [
         { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
-        { side: "output", kind: output.kind, slotIndex: 0, x: 124, y: 35 },
+        ...recipeOutputs.map((entry, slotIndex) => ({
+          side: "output",
+          kind: entry.kind,
+          slotIndex,
+          ...syntheticPassiveOutputPosition(slotIndex, recipeOutputs.length),
+        })),
       ],
-      slotCapacity:
-        output.kind === "fluid"
-          ? { maxItemInputs: 1, maxFluidOutputs: 1 }
-          : { maxItemInputs: 1, maxItemOutputs: 1 },
+      slotCapacity,
     },
   };
   addRecipe(recipe);
   return recipe;
+}
+
+function syntheticPassiveOutputPosition(index, count) {
+  if (count === 1) {
+    return { x: 124, y: 35 };
+  }
+
+  const columns = Math.min(3, count);
+  const column = index % columns;
+  const row = Math.floor(index / columns);
+  return {
+    x: 106 + column * 18,
+    y: count <= 3 ? 35 : 26 + row * 18,
+  };
 }
 
 function hasRecipeMap(recipeMap) {
@@ -811,11 +978,11 @@ function virtualPassiveInput(id, displayName, visual, options = {}) {
   return input;
 }
 
-function passiveOutputAmount(resource) {
+function passiveOutputAmount(resource, options = {}) {
   return {
     kind: resource.kind,
     id: resource.id,
-    amount: resource.kind === "fluid" ? 1000 : 1,
+    amount: options.amount ?? (resource.kind === "fluid" ? 1000 : 1),
     displayName: resource.displayName,
     iconPath: resource.iconPath,
     iconAtlas: resource.iconAtlas,
@@ -826,12 +993,12 @@ function passiveOutputAmount(resource) {
 }
 
 function cropNhSeedInputForOutput(output, visual) {
-  const seedInfo = cropNhBonsaiOutputLike(output)
+  const seedInfo = vanillaBonsaiOutputInfo(output)
     ? cropNhSeedInfoForOutput(output, { requireBonsai: true })
     : undefined;
   const seedInfoForOutput = seedInfo ?? cropNhSeedInfoForOutput(output);
   const fallbackName = cropNhSeedNameFromOutput(output);
-  const displayName = `${seedInfoForOutput?.cropName ?? fallbackName} Seeds (#4269)`;
+  const displayName = `${seedInfoForOutput?.cropName ?? fallbackName} Seeds`;
   const idSource = seedInfoForOutput?.cropId ?? `${output.kind}:${output.id}`;
   return virtualPassiveInput(`factoryflow:cropnh_seed:${slug(idSource)}`, displayName, visual);
 }
@@ -908,24 +1075,11 @@ function isCropNhQuestPassiveOutputResource(resource) {
     return false;
   }
 
-  if (!cropNhBonsaiOutputLike(resource)) {
+  if (!vanillaBonsaiOutputInfo(resource)) {
     return false;
   }
 
   return Boolean(cropNhSeedInfoForOutput(resource, { requireBonsai: true }));
-}
-
-function cropNhBonsaiOutputLike(resource) {
-  const idPath = resource.id.replace(/@.*$/, "").replace(/^[^:]+:/, "");
-  const idWords = titleWords(idPath).join(" ").toLowerCase();
-  if (
-    /\b(?:plank|planks|label|slab|stairs|fence|gate|door|sign|button|plate|stripped)\b/.test(
-      idWords,
-    )
-  ) {
-    return false;
-  }
-  return /\b(?:log|logs|leaf|leaves|sapling|saplings)\b/.test(idWords);
 }
 
 function isBeePassiveOutputResource(resource) {
