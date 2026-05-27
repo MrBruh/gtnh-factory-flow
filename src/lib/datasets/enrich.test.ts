@@ -216,6 +216,40 @@ describe("enrichDatasetRecipes", () => {
     expect(statControl?.defaultKey).toBe("23-31-0");
     expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
   });
+
+  it("does not treat ordinary craft names as passive production", () => {
+    const dataset = baseDataset([
+      {
+        id: "mana-apiary-booster",
+        name: "Shaped Crafting: Mana Apiary Booster",
+        machineType: "Shaped Crafting",
+        minimumTier: "NONE",
+        durationTicks: 1,
+        eut: 0,
+        inputs: [{ kind: "item", id: "plate", amount: 1 }],
+        outputs: [{ kind: "item", id: "apiary_booster", amount: 1 }],
+        source: { recipeMap: "Shaped Crafting" },
+      },
+      {
+        id: "crop-manager",
+        name: "Shaped Crafting: Crop Manager (LV)",
+        machineType: "Shaped Crafting",
+        minimumTier: "NONE",
+        durationTicks: 1,
+        eut: 0,
+        inputs: [{ kind: "item", id: "robot_arm", amount: 1 }],
+        outputs: [{ kind: "item", id: "crop_manager", amount: 1 }],
+        source: { recipeMap: "Shaped Crafting" },
+      },
+    ]);
+
+    const enriched = enrichDatasetRecipes(dataset);
+
+    expect(enriched.recipes[0]?.machineConfigControls).toBeUndefined();
+    expect(enriched.recipes[0]?.machineHandlers).toBeUndefined();
+    expect(enriched.recipes[1]?.machineConfigControls).toBeUndefined();
+    expect(enriched.recipes[1]?.machineHandlers).toBeUndefined();
+  });
 });
 
 function baseDataset(recipes: RecipeDataset["recipes"]): RecipeDataset {

@@ -512,9 +512,7 @@ function withPassiveProductionNote(notes: string | undefined, note: string) {
 }
 
 function passiveProductionLabel(recipe: PassiveProductionRecipeLabel) {
-  return normalizeLabel(
-    `${recipe.source?.recipeMap ?? recipe.recipeMap ?? ""} ${recipe.machineType} ${recipe.name}`,
-  );
+  return normalizeLabel(`${recipe.source?.recipeMap ?? recipe.recipeMap ?? ""} ${recipe.machineType}`);
 }
 
 function normalizeLabel(value: string) {

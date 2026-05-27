@@ -232,6 +232,7 @@ normalizeCraftingSource(findSource("shapedOreDict"), {
 });
 normalizeSmeltingSource(findSource("smelting"));
 normalizePassiveNeiSource(findSource("neiPassive"));
+synthesizePassiveProductionRecipes();
 applyOreDictionaryMemberships();
 
 const dataset = {
@@ -522,6 +523,247 @@ function normalizePassiveNeiSource(source) {
       });
     }
   }
+}
+
+function synthesizePassiveProductionRecipes() {
+  const generated = [
+    ...synthesizeIc2CropRecipes(),
+    ...synthesizeCropNhRecipes(),
+    ...synthesizeBeeProductionRecipes(),
+  ];
+
+  if (generated.length > 0) {
+    console.log(`Synthesized ${generated.length} passive production recipe(s).`);
+  }
+}
+
+function synthesizeIc2CropRecipes() {
+  if (hasRecipeMap("IC2 Crop")) {
+    return [];
+  }
+
+  const seed = virtualPassiveInput("factoryflow:ic2_crop_seed", "IC2 Crop Seed");
+  const outputs = [
+    resourceForPassiveRecipe("item", "IC2:itemHarz", { displayName: "Sticky Resin" }),
+  ].filter(Boolean);
+
+  return outputs.map((output) =>
+    addSyntheticPassiveRecipe({
+      machineType: "IC2 Crop",
+      input: seed,
+      output,
+      index: 0,
+      durationTicks: 1200,
+      eut: 8,
+      minimumTier: "LV",
+      note: "Synthesized from exported GTNH resources because RecEx does not expose IC2 crop NEI recipes.",
+    }),
+  );
+}
+
+function synthesizeCropNhRecipes() {
+  if (hasRecipeMap("CropNH")) {
+    return [];
+  }
+
+  const seed =
+    resourceForPassiveRecipe("item", "cropsnh:genericSeed", { displayName: "Scanned Seed" }) ??
+    virtualPassiveInput("cropsnh:genericSeed", "Scanned Seed");
+  const outputs = passiveResourceValues()
+    .filter(isCropNhPassiveOutputResource)
+    .sort(compareById)
+    .slice(0, 500);
+
+  return outputs.map((output, index) =>
+    addSyntheticPassiveRecipe({
+      machineType: "CropNH",
+      input: seed,
+      output: passiveOutputAmount(output),
+      index,
+      durationTicks: 1200,
+      eut: 8,
+      minimumTier: "LV",
+      note: "Synthesized from exported CropNH resources because RecEx does not expose CropNH passive NEI recipes.",
+    }),
+  );
+}
+
+function synthesizeBeeProductionRecipes() {
+  if (hasRecipeMap("Bee Production")) {
+    return [];
+  }
+
+  const bee =
+    resourceForPassiveRecipe("item", "Forestry:beePrincessGE", {
+      displayName: "Bee Species",
+    }) ?? virtualPassiveInput("factoryflow:bee_species", "Bee Species");
+  const outputs = passiveResourceValues()
+    .filter(isBeePassiveOutputResource)
+    .sort(compareById)
+    .slice(0, 800);
+
+  return outputs.map((output, index) =>
+    addSyntheticPassiveRecipe({
+      machineType: "Bee Production",
+      input: bee,
+      output: passiveOutputAmount(output),
+      index,
+      durationTicks: 550,
+      eut: 0,
+      minimumTier: "NONE",
+      note: "Synthesized from exported bee resources because RecEx does not expose bee passive NEI recipes.",
+    }),
+  );
+}
+
+function addSyntheticPassiveRecipe({
+  machineType,
+  input,
+  output,
+  index,
+  durationTicks,
+  eut,
+  minimumTier,
+  note,
+}) {
+  if (!recipeMaps.includes(machineType)) {
+    recipeMaps.push(machineType);
+  }
+
+  const recipe = {
+    id: `recex:${datasetVersionId}:${slug(machineType)}:synthetic:${hashRecipe(machineType, index, {
+      output: `${output.kind}:${output.id}`,
+    })}`,
+    name: `${machineType}: ${output.displayName ?? output.id}`,
+    machineType,
+    minimumTier,
+    durationTicks,
+    eut,
+    inputs: [{ ...input, amount: 1, consumed: false, neiSlot: { x: 34, y: 35 } }],
+    outputs: [{ ...output, neiSlot: { x: 124, y: 35 } }],
+    notes: note,
+    source: {
+      datasetVersionId,
+      recipeMap: machineType,
+      exporter: "recex",
+      rawRecipeId: `syntheticPassive:${machineType}:${index}:${output.kind}:${output.id}`,
+    },
+    nei: {
+      slots: [
+        { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
+        { side: "output", kind: output.kind, slotIndex: 0, x: 124, y: 35 },
+      ],
+      slotCapacity: output.kind === "fluid"
+        ? { maxItemInputs: 1, maxFluidOutputs: 1 }
+        : { maxItemInputs: 1, maxItemOutputs: 1 },
+    },
+  };
+  addRecipe(recipe);
+  return recipe;
+}
+
+function hasRecipeMap(recipeMap) {
+  return recipes.some(
+    (recipe) => recipe.source?.recipeMap === recipeMap || recipe.machineType === recipeMap,
+  );
+}
+
+function resourceForPassiveRecipe(kind, id, fallback = {}) {
+  const resource =
+    resources.get(`${kind}:${id}`) ??
+    rawItemResources.find((entry) => entry.kind === kind && entry.id === id);
+  if (!resource) {
+    return fallback.displayName
+      ? { kind, id, amount: kind === "fluid" ? 1000 : 1, ...fallback }
+      : undefined;
+  }
+
+  return passiveOutputAmount(resource);
+}
+
+function passiveResourceValues() {
+  return [
+    ...new Map(
+      [...resources.values(), ...rawItemResources].map((resource) => [
+        `${resource.kind}:${resource.id}`,
+        resource,
+      ]),
+    ).values(),
+  ];
+}
+
+function virtualPassiveInput(id, displayName) {
+  return {
+    kind: "item",
+    id,
+    amount: 1,
+    displayName,
+    tooltip: ["Synthetic passive-production input"],
+  };
+}
+
+function passiveOutputAmount(resource) {
+  return {
+    kind: resource.kind,
+    id: resource.id,
+    amount: resource.kind === "fluid" ? 1000 : 1,
+    displayName: resource.displayName,
+    iconPath: resource.iconPath,
+    iconAtlas: resource.iconAtlas,
+    dominantColor: resource.dominantColor,
+    tooltip: resource.tooltip,
+    oreDictionary: resource.oreDictionary,
+  };
+}
+
+function isCropNhPassiveOutputResource(resource) {
+  if (resource.kind !== "item" || !resource.id.startsWith("cropsnh:")) {
+    return false;
+  }
+
+  return (
+    resource.id === "cropsnh:berry" ||
+    resource.id.startsWith("cropsnh:berry@") ||
+    resource.id === "cropsnh:materialLeaf" ||
+    resource.id.startsWith("cropsnh:materialLeaf@") ||
+    resource.id === "cropsnh:gaiaWart" ||
+    resource.id === "cropsnh:goldfish" ||
+    resource.id.startsWith("cropsnh:goldfish@") ||
+    resource.id === "cropsnh:hempHurd" ||
+    resource.id === "cropsnh:poisonPowder" ||
+    resource.id === "cropsnh:sulfurDopedGalvaniaResidue" ||
+    resource.id === "cropsnh:sulfurDopedPlumbiliaResidue"
+  );
+}
+
+function isBeePassiveOutputResource(resource) {
+  if (resource.kind !== "item") {
+    return false;
+  }
+
+  const id = resource.id;
+  return (
+    id === "Forestry:beeCombs" ||
+    id.startsWith("Forestry:beeCombs@") ||
+    id === "Forestry:honeyDrop" ||
+    id.startsWith("Forestry:honeyDrop@") ||
+    id === "Forestry:propolis" ||
+    id.startsWith("Forestry:propolis@") ||
+    id === "Forestry:beeswax" ||
+    id === "Forestry:royalJelly" ||
+    id === "ExtraBees:honeyComb" ||
+    id.startsWith("ExtraBees:honeyComb@") ||
+    id === "ExtraBees:honeyDrop" ||
+    id.startsWith("ExtraBees:honeyDrop@") ||
+    id === "ExtraBees:propolis" ||
+    id.startsWith("ExtraBees:propolis@") ||
+    id === "gendustry:HoneyComb" ||
+    id.startsWith("gendustry:HoneyComb@") ||
+    id === "gendustry:HoneyDrop" ||
+    id.startsWith("gendustry:HoneyDrop@") ||
+    id === "gregtech:gt.comb" ||
+    id.startsWith("gregtech:gt.comb@")
+  );
 }
 
 function addRecipe(recipe) {
