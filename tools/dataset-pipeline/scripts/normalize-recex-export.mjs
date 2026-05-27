@@ -849,10 +849,14 @@ function isCropNhQuestPassiveOutputResource(resource) {
 function cropNhBonsaiOutputLike(resource) {
   const idPath = resource.id.replace(/@.*$/, "").replace(/^[^:]+:/, "");
   const idWords = titleWords(idPath).join(" ").toLowerCase();
-  if (/\b(?:plank|planks|label|slab|stairs|fence|gate|door|sign|button|plate)\b/.test(idWords)) {
+  if (
+    /\b(?:plank|planks|label|slab|stairs|fence|gate|door|sign|button|plate|stripped)\b/.test(
+      idWords,
+    )
+  ) {
     return false;
   }
-  return /\b(?:log|logs|wood|woods|leaf|leaves|sapling|saplings)\b/.test(idWords);
+  return /\b(?:log|logs|leaf|leaves|sapling|saplings)\b/.test(idWords);
 }
 
 function isBeePassiveOutputResource(resource) {
