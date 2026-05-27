@@ -164,6 +164,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const passiveProductionPanel =
     cropProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
+        className="w-[390px]"
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
       />
@@ -190,8 +191,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   return (
     <div
       className={[
-        "group relative border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
-        isCropProductionNode ? "w-[392px]" : "min-w-[368px] w-max",
+        "group relative min-w-[368px] w-max border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
         nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
         selected ? "ring-2 ring-cyan-300" : "",
         isSearchHighlighted ? "ring-4 ring-sky-300" : "",
@@ -495,6 +495,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         <div
           className={[
             "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
+            isCropProductionNode ? "w-[390px]" : "",
             nodeColor ? "recipe-node-stat-grid" : "",
           ].join(" ")}
           style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
@@ -863,9 +864,11 @@ function isCropSeedSlot(
 }
 
 function PassiveProductionConfigPanel({
+  className = "",
   controls,
   onSelect,
 }: {
+  className?: string;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
 }) {
@@ -874,7 +877,12 @@ function PassiveProductionConfigPanel({
   }
 
   return (
-    <div className="nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+    <div
+      className={[
+        "nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]",
+        className,
+      ].join(" ")}
+    >
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
         {controls.map((control) => (
           <label key={control.id} className="min-w-0">
