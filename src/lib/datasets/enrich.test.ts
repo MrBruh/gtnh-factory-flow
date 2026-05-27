@@ -209,10 +209,7 @@ describe("enrichDatasetRecipes", () => {
       minimumTier: "NONE",
       eut: 0,
     });
-    expect(recipe?.machineHandlers?.map((handler) => handler.label)).not.toContain("Manual");
-    expect(recipe?.machineHandlers?.map((handler) => handler.label)).toContain(
-      "Forestry Multifarm",
-    );
+    expect(recipe?.machineHandlers).toEqual([]);
     expect(statControl?.defaultKey).toBe("23-31-0");
     expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
   });

@@ -137,7 +137,7 @@ function enrichCropProductionRecipe(recipe: Recipe): Recipe {
     machineType: isPassiveBaseMachine(recipe.machineType) ? baseMachine : recipe.machineType,
     minimumTier: "NONE",
     eut: 0,
-    machineHandlers: mergeMachineHandlers(recipe.machineHandlers, cropMachineHandlers()),
+    machineHandlers: [],
     machineConfigControls,
     notes: withPassiveProductionNote(
       recipe.notes,
@@ -331,35 +331,6 @@ function beeProductionControls(): MachineConfigControl[] {
         ),
       ],
     }),
-  ];
-}
-
-function cropMachineHandlers(): MachineHandler[] {
-  return [
-    {
-      id: "ic2-crop-harvester",
-      label: "IC2 Crop Harvester",
-      machineType: "IC2 Crop Harvester",
-      minimumTier: "NONE",
-      eut: 0,
-      kind: "automation",
-    },
-    {
-      id: "forestry-multifarm",
-      label: "Forestry Multifarm",
-      machineType: "Forestry Multifarm",
-      minimumTier: "NONE",
-      eut: 0,
-      kind: "multiblock",
-    },
-    {
-      id: "extreme-industrial-greenhouse",
-      label: "Extreme Industrial Greenhouse",
-      machineType: "Extreme Industrial Greenhouse",
-      minimumTier: "NONE",
-      eut: 0,
-      kind: "multiblock",
-    },
   ];
 }
 
