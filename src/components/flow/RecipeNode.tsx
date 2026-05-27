@@ -181,7 +181,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const passiveProductionPanel =
     cropProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
-        className="w-[320px]"
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
       />
@@ -533,7 +532,6 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         <div
           className={[
             "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
-            isCropProductionNode ? "w-[320px]" : "",
             nodeColor ? "recipe-node-stat-grid" : "",
           ].join(" ")}
           style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
