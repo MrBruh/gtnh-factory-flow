@@ -13,9 +13,10 @@ export const CROP_SOIL_CONTROL_ID = "cropSoil";
 export const CROP_SOIL_DEPTH_CONTROL_ID = "cropSoilDepth";
 export const CROP_AIR_QUALITY_CONTROL_ID = "cropAirQuality";
 
-export const BEE_FRAME_CONTROL_ID = "beeFrames";
+export const BEE_FRAME_SLOT_CONTROL_PREFIX = "beeFrameSlot";
 export const BEE_ENVIRONMENT_CONTROL_ID = "beeEnvironment";
 export const BEE_PRODUCTIVITY_CONTROL_ID = "beeProductivity";
+export const BEE_APIARY_BASE_PRODUCTION_TERM = 0.1;
 
 const CROP_CONTROL_IDS = new Set([
   CROP_STATS_CONTROL_ID,
@@ -26,11 +27,7 @@ const CROP_CONTROL_IDS = new Set([
   CROP_AIR_QUALITY_CONTROL_ID,
 ]);
 
-const BEE_CONTROL_IDS = new Set([
-  BEE_FRAME_CONTROL_ID,
-  BEE_ENVIRONMENT_CONTROL_ID,
-  BEE_PRODUCTIVITY_CONTROL_ID,
-]);
+const BEE_CONTROL_IDS = new Set([BEE_ENVIRONMENT_CONTROL_ID, BEE_PRODUCTIVITY_CONTROL_ID]);
 
 export interface CropStatsPreset {
   growth: number;
@@ -44,7 +41,8 @@ interface Ic2CropSimulationProfile {
   baselineStats: CropStatsPreset;
 }
 
-type PassiveProductionRecipeLabel = Pick<Recipe, "machineType" | "name" | "source"> & {
+type PassiveProductionRecipeLabel = Pick<Recipe, "machineType" | "source"> & {
+  name?: string;
   recipeMap?: string;
 };
 
@@ -111,7 +109,50 @@ export function isCropProductionConfigControl(controlId: string) {
 }
 
 export function isBeeProductionConfigControl(controlId: string) {
-  return BEE_CONTROL_IDS.has(controlId);
+  return BEE_CONTROL_IDS.has(controlId) || isBeeFrameSlotControlId(controlId);
+}
+
+export function isBeeFrameSlotControlId(controlId: string) {
+  return new RegExp(`^${BEE_FRAME_SLOT_CONTROL_PREFIX}\\d+$`).test(controlId);
+}
+
+export function getBeeFrameProductionModifier(key: string) {
+  switch (key) {
+    case "forestry:untreated":
+    case "forestry:impregnated":
+    case "forestry:proven":
+      return 1;
+    case "extrabees:cocoa":
+      return 0.5;
+    case "extrabees:cage":
+    case "extrabees:clay":
+    case "magicbees:necrotic":
+      return -0.25;
+    case "extrabees:soul":
+      return -0.75;
+    case "magicbees:magic":
+    case "magicbees:resilient":
+      return 2;
+    case "magicbees:gentle":
+      return 0.4;
+    case "magicbees:metabolic":
+      return 0.2;
+    case "magicbees:oblivion":
+      return -9001;
+    default:
+      return 0;
+  }
+}
+
+export function getBeeBaseProductionTerm(machineType: string) {
+  const label = normalizeLabel(machineType);
+  if (label.includes("industrial apiary") || label.includes("mega apiary")) {
+    return 3;
+  }
+  if (label.includes("alveary")) {
+    return 1;
+  }
+  return BEE_APIARY_BASE_PRODUCTION_TERM;
 }
 
 export function getCropStatsPreset(value: string | undefined): CropStatsPreset | undefined {
@@ -269,26 +310,9 @@ function cropStatsControl(recipe: PassiveProductionRecipeLabel): MachineConfigCo
 
 function beeProductionControls(): MachineConfigControl[] {
   return [
-    selectControl({
-      id: BEE_FRAME_CONTROL_ID,
-      label: "Frames",
-      defaultKey: "none",
-      tiers: [
-        option("none", "None", "bee_frames_none", "No Frames"),
-        option("impregnated", "Impregnated", "Forestry:frameImpregnated", "Impregnated Frames", {
-          outputMultiplier: 1.5,
-          durationMultiplier: 0.8,
-        }),
-        option("proven", "Proven", "Forestry:frameProven", "Proven Frames", {
-          outputMultiplier: 2,
-          durationMultiplier: 0.75,
-        }),
-        option("soul", "Soul", "MagicBees:frameSoul", "Soul Frames", {
-          outputMultiplier: 2.5,
-          durationMultiplier: 0.7,
-        }),
-      ],
-    }),
+    beeFrameSlotControl(1),
+    beeFrameSlotControl(2),
+    beeFrameSlotControl(3),
     selectControl({
       id: BEE_ENVIRONMENT_CONTROL_ID,
       label: "Environment",
@@ -332,6 +356,36 @@ function beeProductionControls(): MachineConfigControl[] {
       ],
     }),
   ];
+}
+
+function beeFrameSlotControl(slotIndex: number): MachineConfigControl {
+  return selectControl({
+    id: `${BEE_FRAME_SLOT_CONTROL_PREFIX}${slotIndex}`,
+    label: `Frame ${slotIndex}`,
+    defaultKey: "none",
+    tiers: [
+      option("none", "Empty", "bee_frame_empty", "Empty Frame Slot"),
+      option("forestry:untreated", "Untreated", "Forestry:frameUntreated", "Untreated Frame"),
+      option(
+        "forestry:impregnated",
+        "Impregnated",
+        "Forestry:frameImpregnated",
+        "Impregnated Frame",
+      ),
+      option("forestry:proven", "Proven", "Forestry:frameProven", "Proven Frame"),
+      option("extrabees:cocoa", "Chocolate", "ExtraBees:hiveFrame.cocoa", "Chocolate Frame"),
+      option("extrabees:cage", "Restraint", "ExtraBees:hiveFrame.cage", "Restraint Frame"),
+      option("extrabees:soul", "Soul", "ExtraBees:hiveFrame.soul", "Soul Frame"),
+      option("extrabees:clay", "Healing", "ExtraBees:hiveFrame.clay", "Healing Frame"),
+      option("magicbees:magic", "Magic", "MagicBees:frameMagic", "Magic Frame"),
+      option("magicbees:resilient", "Resilient", "MagicBees:frameResilient", "Resilient Frame"),
+      option("magicbees:gentle", "Gentle", "MagicBees:frameGentle", "Gentle Frame"),
+      option("magicbees:metabolic", "Metabolic", "MagicBees:frameMetabolic", "Metabolic Frame"),
+      option("magicbees:necrotic", "Necrotic", "MagicBees:frameNecrotic", "Necrotic Frame"),
+      option("magicbees:temporal", "Temporal", "MagicBees:frameTemporal", "Temporal Frame"),
+      option("magicbees:oblivion", "Oblivion", "MagicBees:frameOblivion", "Oblivion Frame"),
+    ],
+  });
 }
 
 function beeMachineHandlers(): MachineHandler[] {

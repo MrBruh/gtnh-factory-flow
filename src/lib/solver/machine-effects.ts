@@ -2,6 +2,13 @@ import {
   getRecipeCoilTierControl,
   getRecipeMachineConfigTierControls,
 } from "@/lib/model/recipe-rules";
+import {
+  BEE_APIARY_BASE_PRODUCTION_TERM,
+  getBeeBaseProductionTerm,
+  getBeeFrameProductionModifier,
+  isBeeFrameSlotControlId,
+  isBeeProductionRecipe,
+} from "@/lib/model/passive-production";
 import { getVoltageTierIndex } from "@/lib/model/tiers";
 import type { FactoryNode, MachineTier, Recipe, RecipeOutput } from "@/lib/model/types";
 
@@ -16,8 +23,15 @@ export function getMachineOutputMultiplier(
   tier: VoltageTier,
 ): number {
   const configMultiplier = getRecipeMachineConfigTierControls(recipe, node)
-    .filter((control) => !isTreeGrowthSimulatorToolControl(control.id))
+    .filter(
+      (control) =>
+        !isTreeGrowthSimulatorToolControl(control.id) && !isBeeFrameSlotControlId(control.id),
+    )
     .reduce((multiplier, control) => multiplier * (control.current.outputMultiplier ?? 1), 1);
+
+  if (isBeeProductionRecipe(recipe)) {
+    return configMultiplier * getBeeFrameOutputMultiplier(recipe, node);
+  }
 
   if (!isTreeGrowthSimulatorRecipe(recipe)) {
     return configMultiplier;
@@ -27,6 +41,21 @@ export function getMachineOutputMultiplier(
   const tierMultiplier = (2 * tierOrdinal ** 2 - 2 * tierOrdinal + 5) / TGS_BASE_OUTPUT_MULTIPLIER;
   const toolMultiplier = getTreeGrowthSimulatorToolMultiplier(recipe, node, output);
   return configMultiplier * tierMultiplier * toolMultiplier;
+}
+
+function getBeeFrameOutputMultiplier(
+  recipe: Pick<Recipe, "machineType" | "source" | "nei" | "machineConfigControls">,
+  node: Pick<FactoryNode, "machineConfigTiers">,
+) {
+  const baseTerm = getBeeBaseProductionTerm(recipe.machineType);
+  const frameModifier = getRecipeMachineConfigTierControls(recipe, node)
+    .filter((control) => isBeeFrameSlotControlId(control.id))
+    .reduce((sum, control) => sum + getBeeFrameProductionModifier(control.current.key), 0);
+  const productionTerm = baseTerm + frameModifier;
+  if (productionTerm <= 0) {
+    return 0;
+  }
+  return Math.pow(productionTerm / BEE_APIARY_BASE_PRODUCTION_TERM, 0.52);
 }
 
 export function applyMachineOutputMultipliers(

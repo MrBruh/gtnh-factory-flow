@@ -28,6 +28,7 @@ import {
   getSelectedMachineHandler,
   getVoltageTierIndex,
   isRecipeInputConsumed,
+  isBeeFrameSlotControlId,
   isBeeProductionConfigControl,
   isBeeProductionRecipe,
   isCropProductionConfigControl,
@@ -107,6 +108,12 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const beeProductionControls = isBeeProductionRecipe(effectiveRecipe)
     ? machineConfigControls.filter((control) => isBeeProductionConfigControl(control.id))
     : [];
+  const beeFrameControls = beeProductionControls.filter((control) =>
+    isBeeFrameSlotControlId(control.id),
+  );
+  const beePanelControls = beeProductionControls.filter(
+    (control) => !isBeeFrameSlotControlId(control.id),
+  );
   const tgsToolControls = machineConfigControls.filter(isTreeGrowthSimulatorToolControl);
   const statsMachineConfigControls = machineConfigControls.filter(
     (control) =>
@@ -117,7 +124,10 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   );
   const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
   const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
-  const displayRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
+  const displayRecipe = applyBeeFrameInputs(
+    applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls),
+    beeFrameControls,
+  );
   const adjustedRecipe = applyMachineOutputMultipliers(
     displayRecipe,
     projectNode,
@@ -168,9 +178,9 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
       />
-    ) : beeProductionControls.length > 0 ? (
+    ) : beePanelControls.length > 0 ? (
       <PassiveProductionConfigPanel
-        controls={beeProductionControls}
+        controls={beePanelControls}
         onSelect={updateMachineConfigTier}
       />
     ) : undefined;
@@ -407,14 +417,20 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
             suppressSlotHover={(slot) =>
-              Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls))
+              Boolean(
+                getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls) ??
+                getBeeFrameControlForSlot(slot, beeFrameControls),
+              )
             }
             suppressConsumedState={(slot) =>
               Boolean(getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls)) ||
+              Boolean(getBeeFrameControlForSlot(slot, beeFrameControls)) ||
               isCropSeedSlot(slot, effectiveRecipe, cropProductionControls)
             }
             getSlotZIndex={(slot) => {
-              const control = getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls);
+              const control =
+                getTreeGrowthSimulatorToolControlForSlot(slot, tgsToolControls) ??
+                getBeeFrameControlForSlot(slot, beeFrameControls);
               if (!control) {
                 return undefined;
               }
@@ -435,6 +451,21 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
                       setOpenMachineConfigMenuId(isOpen ? tgsToolControl.id : undefined)
                     }
                     onSelect={(nextTier) => updateMachineConfigTier(tgsToolControl.id, nextTier)}
+                  />
+                );
+              }
+
+              const beeFrameControl = getBeeFrameControlForSlot(slot, beeFrameControls);
+              if (beeFrameControl) {
+                return (
+                  <MachineConfigSlotMenu
+                    control={beeFrameControl}
+                    dataset={dataset}
+                    isOpen={openMachineConfigMenuId === beeFrameControl.id}
+                    onOpenChange={(isOpen) =>
+                      setOpenMachineConfigMenuId(isOpen ? beeFrameControl.id : undefined)
+                    }
+                    onSelect={(nextTier) => updateMachineConfigTier(beeFrameControl.id, nextTier)}
                   />
                 );
               }
@@ -635,6 +666,12 @@ const TREE_GROWTH_SIMULATOR_TOOL_SLOTS: Record<string, { x: number; y: number }>
   tgsFruitTool: { x: 54, y: 54 },
 };
 
+const BEE_FRAME_SLOTS: Record<string, { x: number; y: number }> = {
+  beeFrameSlot1: { x: 66, y: 23 },
+  beeFrameSlot2: { x: 66, y: 52 },
+  beeFrameSlot3: { x: 66, y: 81 },
+};
+
 function getTreeGrowthSimulatorToolControlForSlot(
   slot: NeiPositionedSlot,
   controls: MachineConfigTierControl[],
@@ -645,6 +682,17 @@ function getTreeGrowthSimulatorToolControlForSlot(
 
   return controls.find((control) => {
     const position = TREE_GROWTH_SIMULATOR_TOOL_SLOTS[control.id];
+    return position?.x === slot.x && position.y === slot.y;
+  });
+}
+
+function getBeeFrameControlForSlot(slot: NeiPositionedSlot, controls: MachineConfigTierControl[]) {
+  if (slot.side !== "input" || slot.kind !== "item") {
+    return undefined;
+  }
+
+  return controls.find((control) => {
+    const position = BEE_FRAME_SLOTS[control.id];
     return position?.x === slot.x && position.y === slot.y;
   });
 }
@@ -681,6 +729,35 @@ function applyTreeGrowthSimulatorToolInputs(
   return { ...recipe, inputs };
 }
 
+function applyBeeFrameInputs(recipe: Recipe, controls: MachineConfigTierControl[]): Recipe {
+  if (controls.length === 0) {
+    return recipe;
+  }
+
+  const inputs = recipe.inputs.map((input) => {
+    const matchingControl = controls.find((control) => {
+      const position = BEE_FRAME_SLOTS[control.id];
+      return position?.x === input.neiSlot?.x && position.y === input.neiSlot?.y;
+    });
+
+    if (!matchingControl) {
+      return input;
+    }
+    const resource = getBeeFrameSlotResource(matchingControl);
+
+    return {
+      ...input,
+      ...resource,
+      amount: 1,
+      optional: true,
+      consumed: false,
+      neiSlot: input.neiSlot,
+    };
+  });
+
+  return { ...recipe, inputs };
+}
+
 function isTreeGrowthSimulatorEmptyTool(control: MachineConfigTierControl) {
   return (
     control.current.key === "none" ||
@@ -691,6 +768,14 @@ function isTreeGrowthSimulatorEmptyTool(control: MachineConfigTierControl) {
 
 function getTreeGrowthSimulatorSlotResource(control: MachineConfigTierControl) {
   if (!isTreeGrowthSimulatorEmptyTool(control)) {
+    return control.resource;
+  }
+
+  return control.tiers.find((tier) => tier.key === "none")?.resource ?? control.resource;
+}
+
+function getBeeFrameSlotResource(control: MachineConfigTierControl) {
+  if (control.current.key !== "none") {
     return control.resource;
   }
 
@@ -834,6 +919,16 @@ function TreeGrowthSimulatorToolSlotMenu({
       ) : null}
     </span>
   );
+}
+
+function MachineConfigSlotMenu(props: {
+  control: MachineConfigTierControl;
+  dataset: ReturnType<typeof useFactoryStore.getState>["dataset"];
+  isOpen: boolean;
+  onOpenChange: (isOpen: boolean) => void;
+  onSelect: (nextTier: string) => void;
+}) {
+  return <TreeGrowthSimulatorToolSlotMenu {...props} />;
 }
 
 function TreeGrowthSimulatorMenuIcon({ resource }: { resource: ResourceAmount }) {

@@ -214,6 +214,52 @@ describe("enrichDatasetRecipes", () => {
     expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
   });
 
+  it("adds bee production handlers and frame slot controls", () => {
+    const dataset = baseDataset([
+      {
+        id: "bee-explosive",
+        name: "Bee Production: Explosive Bee",
+        machineType: "Bee Production",
+        minimumTier: "NONE",
+        durationTicks: 550,
+        eut: 0,
+        inputs: [
+          {
+            kind: "item",
+            id: "factoryflow:bee_species:gregtech-explosive",
+            amount: 1,
+            displayName: "Explosive Bee",
+            consumed: false,
+          },
+        ],
+        outputs: [
+          { kind: "item", id: "IC2:blockITNT", amount: 0.02, displayName: "Industrial TNT" },
+        ],
+        source: { recipeMap: "Bee Production" },
+      },
+    ]);
+
+    const recipe = enrichDatasetRecipes(dataset).recipes[0];
+
+    expect(recipe).toMatchObject({
+      machineType: "Apiary",
+      minimumTier: "NONE",
+      eut: 0,
+    });
+    expect(recipe?.machineHandlers?.map((handler) => handler.label)).toEqual([
+      "Alveary",
+      "Industrial Apiary",
+      "Mega Apiary",
+    ]);
+    expect(recipe?.machineConfigControls?.map((control) => control.id)).toEqual([
+      "beeFrameSlot1",
+      "beeFrameSlot2",
+      "beeFrameSlot3",
+      "beeEnvironment",
+      "beeProductivity",
+    ]);
+  });
+
   it("does not treat ordinary craft names as passive production", () => {
     const dataset = baseDataset([
       {

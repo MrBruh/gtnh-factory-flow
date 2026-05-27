@@ -21,7 +21,7 @@ import {
 type TierFilter = "all" | Exclude<MachineTier, "DEMO">;
 type SearchableResource = Pick<
   ResourceAmount,
-  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas"
+  "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "tooltip"
 > & {
   alternatives?: SearchableResource[];
 };
@@ -581,9 +581,7 @@ async function loadCatalog(versionId: string): Promise<LoadedRecipeIndex> {
   }
 
   const promise = (async () => {
-    const catalog = await readGzipJson<LoadedRecipeIndex>(
-      publicPathToFile(resourceIndexPath),
-    );
+    const catalog = await readGzipJson<LoadedRecipeIndex>(publicPathToFile(resourceIndexPath));
     const loaded = {
       ...catalog,
       version,
@@ -1400,14 +1398,21 @@ function resourceSearchTerms(
   resourcesByKey?: Map<string, DatasetResource | DatasetResourceIndexEntry>,
 ): string[] {
   const indexed = resourcesByKey?.get(`${resource.kind}:${resource.id}`);
-  return [resource.displayName, indexed?.displayName, resource.id, resource.kind].filter(
-    (term): term is string => Boolean(term),
-  );
+  return [
+    resource.displayName,
+    indexed?.displayName,
+    resource.id,
+    resource.kind,
+    ...(resource.tooltip ?? []),
+    ...(indexed?.tooltip ?? []),
+  ].filter((term): term is string => Boolean(term));
 }
 
 function normalizeResourceSearchText(resource: DatasetResourceIndexEntry): string {
   return normalizeText(
-    [resource.displayName, resource.id, resource.kind].filter(Boolean).join(" "),
+    [resource.displayName, resource.id, resource.kind, ...(resource.tooltip ?? [])]
+      .filter(Boolean)
+      .join(" "),
   );
 }
 

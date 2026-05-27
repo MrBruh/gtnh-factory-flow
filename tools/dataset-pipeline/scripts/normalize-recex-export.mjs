@@ -27,6 +27,8 @@ console.log("Collecting raw item resources.");
 const rawItemResources = collectRawItemResources(raw);
 console.log("Collecting CropNH seed names.");
 const cropNhSeedCatalog = await loadCropNhSeedCatalog(process.env.GTNH_INSTANCE_ROOT);
+console.log("Collecting bee species production catalog.");
+const beeSpeciesCatalog = await loadBeeSpeciesCatalog();
 
 const resources = new Map();
 const recipeMaps = [];
@@ -213,6 +215,8 @@ const treeGrowthSimulatorToolSlots = [
 ];
 
 const BONSAI_LOGS_PER_HARVEST = 10;
+const BEE_CYCLE_TICKS = 550;
+const BEE_APIARY_BASE_PRODUCTION_TERM = 0.1;
 const VANILLA_BONSAI_CROPS = [
   {
     key: "bonsai-oak",
@@ -577,6 +581,9 @@ function normalizePassiveNeiSource(source) {
     if (!machineType) {
       continue;
     }
+    if (machineType === "Bee Production" && beeSpeciesCatalog.length > 0) {
+      continue;
+    }
 
     recipeMaps.push(machineType);
 
@@ -659,7 +666,6 @@ function synthesizeIc2CropRecipes() {
     "factoryflow:ic2_crop_seed:stickreed",
     "Stickreed Seeds",
     seedVisual,
-    { tooltip: ["IC2:itemCropSeed"] },
   );
   const recipes = [];
   const stickyResin = resourceForPassiveRecipe("item", "IC2:itemHarz", {
@@ -775,9 +781,7 @@ function legacyIc2SeedInputForOutput(output, visual) {
   const bonsai = legacyBonsaiTreeInfo(output);
   const displayName = `${bonsai?.cropName ?? cropNhSeedNameFromOutput(output)} Seeds`;
   const idSource = bonsai?.key ?? `${output.kind}:${output.id}`;
-  return virtualPassiveInput(`factoryflow:ic2_crop_seed:${slug(idSource)}`, displayName, visual, {
-    tooltip: ["IC2:itemCropSeed"],
-  });
+  return virtualPassiveInput(`factoryflow:ic2_crop_seed:${slug(idSource)}`, displayName, visual);
 }
 
 function usesLegacyIc2Crops() {
@@ -807,17 +811,32 @@ function cropNhCropOutputAmount(resource) {
 }
 
 function synthesizeBeeProductionRecipes() {
-  if (hasRecipeMap("Bee Production")) {
+  if (beeSpeciesCatalog.length === 0 && hasRecipeMap("Bee Production")) {
     return [];
   }
 
-  const bee =
+  const beeVisual =
     resourceForPassiveRecipe("item", "Forestry:beePrincessGE") ??
-    virtualPassiveInput(
-      "factoryflow:bee_species",
-      "Bee Species",
-      passiveInputVisualFallback(["Forestry:beePrincessGE@32767", "Forestry:beePrincessGE"]),
+    passiveInputVisualFallback(["Forestry:beePrincessGE@32767", "Forestry:beePrincessGE"]);
+
+  if (beeSpeciesCatalog.length > 0) {
+    return beeSpeciesCatalog.map((speciesEntry, index) =>
+      addSyntheticPassiveRecipe({
+        machineType: "Bee Production",
+        input: beeSpeciesInput(speciesEntry, beeVisual),
+        inputs: beeProductionInputs(speciesEntry, beeVisual),
+        outputs: beeProductionOutputs(speciesEntry),
+        recipeName: `Bee Production: ${speciesEntry.displayName}`,
+        index,
+        durationTicks: BEE_CYCLE_TICKS,
+        eut: 0,
+        minimumTier: "NONE",
+        note: "Synthesized from GTNH bee species product declarations because RecEx does not expose per-species bee production recipes.",
+      }),
     );
+  }
+
+  const bee = virtualPassiveInput("factoryflow:bee_species", "Bee Species", beeVisual);
   const outputs = passiveResourceValues()
     .filter(isBeePassiveOutputResource)
     .sort(compareById)
@@ -837,11 +856,109 @@ function synthesizeBeeProductionRecipes() {
   );
 }
 
+function beeSpeciesInput(speciesEntry, visual) {
+  return virtualPassiveInput(
+    `factoryflow:bee_species:${slug(speciesEntry.id)}`,
+    speciesEntry.displayName,
+    visual,
+    {
+      tooltip: [
+        "Bee species",
+        `Source: ${speciesEntry.source}`,
+        ...(speciesEntry.aliases ?? []).map((alias) => `${alias} Bee`),
+      ],
+    },
+  );
+}
+
+function beeProductionInputs(speciesEntry, visual) {
+  return [
+    { ...beeSpeciesInput(speciesEntry, visual), neiSlot: { x: 34, y: 52 } },
+    ...[0, 1, 2].map((index) => ({
+      kind: "item",
+      id: `factoryflow:bee_frame_slot_${index + 1}`,
+      amount: 1,
+      displayName: `Bee Frame Slot ${index + 1}`,
+      tooltip: ["Optional bee frame"],
+      consumed: false,
+      optional: true,
+      neiSlot: { x: 66, y: 23 + index * 29 },
+    })),
+  ];
+}
+
+function beeProductionOutputs(speciesEntry) {
+  const outputsByKey = new Map();
+  for (const product of speciesEntry.products ?? []) {
+    const resource = beeCatalogOutputResource(product);
+    if (!resource) {
+      continue;
+    }
+    const amount = beeExpectedCycleAmount(product.chance);
+    const key = `${resource.kind}:${resource.id}`;
+    const existing = outputsByKey.get(key);
+    if (existing) {
+      existing.amount = roundSyntheticAmount(existing.amount + amount);
+      continue;
+    }
+    outputsByKey.set(key, {
+      ...resource,
+      amount,
+      chance: product.chance,
+      tooltip: [
+        ...(resource.tooltip ?? []),
+        `${product.role === "specialty" ? "Specialty" : "Product"} chance: ${formatPercent(product.chance)}`,
+      ],
+    });
+  }
+  return [...outputsByKey.values()];
+}
+
+function beeCatalogOutputResource(product) {
+  const id = text(product?.id, "");
+  if (!id) {
+    return undefined;
+  }
+  const kind = text(product.kind, "item");
+  return (
+    resourceForPassiveRecipe(kind, id, { displayName: product.displayName }) ??
+    (id.endsWith("@0")
+      ? resourceForPassiveRecipe(kind, id.slice(0, -2), { displayName: product.displayName })
+      : undefined) ??
+    passiveOutputAmount({
+      kind,
+      id,
+      amount: kind === "fluid" ? 1000 : 1,
+      displayName: product.displayName ?? id,
+      tooltip: product.tooltip,
+    })
+  );
+}
+
+function beeExpectedCycleAmount(chance) {
+  const normalizedChance = Number(chance);
+  if (!Number.isFinite(normalizedChance) || normalizedChance <= 0) {
+    return 0;
+  }
+  return roundSyntheticAmount(
+    (2.8 *
+      Math.pow(normalizedChance * 100, 0.52) *
+      Math.pow(BEE_APIARY_BASE_PRODUCTION_TERM, 0.52)) /
+      100,
+  );
+}
+
+function formatPercent(value) {
+  return `${Math.round(value * 10000) / 100}%`;
+}
+
 function addSyntheticPassiveRecipe({
   machineType,
   input,
+  inputs,
   output,
   outputs,
+  recipeName,
   index,
   durationTicks,
   eut,
@@ -852,11 +969,26 @@ function addSyntheticPassiveRecipe({
     recipeMaps.push(machineType);
   }
 
+  const recipeInputs = inputs?.map((entry, slotIndex) => ({
+    ...entry,
+    amount: entry.amount ?? 1,
+    consumed: entry.consumed ?? false,
+    neiSlot: entry.neiSlot ?? { x: 34, y: 35 + slotIndex * 18 },
+  })) ?? [{ ...input, amount: 1, consumed: false, neiSlot: { x: 34, y: 35 } }];
   const recipeOutputs = outputs ?? [output];
   const outputSignature = recipeOutputs.map((entry) => `${entry.kind}:${entry.id}`).join("|");
+  const inputSignature = recipeInputs.map((entry) => `${entry.kind}:${entry.id}`).join("|");
+  const itemInputCount = recipeInputs.filter((entry) => entry.kind === "item").length;
+  const fluidInputCount = recipeInputs.filter((entry) => entry.kind === "fluid").length;
   const itemOutputCount = recipeOutputs.filter((entry) => entry.kind === "item").length;
   const fluidOutputCount = recipeOutputs.filter((entry) => entry.kind === "fluid").length;
-  const slotCapacity = { maxItemInputs: 1 };
+  const slotCapacity = {};
+  if (itemInputCount > 0) {
+    slotCapacity.maxItemInputs = itemInputCount;
+  }
+  if (fluidInputCount > 0) {
+    slotCapacity.maxFluidInputs = fluidInputCount;
+  }
   if (itemOutputCount > 0) {
     slotCapacity.maxItemOutputs = itemOutputCount;
   }
@@ -866,17 +998,19 @@ function addSyntheticPassiveRecipe({
 
   const recipe = {
     id: `recex:${datasetVersionId}:${slug(machineType)}:synthetic:${hashRecipe(machineType, index, {
+      inputs: inputSignature,
       outputs: outputSignature,
     })}`,
     name:
-      recipeOutputs.length === 1
+      recipeName ??
+      (recipeOutputs.length === 1
         ? `${machineType}: ${recipeOutputs[0].displayName ?? recipeOutputs[0].id}`
-        : `${machineType}: ${input.displayName ?? input.id}`,
+        : `${machineType}: ${input.displayName ?? recipeInputs[0]?.displayName ?? input.id}`),
     machineType,
     minimumTier,
     durationTicks,
     eut,
-    inputs: [{ ...input, amount: 1, consumed: false, neiSlot: { x: 34, y: 35 } }],
+    inputs: recipeInputs,
     outputs: recipeOutputs.map((entry, slotIndex) => ({
       ...entry,
       neiSlot: syntheticPassiveOutputPosition(slotIndex, recipeOutputs.length),
@@ -890,7 +1024,12 @@ function addSyntheticPassiveRecipe({
     },
     nei: {
       slots: [
-        { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
+        ...recipeInputs.map((entry, slotIndex) => ({
+          side: "input",
+          kind: entry.kind,
+          slotIndex,
+          ...(entry.neiSlot ?? { x: 34, y: 35 + slotIndex * 18 }),
+        })),
         ...recipeOutputs.map((entry, slotIndex) => ({
           side: "output",
           kind: entry.kind,
@@ -2139,6 +2278,20 @@ async function loadCropNhSeedCatalog(instanceRoot) {
     console.log(`Collected ${catalog.length} CropNH seed name(s).`);
   }
   return catalog;
+}
+
+async function loadBeeSpeciesCatalog() {
+  const catalogPath = new URL("../data/bee-production-catalog.json", import.meta.url);
+  const catalog = JSON.parse(await fs.readFile(catalogPath, "utf8"));
+  const entries = Array.isArray(catalog.species) ? catalog.species : [];
+  const species = entries.filter(
+    (entry) => entry?.id && entry?.displayName && entry?.products?.length,
+  );
+  if (species.length === 0) {
+    throw new Error(`Bee species production catalog at ${catalogPath.pathname} is empty.`);
+  }
+  console.log(`Loaded ${species.length} bee species from production catalog.`);
+  return species;
 }
 
 async function* walkJsonFiles(dir) {
