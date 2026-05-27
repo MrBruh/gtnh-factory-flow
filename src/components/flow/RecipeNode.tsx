@@ -51,6 +51,8 @@ import { useFactoryStore } from "@/store/factory-store";
 import { GT_NODE_COLORS } from "./node-colors";
 import { GT_TIER_COLORS } from "./tier-colors";
 
+const PASSIVE_CONFIG_PANEL_WIDTH_CLASS = "w-[300px]";
+
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
   recipe: Recipe;
@@ -181,11 +183,13 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const passiveProductionPanel =
     cropProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
+        className={PASSIVE_CONFIG_PANEL_WIDTH_CLASS}
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
       />
     ) : beePanelControls.length > 0 ? (
       <PassiveProductionConfigPanel
+        className={PASSIVE_CONFIG_PANEL_WIDTH_CLASS}
         controls={beePanelControls}
         onSelect={updateMachineConfigTier}
       />
@@ -532,6 +536,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
         <div
           className={[
             "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
+            passiveProductionPanel ? PASSIVE_CONFIG_PANEL_WIDTH_CLASS : "",
             nodeColor ? "recipe-node-stat-grid" : "",
           ].join(" ")}
           style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
