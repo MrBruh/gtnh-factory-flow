@@ -344,6 +344,7 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
           <NeiRecipeWindow
             recipe={overclockedRecipe}
             scale={2}
+            compactSlotPixelSize={isBeeProductionNode ? 26 : undefined}
             compact
             className={nodeColor ? "recipe-node-nei-tint" : undefined}
             canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}

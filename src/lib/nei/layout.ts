@@ -103,9 +103,9 @@ const BEE_PRODUCE_LAYOUT: RecipeMapLayoutDefinition = {
   maxItemOutputs: 6,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
-  itemInputPositions: (count) => gridPositions(count, 34, 52, 1, 1),
+  itemInputPositions: (count) => gridPositions(count, 34, 40, 1, 1),
   itemOutputPositions: (count) => gridPositions(count, 106, 26, 3),
-  progressBars: [{ x: 66, y: 52, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  progressBars: [{ x: 66, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
 };
 
 const LARGE_NEI_MAPS = new Set([

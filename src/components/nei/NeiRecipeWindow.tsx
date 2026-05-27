@@ -12,6 +12,7 @@ const QUICK_SLOT_ICON_PIXEL_SIZE = 64;
 interface NeiRecipeWindowProps {
   recipe: Recipe;
   scale?: number;
+  compactSlotPixelSize?: number;
   className?: string;
   canvasClassName?: string;
   compact?: boolean;
@@ -30,6 +31,7 @@ interface NeiRecipeWindowProps {
 export const NeiRecipeWindow = memo(function NeiRecipeWindow({
   recipe,
   scale = 2,
+  compactSlotPixelSize = QUICK_SLOT_PIXEL_SIZE,
   className = "",
   canvasClassName = "",
   compact = false,
@@ -69,7 +71,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
           <NeiRecipeCanvas
             recipe={recipe}
             scale={scale}
-            slotPixelSize={compact ? QUICK_SLOT_PIXEL_SIZE : undefined}
+            slotPixelSize={compact ? compactSlotPixelSize : undefined}
             iconPixelSize={compact ? QUICK_SLOT_ICON_PIXEL_SIZE : undefined}
             className={canvasClassName}
             renderHandle={renderHandle}
