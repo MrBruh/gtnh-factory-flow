@@ -3,7 +3,11 @@ import type { FactoryNode, Recipe } from "@/lib/model/types";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
 import { enrichPassiveProductionRecipe } from "@/lib/model/passive-production";
 import { getOverclockedRecipeStats } from "./overclock";
-import { getMachineDurationMultiplier, getMachineOutputMultiplier } from "./machine-effects";
+import {
+  getMachineDurationMultiplier,
+  getMachineEutMultiplier,
+  getMachineOutputMultiplier,
+} from "./machine-effects";
 
 describe("passive production machine effects", () => {
   it("applies IC2 crop stat presets as generic config multipliers", () => {
@@ -113,6 +117,10 @@ describe("passive production machine effects", () => {
     expect(stats.tier).toBe("MV");
     expect(stats.overclockSteps).toBe(0);
     expect(stats.durationTicks).toBeCloseTo(550 / 16);
+    expect(stats.eut).toBeCloseTo((37 + 2048) * 1.4 ** 4);
+    expect(getMachineEutMultiplier(industrialRecipe, node)).toBeCloseTo(
+      ((37 + 2048) / 37) * 1.4 ** 4,
+    );
     expect(
       getMachineOutputMultiplier(industrialRecipe, node, recipe.outputs[0]!, "MV"),
     ).toBeCloseTo(Math.pow((4 * 1.2 ** 4 + 8) / 0.1, 0.52));
@@ -127,6 +135,7 @@ describe("passive production machine effects", () => {
     const industrialRecipe = applyMachineHandlerToRecipe(recipe, node);
 
     expect(getMachineDurationMultiplier(industrialRecipe, node)).toBeCloseTo(1 / 256);
+    expect(getMachineEutMultiplier(industrialRecipe, node)).toBeCloseTo((37 + 524288) / 37);
     expect(
       getMachineOutputMultiplier(industrialRecipe, node, recipe.outputs[0]!, "MV"),
     ).toBeCloseTo(Math.pow((17.19926784 + 8) / 0.1, 0.52));

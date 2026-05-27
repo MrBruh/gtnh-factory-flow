@@ -28,6 +28,9 @@ const BEE_ALVEARY_BASE_PRODUCTION_TERM = 1;
 const BEE_INDUSTRIAL_APIARY_BASE_PRODUCTION_TERM = 10;
 export const BEE_MEGA_APIARY_BASE_PRODUCTION_TERM = 17.19926784 + 6;
 export const MEGA_APIARY_BATCH_CYCLES = 6400 / 550;
+const INDUSTRIAL_APIARY_BASE_EUT = 37;
+const INDUSTRIAL_APIARY_ACCELERATION_AMP_EUT = [32, 128, 512, 2048, 8192, 32768, 131072, 524288];
+const INDUSTRIAL_APIARY_PRODUCTION_EUT_MULTIPLIER = 1.4;
 
 const CROP_CONTROL_IDS = new Set([
   CROP_STATS_CONTROL_ID,
@@ -494,6 +497,7 @@ function industrialApiaryControls(): MachineConfigControl[] {
             `Acceleration Upgrade x${multiplier}`,
             {
               durationMultiplier: 1 / multiplier,
+              eutMultiplier: industrialApiaryAccelerationEutMultiplier(speed),
             },
           );
         }),
@@ -504,6 +508,7 @@ function industrialApiaryControls(): MachineConfigControl[] {
           "Upgraded Acceleration Upgrade x256",
           {
             durationMultiplier: 1 / 256,
+            eutMultiplier: industrialApiaryAccelerationEutMultiplier(8),
           },
         ),
       ],
@@ -520,6 +525,9 @@ function industrialApiaryControls(): MachineConfigControl[] {
           count === 0
             ? "No Production Upgrades"
             : `${count} Production Upgrade${count > 1 ? "s" : ""}`,
+          count === 0
+            ? {}
+            : { eutMultiplier: INDUSTRIAL_APIARY_PRODUCTION_EUT_MULTIPLIER ** count },
         ),
       ),
     }),
@@ -615,7 +623,7 @@ function beeMachineHandlers(): MachineHandler[] {
       label: "Industrial Apiary",
       machineType: "Industrial Apiary",
       minimumTier: "MV",
-      eut: 37,
+      eut: INDUSTRIAL_APIARY_BASE_EUT,
       kind: "automation",
       machineConfigControls: industrialApiaryControls(),
     },
@@ -630,6 +638,11 @@ function beeMachineHandlers(): MachineHandler[] {
       machineConfigControls: megaApiaryControls(),
     },
   ];
+}
+
+function industrialApiaryAccelerationEutMultiplier(speed: number) {
+  const addedEut = INDUSTRIAL_APIARY_ACCELERATION_AMP_EUT[speed - 1] ?? 0;
+  return (INDUSTRIAL_APIARY_BASE_EUT + addedEut) / INDUSTRIAL_APIARY_BASE_EUT;
 }
 
 function getAlvearyFrameHousingProductionModifier(key: string) {

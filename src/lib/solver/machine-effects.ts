@@ -210,10 +210,17 @@ export function getMachineEutMultiplier(
 ): number {
   const coilControl = getRecipeCoilTierControl(recipe, node);
   const coilMultiplier = coilControl?.current.eutMultiplier ?? 1;
-  const configMultiplier = getRecipeMachineConfigTierControls(recipe, node).reduce(
-    (multiplier, control) => multiplier * (control.current.eutMultiplier ?? 1),
-    1,
+  const controls = getRecipeMachineConfigTierControls(recipe, node);
+  const hasUpgradedSpeed8 = controls.some(
+    (control) =>
+      control.id === BEE_INDUSTRIAL_SPEED_CONTROL_ID && control.current.key === "speed-8-upgraded",
   );
+  const configMultiplier = controls.reduce((multiplier, control) => {
+    if (hasUpgradedSpeed8 && control.id === BEE_INDUSTRIAL_PRODUCTION_CONTROL_ID) {
+      return multiplier;
+    }
+    return multiplier * (control.current.eutMultiplier ?? 1);
+  }, 1);
   return coilMultiplier * configMultiplier;
 }
 
