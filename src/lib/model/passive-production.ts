@@ -40,9 +40,31 @@ export interface CropStatsPreset {
   resistance: number;
 }
 
+interface Ic2CropSimulationProfile {
+  tier: number;
+  environmentScore: number;
+  baselineStats: CropStatsPreset;
+}
+
 type PassiveProductionRecipeLabel = Pick<Recipe, "machineType" | "name" | "source"> & {
   recipeMap?: string;
 };
+
+const IC2_STICKREED_PROFILE: Ic2CropSimulationProfile = {
+  tier: 4,
+  environmentScore: 120,
+  baselineStats: { growth: 23, gain: 31, resistance: 0 },
+};
+
+const CROPNH_GENERIC_PROFILE: Ic2CropSimulationProfile = {
+  tier: 1,
+  environmentScore: 120,
+  baselineStats: { growth: 31, gain: 31, resistance: 31 },
+};
+
+const SQRT_2_PI = Math.sqrt(2 * Math.PI);
+const ic2DropMultiplierCache = new Map<string, number>();
+const ic2GrowthCycleCache = new Map<string, number>();
 
 export function enrichPassiveProductionRecipe(recipe: Recipe): Recipe {
   if (isCropProductionRecipe(recipe)) {
@@ -242,28 +264,13 @@ function cropProductionControls(recipe: PassiveProductionRecipeLabel) {
 function cropStatsControl(recipe: PassiveProductionRecipeLabel): MachineConfigControl {
   const tiers = isCropNhRecipe(recipe)
     ? [
-        cropStatsOption(
-          { growth: 1, gain: 1, resistance: 1 },
-          { durationMultiplier: 31, outputMultiplier: 1 },
-        ),
-        cropStatsOption(
-          { growth: 23, gain: 31, resistance: 0 },
-          { durationMultiplier: 31 / 23, outputMultiplier: 31 },
-        ),
-        cropStatsOption(
-          { growth: 31, gain: 31, resistance: 31 },
-          { outputMultiplier: 31 },
-        ),
+        cropStatsOption({ growth: 1, gain: 1, resistance: 1 }, CROPNH_GENERIC_PROFILE),
+        cropStatsOption({ growth: 23, gain: 31, resistance: 0 }, CROPNH_GENERIC_PROFILE),
+        cropStatsOption({ growth: 31, gain: 31, resistance: 31 }, CROPNH_GENERIC_PROFILE),
       ]
     : [
-        cropStatsOption(
-          { growth: 1, gain: 1, resistance: 1 },
-          { durationMultiplier: 23, outputMultiplier: 1 },
-        ),
-        cropStatsOption(
-          { growth: 23, gain: 31, resistance: 0 },
-          { outputMultiplier: 31 },
-        ),
+        cropStatsOption({ growth: 1, gain: 1, resistance: 1 }, IC2_STICKREED_PROFILE),
+        cropStatsOption({ growth: 23, gain: 31, resistance: 0 }, IC2_STICKREED_PROFILE),
       ];
 
   return {
@@ -402,9 +409,10 @@ function beeMachineHandlers(): MachineHandler[] {
 
 function cropStatsOption(
   stats: CropStatsPreset,
-  effect: Pick<MachineConfigTierOption, "durationMultiplier" | "outputMultiplier"> = {},
+  profile: Ic2CropSimulationProfile,
 ): MachineConfigTierOption {
   const label = `${stats.growth}/${stats.gain}/${stats.resistance}`;
+  const effect = ic2CropStatsEffect(stats, profile);
   return {
     key: `${stats.growth}-${stats.gain}-${stats.resistance}`,
     label,
@@ -420,6 +428,221 @@ function cropStatsOption(
       ],
     ),
   };
+}
+
+function ic2CropStatsEffect(
+  stats: CropStatsPreset,
+  profile: Ic2CropSimulationProfile,
+): Pick<MachineConfigTierOption, "durationMultiplier" | "outputMultiplier"> {
+  // Mirrors GTNH EIG's IC2 crop approximation: gain changes drop rounds, growth changes tick cycles.
+  const baselineCycles = ic2AverageGrowthCycles(profile.baselineStats, profile);
+  const cycles = ic2AverageGrowthCycles(stats, profile);
+  const durationMultiplier = cycles > 0 && baselineCycles > 0 ? cycles / baselineCycles : 1;
+
+  return {
+    durationMultiplier: roundMultiplier(durationMultiplier),
+    outputMultiplier: roundMultiplier(ic2ExpectedHarvestOutput(stats.gain, profile.tier)),
+  };
+}
+
+function ic2ExpectedHarvestOutput(gain: number, tier: number) {
+  const cacheKey = `${tier}:${gain}`;
+  const cached = ic2DropMultiplierCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const baseDropGainChance = 0.95 ** tier;
+  const dropRounds = ic2AverageDropRounds(baseDropGainChance * 1.03 ** gain);
+  const stackIncrease = (gain + 1) / 100;
+  const multiplier = dropRounds * (1 + stackIncrease);
+  ic2DropMultiplierCache.set(cacheKey, multiplier);
+  return multiplier;
+}
+
+function ic2AverageDropRounds(chance: number) {
+  const min = -10;
+  const max = 10;
+  const steps = 10_000;
+  const stepSize = (max - min) / steps;
+  let sum = 0;
+
+  for (let step = 1; step <= steps - 1; step += 1) {
+    sum += weightedDropChance(min + step * stepSize, chance);
+  }
+
+  return (
+    stepSize * ((weightedDropChance(min, chance) + weightedDropChance(max, chance)) / 2 + sum)
+  );
+}
+
+function weightedDropChance(x: number, chance: number) {
+  return Math.max(0, Math.round(x * chance * 0.6827 + chance)) * standardNormalDistribution(x);
+}
+
+function standardNormalDistribution(x: number) {
+  return Math.exp(-0.5 * x * x) / SQRT_2_PI;
+}
+
+function ic2AverageGrowthCycles(stats: CropStatsPreset, profile: Ic2CropSimulationProfile) {
+  const cacheKey = `${profile.tier}:${profile.environmentScore}:${stats.growth}:${stats.gain}:${stats.resistance}`;
+  const cached = ic2GrowthCycleCache.get(cacheKey);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  const growthSpeeds = Array.from({ length: 7 }, (_unused, roll) =>
+    ic2AverageGrowthRate(stats, profile, roll),
+  );
+  if (growthSpeeds.some((speed) => speed < 0)) {
+    ic2GrowthCycleCache.set(cacheKey, -1);
+    return -1;
+  }
+
+  const nonZeroSpeeds = growthSpeeds.filter((speed) => speed > 0);
+  const zeroRolls = growthSpeeds.length - nonZeroSpeeds.length;
+  if (zeroRolls >= growthSpeeds.length) {
+    ic2GrowthCycleCache.set(cacheKey, -1);
+    return -1;
+  }
+
+  const stageGoal = profile.tier * 200;
+  const stageGoals = [0, stageGoal, stageGoal, stageGoal];
+  const startStageFrequency = new Map([
+    [1, 1],
+    [2, 1],
+    [3, 1],
+  ]);
+  const frequencySum = [...startStageFrequency.values()].reduce((sum, value) => sum + value, 0);
+  const averageCyclesByStage = stageGoals.map((goal) => averageCyclesToGoal(nonZeroSpeeds, goal));
+  const normalizedStageFrequencies = stageGoals.map(
+    (_goal, stage) =>
+      ((startStageFrequency.get(stage) ?? 0) * stageGoals.length) / frequencySum,
+  );
+  const frequencyMultipliers = new Array(averageCyclesByStage.length).fill(1);
+
+  convolveSignalInPlace(
+    frequencyMultipliers,
+    normalizedStageFrequencies,
+    new Array(averageCyclesByStage.length).fill(0),
+    0,
+    frequencyMultipliers.length,
+    0,
+  );
+
+  const average =
+    averageCyclesByStage.reduce(
+      (sum, value, index) => sum + value * (frequencyMultipliers[index] ?? 1),
+      0,
+    ) / averageCyclesByStage.length;
+  const zeroRollAdjustedAverage =
+    zeroRolls > 0 ? (average / nonZeroSpeeds.length) * growthSpeeds.length : average;
+
+  ic2GrowthCycleCache.set(cacheKey, zeroRollAdjustedAverage);
+  return zeroRollAdjustedAverage;
+}
+
+function ic2AverageGrowthRate(
+  stats: CropStatsPreset,
+  profile: Ic2CropSimulationProfile,
+  rngRoll: number,
+) {
+  const base = 3 + rngRoll + stats.growth;
+  const need = Math.max(
+    0,
+    (profile.tier - 1) * 4 + stats.growth + stats.gain + stats.resistance,
+  );
+  const have = profile.environmentScore;
+
+  if (have >= need) {
+    return Math.trunc((base * (100 + (have - need))) / 100);
+  }
+
+  const penalty = (need - have) * 4;
+  if (penalty > 100) {
+    return stats.resistance >= 31 ? 0 : -1;
+  }
+  return Math.max(0, Math.trunc((base * (100 - penalty)) / 100));
+}
+
+function averageCyclesToGoal(speeds: number[], goal: number) {
+  if (goal <= 0) {
+    return 1;
+  }
+
+  const maxSpeed = speeds[speeds.length - 1] ?? 1;
+  const goalCap = maxSpeed * 1000;
+  let cappedGoal = goal;
+  let multiplier = 1;
+
+  if (goal > goalCap) {
+    multiplier = goal / goalCap;
+    cappedGoal = goalCap;
+  }
+
+  const signal = new Array(cappedGoal).fill(0);
+  signal[0] = 1;
+  const kernel = tabulate(speeds, 1 / speeds.length);
+  const target = new Array(signal.length).fill(0);
+  const min = speeds[0] ?? 0;
+  const max = maxSpeed;
+  let averageRolls = 1;
+  let iteration = 0;
+  let probability: number;
+
+  do {
+    probability = convolveSignalInPlace(signal, kernel, target, min, max, iteration);
+    averageRolls += probability;
+    iteration += 1;
+  } while (probability >= 0.1 / cappedGoal);
+
+  return averageRolls * multiplier;
+}
+
+function tabulate(values: number[], multiplier: number) {
+  const max = Math.max(...values);
+  const tabulated = new Array(max + 1).fill(0);
+  for (const value of values) {
+    tabulated[value] += multiplier;
+  }
+  return tabulated;
+}
+
+function convolveSignalInPlace(
+  signal: number[],
+  kernel: number[],
+  target: number[],
+  minValue: number,
+  maxValue: number,
+  iteration: number,
+) {
+  let sum = 0;
+  const maxK = Math.min(signal.length, (iteration + 1) * maxValue + 1);
+  const startAt = Math.min(signal.length, minValue * (iteration + 1));
+  let k = Math.max(0, startAt - kernel.length);
+
+  for (; k < startAt; k += 1) {
+    target[k] = 0;
+  }
+
+  for (; k < maxK; k += 1) {
+    target[k] = 0;
+    for (let i = Math.max(0, k - kernel.length + 1); i <= k; i += 1) {
+      const value = (signal[i] ?? 0) * (kernel[k - i] ?? 0);
+      sum += value;
+      target[k] = (target[k] ?? 0) + value;
+    }
+  }
+
+  for (let index = 0; index < signal.length; index += 1) {
+    signal[index] = target[index] ?? 0;
+  }
+
+  return sum;
+}
+
+function roundMultiplier(value: number) {
+  return Math.round(value * 1000) / 1000;
 }
 
 function selectControl({

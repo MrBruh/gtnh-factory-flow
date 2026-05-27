@@ -13,10 +13,14 @@ describe("passive production machine effects", () => {
       machineConfigTiers: { cropStats: "23-31-0" },
     };
 
-    expect(getMachineDurationMultiplier(recipe, lowStatsNode)).toBe(23);
-    expect(getMachineOutputMultiplier(recipe, lowStatsNode, recipe.outputs[0]!, "LV")).toBe(1);
+    expect(getMachineDurationMultiplier(recipe, lowStatsNode)).toBeCloseTo(3.102);
+    expect(getMachineOutputMultiplier(recipe, lowStatsNode, recipe.outputs[0]!, "LV")).toBeCloseTo(
+      0.866,
+    );
     expect(getMachineDurationMultiplier(recipe, gainNode)).toBe(1);
-    expect(getMachineOutputMultiplier(recipe, gainNode, recipe.outputs[0]!, "LV")).toBe(31);
+    expect(getMachineOutputMultiplier(recipe, gainNode, recipe.outputs[0]!, "LV")).toBeCloseTo(
+      2.741,
+    );
   });
 });
 
