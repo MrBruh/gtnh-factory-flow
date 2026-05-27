@@ -99,13 +99,14 @@ const CROP_PROGRESS_BARS: NeiProgressBar[] = [
 ];
 const BEE_PRODUCE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "bee-produce",
+  canvas: { width: 250, height: 82 },
   maxItemInputs: 1,
   maxItemOutputs: 6,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
-  itemInputPositions: (count) => gridPositions(count, 34, 40, 1, 1),
-  itemOutputPositions: (count) => gridPositions(count, 106, 26, 3),
-  progressBars: [{ x: 66, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  itemInputPositions: (count) => gridPositions(count, 58, 42, 1, 1),
+  itemOutputPositions: (count) => gridPositions(count, 150, 26, 3),
+  progressBars: [{ x: 98, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
 };
 
 const LARGE_NEI_MAPS = new Set([

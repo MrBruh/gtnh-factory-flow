@@ -86,10 +86,6 @@ export function NeiRecipeCanvas({
         <ProgressTexture key={`${bar.x}-${bar.y}-${index}`} bar={bar} scale={renderScale} />
       ))}
 
-      {layout.id === "bee-produce" ? (
-        <BeeProduceLabels recipe={recipe} scale={renderScale} />
-      ) : null}
-
       {renderLayout.frames.map((frame) => {
         const slot = frame.resource ? (frame as NeiPositionedSlot) : undefined;
         return (
@@ -233,55 +229,6 @@ function getRenderLayout(
     frames: renderFrames,
     logoY: applyVerticalShifts(logoY, shifts),
   };
-}
-
-function BeeProduceLabels({ recipe, scale }: { recipe: Recipe; scale: number }) {
-  const beeName =
-    recipe.inputs.find((input) => input.kind === "item")?.displayName?.replace(/\s+Bee$/i, "") ??
-    "";
-  const labelStyle = {
-    fontSize: `${Math.max(10, 10 * scale)}px`,
-    lineHeight: 1,
-    textShadow: "1px 1px 0 #555",
-  };
-
-  return (
-    <>
-      <span
-        className="pointer-events-none absolute z-10 font-mono font-bold text-white"
-        style={{
-          ...labelStyle,
-          left: 88 * scale,
-          top: 25 * scale,
-        }}
-      >
-        Prod:
-      </span>
-      <span
-        className="pointer-events-none absolute z-10 font-mono font-bold text-[#ffff33]"
-        style={{
-          ...labelStyle,
-          left: 77 * scale,
-          top: 56 * scale,
-        }}
-      >
-        Speed:
-      </span>
-      {beeName ? (
-        <span
-          className="pointer-events-none absolute z-10 max-w-[78px] truncate font-mono font-bold text-white"
-          style={{
-            ...labelStyle,
-            left: 3 * scale,
-            top: 61 * scale,
-            maxWidth: 78 * scale,
-          }}
-        >
-          {beeName}
-        </span>
-      ) : null}
-    </>
-  );
 }
 
 function findContextFrame(
