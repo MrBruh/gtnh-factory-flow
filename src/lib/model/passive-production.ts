@@ -9,7 +9,6 @@ import type {
 export const CROP_STATS_CONTROL_ID = "cropStats";
 export const CROP_HYDRATION_CONTROL_ID = "cropHydration";
 export const CROP_NUTRIENTS_CONTROL_ID = "cropNutrients";
-export const CROP_WEED_CONTROL_ID = "cropWeedControl";
 export const CROP_SOIL_CONTROL_ID = "cropSoil";
 export const CROP_SOIL_DEPTH_CONTROL_ID = "cropSoilDepth";
 export const CROP_AIR_QUALITY_CONTROL_ID = "cropAirQuality";
@@ -22,7 +21,6 @@ const CROP_CONTROL_IDS = new Set([
   CROP_STATS_CONTROL_ID,
   CROP_HYDRATION_CONTROL_ID,
   CROP_NUTRIENTS_CONTROL_ID,
-  CROP_WEED_CONTROL_ID,
   CROP_SOIL_CONTROL_ID,
   CROP_SOIL_DEPTH_CONTROL_ID,
   CROP_AIR_QUALITY_CONTROL_ID,
@@ -201,16 +199,6 @@ function cropProductionControls(recipe: PassiveProductionRecipeLabel) {
             durationMultiplier: 0.82,
           },
         ),
-      ],
-    }),
-    selectControl({
-      id: CROP_WEED_CONTROL_ID,
-      label: "Weed Control",
-      defaultKey: "managed",
-      tiers: [
-        option("none", "None", "crop_weed_none", "No Weed Control"),
-        option("weed-ex", "Weed-EX", "crop_weed_ex", "Weed-EX"),
-        option("managed", "Managed", "crop_weed_managed", "Managed Weed Control"),
       ],
     }),
     selectControl({
@@ -471,9 +459,7 @@ function ic2AverageDropRounds(chance: number) {
     sum += weightedDropChance(min + step * stepSize, chance);
   }
 
-  return (
-    stepSize * ((weightedDropChance(min, chance) + weightedDropChance(max, chance)) / 2 + sum)
-  );
+  return stepSize * ((weightedDropChance(min, chance) + weightedDropChance(max, chance)) / 2 + sum);
 }
 
 function weightedDropChance(x: number, chance: number) {
@@ -516,8 +502,7 @@ function ic2AverageGrowthCycles(stats: CropStatsPreset, profile: Ic2CropSimulati
   const frequencySum = [...startStageFrequency.values()].reduce((sum, value) => sum + value, 0);
   const averageCyclesByStage = stageGoals.map((goal) => averageCyclesToGoal(nonZeroSpeeds, goal));
   const normalizedStageFrequencies = stageGoals.map(
-    (_goal, stage) =>
-      ((startStageFrequency.get(stage) ?? 0) * stageGoals.length) / frequencySum,
+    (_goal, stage) => ((startStageFrequency.get(stage) ?? 0) * stageGoals.length) / frequencySum,
   );
   const frequencyMultipliers = new Array(averageCyclesByStage.length).fill(1);
 
@@ -548,10 +533,7 @@ function ic2AverageGrowthRate(
   rngRoll: number,
 ) {
   const base = 3 + rngRoll + stats.growth;
-  const need = Math.max(
-    0,
-    (profile.tier - 1) * 4 + stats.growth + stats.gain + stats.resistance,
-  );
+  const need = Math.max(0, (profile.tier - 1) * 4 + stats.growth + stats.gain + stats.resistance);
   const have = profile.environmentScore;
 
   if (have >= need) {
@@ -743,7 +725,9 @@ function withPassiveProductionNote(notes: string | undefined, note: string) {
 }
 
 function passiveProductionLabel(recipe: PassiveProductionRecipeLabel) {
-  return normalizeLabel(`${recipe.source?.recipeMap ?? recipe.recipeMap ?? ""} ${recipe.machineType}`);
+  return normalizeLabel(
+    `${recipe.source?.recipeMap ?? recipe.recipeMap ?? ""} ${recipe.machineType}`,
+  );
 }
 
 function normalizeLabel(value: string) {
