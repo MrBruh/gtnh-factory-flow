@@ -214,6 +214,52 @@ describe("enrichDatasetRecipes", () => {
     expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
   });
 
+  it("adds bee production controls without alternate machine handlers", () => {
+    const dataset = baseDataset([
+      {
+        id: "bee-products-honey",
+        name: "Alveary: Honey Drops",
+        machineType: "Alveary",
+        minimumTier: "UNKNOWN",
+        durationTicks: 1200,
+        eut: 0,
+        inputs: [
+          {
+            kind: "item",
+            id: "Forestry:beeCombs",
+            amount: 1,
+            displayName: "Honey Comb",
+            consumed: false,
+          },
+        ],
+        outputs: [{ kind: "item", id: "Forestry:honeyDrop", amount: 1, displayName: "Honey Drop" }],
+        source: { recipeMap: "Alveary" },
+        machineHandlers: [
+          {
+            id: "industrial-apiary",
+            label: "Industrial Apiary",
+            machineType: "Industrial Apiary",
+            minimumTier: "MV",
+          },
+        ],
+      },
+    ]);
+
+    const recipe = enrichDatasetRecipes(dataset).recipes[0];
+
+    expect(recipe).toMatchObject({
+      machineType: "Apiary",
+      minimumTier: "NONE",
+      eut: 0,
+      machineHandlers: [],
+    });
+    expect(recipe?.machineConfigControls?.map((control) => control.id)).toEqual([
+      "beeFrames",
+      "beeEnvironment",
+      "beeProductivity",
+    ]);
+  });
+
   it("does not treat ordinary craft names as passive production", () => {
     const dataset = baseDataset([
       {
