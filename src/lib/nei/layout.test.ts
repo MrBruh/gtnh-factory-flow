@@ -200,12 +200,12 @@ describe("NEI layout", () => {
     expect(layout.id).toBe("bee-produce");
     expect(layout.canvas.width).toBe(170);
     expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
-      ["item", "input", 34, 42],
-      ["item", "output", 106, 26],
-      ["item", "output", 124, 26],
+      ["item", "input", 22, 42],
+      ["item", "output", 94, 26],
+      ["item", "output", 112, 26],
     ]);
     expect(layout.frames.filter((frame) => frame.side === "output")).toHaveLength(6);
-    expect(layout.progressBars[0]).toMatchObject({ x: 66, y: 42, texture: "arrow" });
+    expect(layout.progressBars[0]).toMatchObject({ x: 54, y: 42, texture: "arrow" });
   });
 
   it("reuses the Bee Produce surface for bee machines", () => {
@@ -219,10 +219,48 @@ describe("NEI layout", () => {
 
     expect(layout.id).toBe("bee-produce");
     expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
-      ["item", "input", 34, 42],
-      ["item", "output", 106, 26],
+      ["item", "input", 22, 42],
+      ["item", "output", 94, 26],
     ]);
     expect(layout.frames.filter((frame) => frame.side === "output")).toHaveLength(6);
+  });
+
+  it("centers bee machine recipes even when the dataset provides raw NEI slots", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Industrial Apiary",
+        inputs: [
+          {
+            kind: "item",
+            id: "factoryflow:bee_species:explosive",
+            amount: 1,
+            neiSlot: { x: 34, y: 52 },
+          },
+        ],
+        outputs: [
+          {
+            kind: "item",
+            id: "IC2:blockITNT",
+            amount: 1,
+            chance: 0.2,
+            neiSlot: { x: 106, y: 26 },
+          },
+        ],
+        nei: {
+          slots: [
+            { side: "input", kind: "item", slotIndex: 0, x: 34, y: 52 },
+            { side: "output", kind: "item", slotIndex: 0, x: 106, y: 26 },
+          ],
+          progressBars: [{ x: 66, y: 52, width: 24, height: 17, direction: "right" }],
+        },
+      }),
+    );
+
+    expect(layout.slots.map((slot) => [slot.kind, slot.side, slot.x, slot.y])).toEqual([
+      ["item", "input", 22, 42],
+      ["item", "output", 94, 26],
+    ]);
+    expect(layout.progressBars[0]).toMatchObject({ x: 54, y: 42, texture: "arrow" });
   });
 
   it("aligns crop production arrows with the crop slots", () => {

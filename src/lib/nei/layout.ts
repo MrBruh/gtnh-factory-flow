@@ -103,9 +103,9 @@ const BEE_PRODUCE_LAYOUT: RecipeMapLayoutDefinition = {
   maxItemOutputs: 6,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
-  itemInputPositions: (count) => gridPositions(count, 34, 42, 1, 1),
-  itemOutputPositions: (count) => gridPositions(count, 106, 26, 3),
-  progressBars: [{ x: 66, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  itemInputPositions: (count) => gridPositions(count, 22, 42, 1, 1),
+  itemOutputPositions: (count) => gridPositions(count, 94, 26, 3),
+  progressBars: [{ x: 54, y: 42, width: 24, height: 17, direction: "right", texture: "arrow" }],
 };
 
 const LARGE_NEI_MAPS = new Set([
@@ -243,16 +243,21 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   const itemOutputs = withResourceIndexes(recipe.outputs, "item");
   const fluidOutputs = withResourceIndexes(recipe.outputs, "fluid");
 
-  const explicitFrames = getExplicitSlotFrames(recipe, {
-    itemInputs,
-    fluidInputs,
-    itemOutputs,
-    fluidOutputs,
-  });
-  const explicitProgressBars = recipe.nei?.progressBars?.map((bar) => ({
-    ...bar,
-    texture: bar.texture ?? "arrow",
-  }));
+  const shouldUseRecipeMapLayout = definition.id === "bee-produce";
+  const explicitFrames = shouldUseRecipeMapLayout
+    ? undefined
+    : getExplicitSlotFrames(recipe, {
+        itemInputs,
+        fluidInputs,
+        fluidOutputs,
+        itemOutputs,
+      });
+  const explicitProgressBars = shouldUseRecipeMapLayout
+    ? undefined
+    : recipe.nei?.progressBars?.map((bar) => ({
+        ...bar,
+        texture: bar.texture ?? "arrow",
+      }));
   const frames: NeiSlotFrame[] = explicitFrames ?? [
     ...positionFrames(
       itemInputs,
