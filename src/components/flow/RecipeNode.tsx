@@ -19,7 +19,6 @@ import {
   formatRate,
   applyMachineHandlerToRecipe,
   getAdjacentMachineConfigTier,
-  getCropStatsPreset,
   GT_VOLTAGE_TIERS,
   getRecipeMachineHandlers,
   getRecipeMachineConfigTierControls,
@@ -165,13 +164,11 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const passiveProductionPanel =
     cropProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
-        title="Crop setup"
         controls={cropProductionControls}
         onSelect={updateMachineConfigTier}
       />
     ) : beeProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
-        title="Bee setup"
         controls={beeProductionControls}
         onSelect={updateMachineConfigTier}
       />
@@ -865,11 +862,9 @@ function isCropSeedSlot(
 }
 
 function PassiveProductionConfigPanel({
-  title,
   controls,
   onSelect,
 }: {
-  title: string;
   controls: MachineConfigTierControl[];
   onSelect: (controlId: string, nextTier: string) => void;
 }) {
@@ -879,27 +874,17 @@ function PassiveProductionConfigPanel({
 
   const statsControl = controls.find((control) => control.id === "cropStats");
   const regularControls = controls.filter((control) => control.id !== "cropStats");
-  const stats = getCropStatsPreset(statsControl?.current.key);
 
   return (
     <div className="nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
-      <div className="mb-1 flex min-w-0 items-center justify-between gap-2">
-        <div className="truncate text-[9px] font-bold uppercase leading-3 text-[#424242]">
-          {title}
-        </div>
-        {stats ? (
-          <div className="grid shrink-0 grid-cols-3 gap-1 text-center text-[9px] font-black leading-3">
-            <CropStatBadge label="Gr" value={stats.growth} />
-            <CropStatBadge label="Ga" value={stats.gain} />
-            <CropStatBadge label="R" value={stats.resistance} />
-          </div>
-        ) : null}
-      </div>
-      <div className="grid grid-cols-2 gap-1">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] gap-1">
         {controls.map((control) => (
           <label
             key={control.id}
-            className={control === statsControl && regularControls.length > 0 ? "col-span-2" : ""}
+            className={[
+              "min-w-0",
+              control === statsControl && regularControls.length > 0 ? "col-span-2" : "",
+            ].join(" ")}
           >
             <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[#4a4a4a]">
               {control.label}
@@ -923,15 +908,6 @@ function PassiveProductionConfigPanel({
         ))}
       </div>
     </div>
-  );
-}
-
-function CropStatBadge({ label, value }: { label: string; value: number }) {
-  return (
-    <span className="min-w-7 border border-[#555] bg-[#d8d8d8] px-1 shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a]">
-      {label}
-      {value}
-    </span>
   );
 }
 
