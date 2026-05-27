@@ -191,6 +191,7 @@ describe("enrichDatasetRecipes", () => {
             id: "IC2:itemCropSeed@1",
             amount: 1,
             displayName: "Stickreed Seeds",
+            tooltip: ["IC2:itemCropSeed", "Not a generated line"],
             consumed: false,
           },
         ],
@@ -210,6 +211,7 @@ describe("enrichDatasetRecipes", () => {
       eut: 0,
     });
     expect(recipe?.machineHandlers).toEqual([]);
+    expect(recipe?.inputs[0]?.tooltip).toEqual(["Not a generated line"]);
     expect(statControl?.defaultKey).toBe("23-31-0");
     expect(statControl?.tiers.map((tier) => tier.label)).toEqual(["1/1/1", "23/31/0"]);
   });
@@ -229,6 +231,7 @@ describe("enrichDatasetRecipes", () => {
             id: "factoryflow:bee_species:gregtech-explosive",
             amount: 1,
             displayName: "Explosive Bee",
+            tooltip: ["Bee species", "Source: GregTech", "Explosive Bee"],
             consumed: false,
           },
         ],
@@ -246,6 +249,7 @@ describe("enrichDatasetRecipes", () => {
       minimumTier: "NONE",
       eut: 0,
     });
+    expect(recipe?.inputs[0]?.tooltip).toBeUndefined();
     expect(recipe?.machineHandlers?.map((handler) => handler.label)).toEqual([
       "Magic Apiary",
       "Alveary",

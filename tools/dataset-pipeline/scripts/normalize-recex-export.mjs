@@ -864,13 +864,6 @@ function beeSpeciesInput(speciesEntry, visual) {
     `factoryflow:bee_species:${slug(speciesEntry.id)}`,
     speciesEntry.displayName,
     visual,
-    {
-      tooltip: [
-        "Bee species",
-        `Source: ${speciesEntry.source}`,
-        ...(speciesEntry.aliases ?? []).map((alias) => `${alias} Bee`),
-      ],
-    },
   );
 }
 

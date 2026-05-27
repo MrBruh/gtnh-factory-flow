@@ -223,6 +223,7 @@ function enrichCropProductionRecipe(recipe: Recipe): Recipe {
 
   return {
     ...recipe,
+    inputs: sanitizeCropProductionInputs(recipe.inputs),
     machineType: isPassiveBaseMachine(recipe.machineType) ? baseMachine : recipe.machineType,
     minimumTier: "NONE",
     eut: 0,
@@ -240,6 +241,7 @@ function enrichBeeProductionRecipe(recipe: Recipe): Recipe {
 
   return {
     ...recipe,
+    inputs: sanitizeBeeProductionInputs(recipe.inputs),
     machineType: isPassiveBaseMachine(recipe.machineType) ? "Apiary" : recipe.machineType,
     minimumTier: recipe.minimumTier === "UNKNOWN" ? "NONE" : recipe.minimumTier,
     eut: recipe.eut > 0 ? recipe.eut : 0,
@@ -363,6 +365,44 @@ function apiaryProductionControls(): MachineConfigControl[] {
     beeFrameSlotControl(3),
     beeEnvironmentControl(),
   ];
+}
+
+function sanitizeCropProductionInputs(inputs: Recipe["inputs"]): Recipe["inputs"] {
+  return inputs.map((input) => {
+    if (!isIc2CropSeedInput(input)) {
+      return input;
+    }
+
+    return withoutTooltipLines(input, (line) => /^IC2:itemCropSeed(?:@|$)/i.test(line.trim()));
+  });
+}
+
+function sanitizeBeeProductionInputs(inputs: Recipe["inputs"]): Recipe["inputs"] {
+  return inputs.map((input) => {
+    if (!input.id.startsWith("factoryflow:bee_species:")) {
+      return input;
+    }
+
+    return { ...input, tooltip: undefined };
+  });
+}
+
+function isIc2CropSeedInput(input: ResourceAmount) {
+  return (
+    /^IC2:itemCropSeed(?:@|$)/i.test(input.id) || input.id.startsWith("factoryflow:ic2_crop_seed:")
+  );
+}
+
+function withoutTooltipLines(
+  input: Recipe["inputs"][number],
+  shouldRemove: (line: string) => boolean,
+): Recipe["inputs"][number] {
+  const tooltip = input.tooltip?.filter((line) => !shouldRemove(line));
+  if (!tooltip || tooltip.length === input.tooltip?.length) {
+    return input;
+  }
+
+  return { ...input, tooltip: tooltip.length > 0 ? tooltip : undefined };
 }
 
 function magicApiaryProductionControls(): MachineConfigControl[] {

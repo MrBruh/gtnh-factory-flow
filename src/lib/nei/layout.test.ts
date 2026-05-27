@@ -207,6 +207,29 @@ describe("NEI layout", () => {
     expect(layout.progressBars[0]).toMatchObject({ x: 66, y: 52, texture: "arrow" });
   });
 
+  it("aligns crop production arrows with the crop slots", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Crop Manager",
+        sourceRecipeMap: "IC2 Crop",
+        inputs: [
+          {
+            kind: "item",
+            id: "factoryflow:ic2_crop_seed:spruce-bonsai",
+            amount: 1,
+            neiSlot: { x: 34, y: 35 },
+          },
+        ],
+        outputs: [
+          { kind: "item", id: "minecraft:spruce_log", amount: 16.79, neiSlot: { x: 124, y: 35 } },
+          { kind: "item", id: "minecraft:sapling", amount: 1.52, neiSlot: { x: 142, y: 35 } },
+        ],
+      }),
+    );
+
+    expect(layout.progressBars[0]).toMatchObject({ x: 78, y: 35, texture: "arrow" });
+  });
+
   it("keeps empty centrifuge output slots when only some outputs are used", () => {
     const layout = getNeiRecipeLayout(
       recipe({

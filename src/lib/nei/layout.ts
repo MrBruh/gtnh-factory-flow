@@ -94,6 +94,9 @@ const DEFAULT_CANVAS: NeiSize = { width: 170, height: 82 };
 const DEFAULT_PROGRESS_BARS: NeiProgressBar[] = [
   { x: 78, y: 24, width: 20, height: 18, direction: "right", texture: "arrow" },
 ];
+const CROP_PROGRESS_BARS: NeiProgressBar[] = [
+  { x: 78, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" },
+];
 
 const LARGE_NEI_MAPS = new Set([
   "Entropic Processing",
@@ -173,6 +176,38 @@ const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
     itemInputPositions: (count) => gridPositions(count, 34, 52, 1, 1),
     itemOutputPositions: (count) => gridPositions(count, 106, 26, 3),
     progressBars: [{ x: 66, y: 52, width: 24, height: 17, direction: "right", texture: "arrow" }],
+  },
+  "IC2 Crop": {
+    id: "crop-production",
+    maxItemInputs: 1,
+    maxItemOutputs: 3,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    progressBars: CROP_PROGRESS_BARS,
+  },
+  CropNH: {
+    id: "crop-production",
+    maxItemInputs: 1,
+    maxItemOutputs: 3,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    progressBars: CROP_PROGRESS_BARS,
+  },
+  "Crop Production": {
+    id: "crop-production",
+    maxItemInputs: 1,
+    maxItemOutputs: 3,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    progressBars: CROP_PROGRESS_BARS,
+  },
+  "Crop Manager": {
+    id: "crop-production",
+    maxItemInputs: 1,
+    maxItemOutputs: 3,
+    maxFluidInputs: 0,
+    maxFluidOutputs: 0,
+    progressBars: CROP_PROGRESS_BARS,
   },
   "Distillation Tower": {
     id: "distillation-tower",
