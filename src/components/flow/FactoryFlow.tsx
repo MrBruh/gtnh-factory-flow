@@ -3710,11 +3710,6 @@ function isCompatibleDraggedResourceTarget(
   targetHandle: ResolvedResourceHandle,
 ) {
   const targetResource = getResourceForHandle(project, targetHandle.nodeId, targetHandle.handleId);
-  const dragged = {
-    kind: draggedResource.kind,
-    id: draggedResource.id,
-    alternatives: draggedResource.alternatives,
-  };
 
   if (!targetResource) {
     return false;
@@ -3724,8 +3719,8 @@ function isCompatibleDraggedResourceTarget(
     draggedResource.nodeId !== targetHandle.nodeId &&
     draggedResource.side !== targetHandle.side &&
     (targetHandle.side === "input"
-      ? resourceMatchesInput(dragged, targetResource)
-      : resourceMatchesInput(targetResource, dragged))
+      ? resourceMatchesInput(draggedResource, targetResource)
+      : resourceMatchesInput(targetResource, draggedResource))
   );
 }
 
@@ -3877,9 +3872,7 @@ function isCompatibleResourceConnection(
   const input = sourceHandle.side === "input" ? sourceResource : targetResource;
 
   return (
-    sourceHandle.side !== targetHandle.side &&
-    sourceHandle.kind === targetHandle.kind &&
-    resourceMatchesInput(output, input)
+    sourceHandle.side !== targetHandle.side && resourceMatchesInput(output, input)
   );
 }
 
