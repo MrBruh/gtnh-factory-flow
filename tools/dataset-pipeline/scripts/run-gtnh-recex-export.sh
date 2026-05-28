@@ -16,6 +16,7 @@ export GTNH_ICON_EXPORT_BATCH_SIZE="${GTNH_ICON_EXPORT_BATCH_SIZE:-64}"
 export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-256}"
 export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$HOME/.cache/gtnh-factory-flow/icons/$GTNH_ATLAS_ICON_SIZE}"
 export GTNH_EXPORT_DISABLE_CLIENT_UI_MODS="${GTNH_EXPORT_DISABLE_CLIENT_UI_MODS:-false}"
+export GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS="${GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS:-true}"
 
 mkdir -p "$GTNH_DATASET_OUT_DIR" "$GTNH_RAW_EXPORT_DIR" "$GTNH_INSTANCE_DIR"
 
@@ -38,6 +39,7 @@ echo "Icon export batch size: $GTNH_ICON_EXPORT_BATCH_SIZE"
 echo "Atlas icon size: $GTNH_ATLAS_ICON_SIZE"
 echo "Shared icon cache: $GTNH_ICON_CACHE_DIR"
 echo "Disable client UI-only mods: $GTNH_EXPORT_DISABLE_CLIENT_UI_MODS"
+echo "Fail fast on fatal runtime logs: $GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS"
 
 node tools/dataset-pipeline/scripts/download-gtnh-pack.mjs "$pack_archive"
 
@@ -140,14 +142,46 @@ runtime_pid=$!
 tail -n +1 -f "$runtime_log" &
 tail_pid=$!
 
+stop_runtime() {
+  kill "$tail_pid" 2>/dev/null || true
+  kill -TERM "-$runtime_pid" 2>/dev/null || true
+  sleep 5
+  kill -KILL "-$runtime_pid" 2>/dev/null || true
+}
+
+fail_from_runtime_log() {
+  local reason="$1"
+  echo "$reason" >&2
+  echo "Recent GTNH runtime log:" >&2
+  tail -n 160 "$runtime_log" >&2 || true
+  stop_runtime
+  exit 1
+}
+
+detect_fatal_runtime_log() {
+  [[ "$GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS" == "true" ]] || return 1
+  [[ -s "$runtime_log" ]] || return 1
+
+  grep -Eq \
+    'Fatal errors were detected during the transition|Minecraft ran into a problem! Report saved to:|---- Minecraft Crash Report ----|Caught exception from [A-Za-z0-9_.:-]+' \
+    "$runtime_log"
+}
+
 raw_recex_json=""
 deadline=$((SECONDS + GTNH_EXPORT_TIMEOUT_SECONDS))
 
 while (( SECONDS < deadline )); do
+  if detect_fatal_runtime_log; then
+    fail_from_runtime_log "GTNH runtime emitted a fatal Forge/Minecraft crash log before completing the RecEx export."
+  fi
+
   raw_recex_json="$(find "$instance_root/RecEx-Records" -type f -name '*.json' 2>/dev/null | sort | tail -n 1 || true)"
   if [[ -n "$raw_recex_json" ]]; then
     current_size="$(stat -c%s "$raw_recex_json")"
     sleep 5
+    if detect_fatal_runtime_log; then
+      fail_from_runtime_log "GTNH runtime emitted a fatal Forge/Minecraft crash log while waiting for the RecEx export to settle."
+    fi
     next_size="$(stat -c%s "$raw_recex_json")"
     if [[ "$current_size" == "$next_size" ]]; then
       if [[ "$GTNH_RENDER_STACK_ICONS" == "true" ]]; then
@@ -175,10 +209,7 @@ while (( SECONDS < deadline )); do
   sleep 5
 done
 
-kill "$tail_pid" 2>/dev/null || true
-kill -TERM "-$runtime_pid" 2>/dev/null || true
-sleep 5
-kill -KILL "-$runtime_pid" 2>/dev/null || true
+stop_runtime
 
 if [[ -z "$raw_recex_json" ]]; then
   echo "RecEx did not produce a JSON export under $instance_root/RecEx-Records" >&2
