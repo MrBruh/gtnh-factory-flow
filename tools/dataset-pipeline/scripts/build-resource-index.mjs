@@ -142,7 +142,72 @@ function buildResourceIndex(dataset) {
     }
   }
 
+  addFluidCellAlternatives(index, dataset.recipes ?? []);
+
   return [...index.values()].sort((left, right) => right.recipeCount - left.recipeCount);
+}
+
+function addFluidCellAlternatives(index, recipes) {
+  for (const recipe of recipes) {
+    if (!isFluidCannerRecipe(recipe)) {
+      continue;
+    }
+
+    const fillFluid = (recipe.inputs ?? []).find((resource) => resource.kind === "fluid");
+    const fillCell = (recipe.outputs ?? []).find((resource) => isFilledCell(resource));
+    if (fillFluid && fillCell && hasEmptyCell(recipe.inputs ?? [])) {
+      linkAlternatives(index, fillCell, fillFluid);
+    }
+
+    const emptyFluid = (recipe.outputs ?? []).find((resource) => resource.kind === "fluid");
+    const emptyCell = (recipe.inputs ?? []).find((resource) => isFilledCell(resource));
+    if (emptyFluid && emptyCell && hasEmptyCell(recipe.outputs ?? [])) {
+      linkAlternatives(index, emptyCell, emptyFluid);
+    }
+  }
+}
+
+function linkAlternatives(index, cell, fluid) {
+  const cellEntry = index.get(resourceKey(cell));
+  const fluidEntry = index.get(resourceKey(fluid));
+  if (!cellEntry || !fluidEntry) {
+    return;
+  }
+
+  addAlternative(cellEntry, fluidEntry);
+  addAlternative(fluidEntry, cellEntry);
+}
+
+function addAlternative(resource, alternative) {
+  const alternatives = resource.alternatives ?? [];
+  if (alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)) {
+    return;
+  }
+
+  resource.alternatives = [
+    ...alternatives,
+    {
+      kind: alternative.kind,
+      id: alternative.id,
+      displayName: alternative.displayName,
+      iconPath: alternative.iconPath,
+      iconAtlas: alternative.iconAtlas,
+      dominantColor: alternative.dominantColor ?? alternative.iconAtlas?.dominantColor,
+      tooltip: alternative.tooltip,
+    },
+  ];
+}
+
+function isFluidCannerRecipe(recipe) {
+  return (recipe.source?.recipeMap ?? recipe.recipeMap ?? recipe.machineType) === "Fluid Canner";
+}
+
+function isFilledCell(resource) {
+  return resource.kind === "item" && /(^|\s)Cell$/i.test(resource.displayName ?? "");
+}
+
+function hasEmptyCell(resources) {
+  return resources.some((resource) => resource.kind === "item" && /^Empty Cell$/i.test(resource.displayName ?? ""));
 }
 
 function mergeResourceIcon(target, resource, indexed) {

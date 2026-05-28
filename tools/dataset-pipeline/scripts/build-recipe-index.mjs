@@ -62,7 +62,7 @@ const recipeIndex = {
   iconScores: dataset.recipes.map((recipe) => recipeIconScore(recipe, resourcesByKey)),
 };
 
-const recipeLookupIndex = buildRecipeLookupIndex(dataset.recipes, recipeIndex);
+const recipeLookupIndex = buildRecipeLookupIndex(dataset.recipes, recipeIndex, resourcesByKey);
 const resourceCatalog = {
   schemaVersion: 1,
   datasetVersionId: versionId,
@@ -88,7 +88,7 @@ console.log(
   `Wrote resource catalog, recipe index with ${recipeIndex.recipes.length} summaries, compact lookup index, and ${shards.length} shard(s).`,
 );
 
-function buildRecipeLookupIndex(recipes, recipeIndex) {
+function buildRecipeLookupIndex(recipes, recipeIndex, resourcesByKey = new Map()) {
   const recipeMaps = [
     ...new Set((recipeIndex.recipes ?? []).map((recipe) => recipe.recipeMap).filter(Boolean)),
   ].sort((a, b) => a.localeCompare(b));
@@ -113,10 +113,13 @@ function buildRecipeLookupIndex(recipes, recipeIndex) {
 
     for (const output of recipe.outputs ?? []) {
       addLookupRecipe(entries, output, "recipes", recipeMapId, index);
+      for (const alternative of resourceAlternatives(output, resourcesByKey)) {
+        addLookupRecipe(entries, alternative, "recipes", recipeMapId, index);
+      }
     }
     for (const input of recipe.inputs ?? []) {
       addLookupRecipe(entries, input, "uses", recipeMapId, index);
-      for (const alternative of input.alternatives ?? []) {
+      for (const alternative of resourceAlternatives(input, resourcesByKey)) {
         addLookupRecipe(entries, alternative, "uses", recipeMapId, index);
       }
     }
@@ -143,6 +146,11 @@ function buildRecipeLookupIndex(recipes, recipeIndex) {
       [...recipesByMap.entries()],
     ]),
   };
+}
+
+function resourceAlternatives(resource, resourcesByKey) {
+  const indexed = resourcesByKey.get(`${resource.kind}:${resource.id}`);
+  return resource.alternatives ?? indexed?.alternatives ?? [];
 }
 
 function addLookupRecipe(entries, resource, mode, recipeMapId, recipeIndex) {

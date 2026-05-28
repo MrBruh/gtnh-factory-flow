@@ -68,7 +68,84 @@ export function buildDatasetResourceIndex(recipes: Recipe[]): DatasetResourceInd
     }
   }
 
+  addFluidCellAlternatives(index, recipes);
+
   return [...index.values()];
+}
+
+function addFluidCellAlternatives(
+  index: Map<string, DatasetResourceIndexEntry>,
+  recipes: Recipe[],
+): void {
+  for (const recipe of recipes) {
+    if (!isFluidCannerRecipe(recipe)) {
+      continue;
+    }
+
+    const fillFluid = recipe.inputs.find((resource) => resource.kind === "fluid");
+    const fillCell = recipe.outputs.find(isFilledCell);
+    if (fillFluid && fillCell && hasEmptyCell(recipe.inputs)) {
+      linkAlternatives(index, fillCell, fillFluid);
+    }
+
+    const emptyFluid = recipe.outputs.find((resource) => resource.kind === "fluid");
+    const emptyCell = recipe.inputs.find(isFilledCell);
+    if (emptyFluid && emptyCell && hasEmptyCell(recipe.outputs)) {
+      linkAlternatives(index, emptyCell, emptyFluid);
+    }
+  }
+}
+
+function linkAlternatives(
+  index: Map<string, DatasetResourceIndexEntry>,
+  cell: ResourceAmount,
+  fluid: ResourceAmount,
+): void {
+  const cellEntry = index.get(`${cell.kind}:${cell.id}`);
+  const fluidEntry = index.get(`${fluid.kind}:${fluid.id}`);
+  if (!cellEntry || !fluidEntry) {
+    return;
+  }
+
+  addAlternative(cellEntry, fluidEntry);
+  addAlternative(fluidEntry, cellEntry);
+}
+
+function addAlternative(
+  resource: DatasetResourceIndexEntry,
+  alternative: DatasetResourceIndexEntry,
+): void {
+  const alternatives = resource.alternatives ?? [];
+  if (alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)) {
+    return;
+  }
+
+  resource.alternatives = [
+    ...alternatives,
+    {
+      kind: alternative.kind,
+      id: alternative.id,
+      displayName: alternative.displayName,
+      iconPath: alternative.iconPath,
+      iconAtlas: alternative.iconAtlas,
+      dominantColor: alternative.dominantColor ?? alternative.iconAtlas?.dominantColor,
+      tooltip: alternative.tooltip,
+    },
+  ];
+}
+
+function isFluidCannerRecipe(recipe: Recipe): boolean {
+  return (recipe.source?.recipeMap ?? recipe.machineType) === "Fluid Canner";
+}
+
+function isFilledCell(resource: ResourceAmount): boolean {
+  return resource.kind === "item" && /(^|\s)Cell$/i.test(resource.displayName ?? "");
+}
+
+function hasEmptyCell(resources: ResourceAmount[]): boolean {
+  return resources.some(
+    (resource) => resource.kind === "item" && /^Empty Cell$/i.test(resource.displayName ?? ""),
+  );
 }
 
 function enrichRecipe(
