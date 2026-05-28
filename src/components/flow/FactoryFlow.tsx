@@ -44,6 +44,7 @@ import {
 import {
   formatRate,
   applyRecipeInputOverrides,
+  restoreCrossKindInputOverrideVisuals,
   applyMachineHandlerToRecipe,
   isRecipeInputConsumed,
   makeResourceKey,
@@ -3981,10 +3982,10 @@ function getNodeRecipeForHandles(recipe: Recipe, node: FactoryProject["nodes"][n
     node,
     overclockedStats.tier,
   );
-  return {
+  return restoreCrossKindInputOverrideVisuals({
     ...effectiveRecipe,
     ...adjustedRecipe,
-  };
+  }, recipe, node);
 }
 
 function getClientPosition(event: MouseEvent | TouchEvent) {

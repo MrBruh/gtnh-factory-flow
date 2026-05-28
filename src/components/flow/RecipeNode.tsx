@@ -24,6 +24,7 @@ import {
   getRecipeMachineConfigTierControls,
   getRecipeCoilTierControl,
   applyRecipeInputOverrides,
+  restoreCrossKindInputOverrideVisuals,
   getRecipePowerTier,
   getSelectedMachineHandler,
   getVoltageTierIndex,
@@ -129,9 +130,14 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
   const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, projectNode);
   const overclockedStats = getOverclockedRecipeStats(nodeRecipe, projectNode);
   const toolAdjustedRecipe = applyTreeGrowthSimulatorToolInputs(effectiveRecipe, tgsToolControls);
+  const visualToolAdjustedRecipe = restoreCrossKindInputOverrideVisuals(
+    toolAdjustedRecipe,
+    recipe,
+    projectNode,
+  );
   const displayRecipe = isBeeProductionNode
-    ? stripBeeFrameSlotInputs(toolAdjustedRecipe)
-    : toolAdjustedRecipe;
+    ? stripBeeFrameSlotInputs(visualToolAdjustedRecipe)
+    : visualToolAdjustedRecipe;
   const adjustedRecipe = applyMachineOutputMultipliers(
     displayRecipe,
     projectNode,

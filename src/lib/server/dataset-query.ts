@@ -1031,13 +1031,49 @@ function getCatalogResourcesByKey(
     return catalog.resourcesByKey;
   }
 
-  catalog.resourcesByKey = new Map(
-    [...catalog.resourceIndex, ...catalog.resources].map((resource) => [
-      `${resource.kind}:${resource.id}`,
-      resource,
-    ]),
-  );
+  catalog.resourcesByKey = new Map();
+  for (const resource of [...catalog.resources, ...catalog.resourceIndex]) {
+    const key = `${resource.kind}:${resource.id}`;
+    const existing = catalog.resourcesByKey.get(key);
+    catalog.resourcesByKey.set(key, existing ? mergeCatalogResource(existing, resource) : resource);
+  }
   return catalog.resourcesByKey;
+}
+
+function mergeCatalogResource(
+  existing: DatasetResource | DatasetResourceIndexEntry,
+  incoming: DatasetResource | DatasetResourceIndexEntry,
+): DatasetResource | DatasetResourceIndexEntry {
+  return {
+    ...existing,
+    ...incoming,
+    displayName: incoming.displayName ?? existing.displayName ?? incoming.id ?? existing.id,
+    iconPath: incoming.iconPath ?? existing.iconPath,
+    iconAtlas: incoming.iconAtlas ?? existing.iconAtlas,
+    dominantColor:
+      incoming.dominantColor ??
+      incoming.iconAtlas?.dominantColor ??
+      existing.dominantColor ??
+      existing.iconAtlas?.dominantColor,
+    tooltip: incoming.tooltip ?? existing.tooltip,
+    oreDictionary: incoming.oreDictionary ?? existing.oreDictionary,
+    alternatives: mergeResourceAlternatives(existing.alternatives, incoming.alternatives),
+  };
+}
+
+function mergeResourceAlternatives(
+  left: DatasetResourceIndexEntry["alternatives"],
+  right: DatasetResourceIndexEntry["alternatives"],
+): DatasetResourceIndexEntry["alternatives"] {
+  const merged = [...(left ?? [])];
+  for (const alternative of right ?? []) {
+    if (
+      !merged.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)
+    ) {
+      merged.push(alternative);
+    }
+  }
+  return merged.length > 0 ? merged : undefined;
 }
 
 function getRecipeResourceScope(
