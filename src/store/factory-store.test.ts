@@ -465,11 +465,7 @@ describe("factory resource links", () => {
       "cell-consumer-node",
       "input",
       { x: 320, y: 20 },
-      makeResourceHandleId(
-        "input",
-        { kind: "item", id: "gregtech:gt.metaitem.99@143" },
-        0,
-      ),
+      makeResourceHandleId("input", { kind: "item", id: "gregtech:gt.metaitem.99@143" }, 0),
     );
 
     const state = useFactoryStore.getState();
@@ -547,13 +543,15 @@ describe("factory resource links", () => {
       edges: [],
     });
 
-    useFactoryStore.getState().addStorageForConnection(
-      { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" },
-      "pyro-node",
-      "input",
-      { x: 220, y: 0 },
-      makeResourceHandleId("input", { kind: "item", id: "minecraft:log@1" }, 0),
-    );
+    useFactoryStore
+      .getState()
+      .addStorageForConnection(
+        { kind: "item", id: "minecraft:log@1", displayName: "Spruce Log" },
+        "pyro-node",
+        "input",
+        { x: 220, y: 0 },
+        makeResourceHandleId("input", { kind: "item", id: "minecraft:log@1" }, 0),
+      );
 
     const project = useFactoryStore.getState().project;
     expect(project.storages).toEqual([
@@ -1400,6 +1398,77 @@ describe("factory machine count optimization", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "input-source", machineCount: 1 }),
         expect.objectContaining({ id: "storage-producer", machineCount: 1 }),
+      ]),
+    );
+  });
+
+  it("optimizes filled-cell producers connected to fluid storage consumers", () => {
+    useFactoryStore.getState().setProject({
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "filled-cell-fluid-storage-optimization",
+      name: "Filled cell fluid storage optimization",
+      recipes: [
+        {
+          id: "oxygen-cell-source",
+          name: "Oxygen Cell Source",
+          machineType: "Dehydrator",
+          minimumTier: "LV",
+          durationTicks: 196,
+          eut: 16,
+          inputs: [{ kind: "item", id: "empty_cell", amount: 14, displayName: "Empty Cell" }],
+          outputs: [{ kind: "item", id: "oxygen_cell", amount: 14, displayName: "Oxygen Cell" }],
+        },
+        {
+          id: "oxygen-consumer",
+          name: "Oxygen Consumer",
+          machineType: "Chemical Reactor",
+          minimumTier: "LV",
+          durationTicks: 160,
+          eut: 30,
+          inputs: [{ kind: "fluid", id: "oxygen", amount: 1000, displayName: "Oxygen" }],
+          outputs: [{ kind: "item", id: "empty_cell", amount: 1, displayName: "Empty Cell" }],
+        },
+      ],
+      nodes: [
+        { ...makeNode("oxygen-cell-source-node", "oxygen-cell-source", 0), machineCount: 1 },
+        { ...makeNode("oxygen-consumer-node", "oxygen-consumer", 220), machineCount: 12 },
+      ],
+      storages: [
+        {
+          id: "oxygen-tank",
+          kind: "fluid",
+          resourceId: "oxygen",
+          displayName: "Oxygen",
+          position: { x: 120, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "oxygen-cell-to-tank",
+          source: "oxygen-cell-source-node",
+          target: "oxygen-tank",
+          resourceKind: "fluid",
+          resourceId: "oxygen",
+          label: "Oxygen Cell",
+        },
+        {
+          id: "oxygen-tank-to-consumer",
+          source: "oxygen-tank",
+          target: "oxygen-consumer-node",
+          resourceKind: "fluid",
+          resourceId: "oxygen",
+          label: "Oxygen",
+        },
+      ],
+      fuelProfiles: [],
+    });
+
+    useFactoryStore.getState().optimizeMachineCounts();
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "oxygen-cell-source-node", machineCount: 2 }),
+        expect.objectContaining({ id: "oxygen-consumer-node", machineCount: 12 }),
       ]),
     );
   });

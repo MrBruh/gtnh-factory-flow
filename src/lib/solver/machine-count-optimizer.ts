@@ -2,6 +2,7 @@ import { applyRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "@/lib/model/recipe-rules";
 import {
   getChanceMultiplier,
+  getFilledCellFluidEquivalent,
   isRecipeInputConsumed,
   makeResourceKey,
   resourceMatchesInput,
@@ -333,7 +334,7 @@ class MachineCountOptimizer {
     return this.context.project.edges.some(
       (edge) =>
         edge.source === nodeId &&
-        makeResourceKey(edge.resourceKind, edge.resourceId) === resourceKey,
+        edgeCanUseOutputKey(this.context.ratePlans.get(nodeId), edge, resourceKey),
     );
   }
 
@@ -519,7 +520,7 @@ class MachineCountOptimizer {
     }
 
     for (const edge of this.context.nodeToStorageEdges.get(nodeId) ?? []) {
-      if (makeResourceKey(edge.resourceKind, edge.resourceId) !== resourceKey) {
+      if (!edgeCanUseOutputKey(this.context.ratePlans.get(nodeId), edge, resourceKey)) {
         continue;
       }
 
@@ -843,15 +844,16 @@ class MachineCountOptimizer {
         continue;
       }
 
-      const outputKey = makeResourceKey(edge.resourceKind, edge.resourceId);
-      const outputRate = plan.outputs.get(outputKey) ?? 0;
+      const outputKey = getPlanOutputKeyForEdge(plan, edge);
+      const outputRate = outputKey ? (plan.outputs.get(outputKey) ?? 0) : 0;
       if (outputRate <= EPSILON) {
         continue;
       }
 
       this.storageCredits.set(
         storageKey,
-        (this.storageCredits.get(storageKey) ?? 0) + outputRate * exactMachineDelta,
+        (this.storageCredits.get(storageKey) ?? 0) +
+          convertOutputRateForEdge(plan, edge, outputKey, outputRate) * exactMachineDelta,
       );
     }
   }
@@ -897,8 +899,10 @@ class MachineCountOptimizer {
         continue;
       }
 
-      amountPerMachine +=
-        plan.outputs.get(makeResourceKey(edge.resourceKind, edge.resourceId)) ?? 0;
+      const outputKey = getPlanOutputKeyForEdge(plan, edge);
+      amountPerMachine += outputKey
+        ? convertOutputRateForEdge(plan, edge, outputKey, plan.outputs.get(outputKey) ?? 0)
+        : 0;
     }
 
     for (const edge of this.context.nodeToNodeEdges.get(nodeId) ?? []) {
@@ -1234,7 +1238,10 @@ function buildGraphContext(project: FactoryProject): GraphContext {
     }
 
     if (!sourceStorageKey && targetStorageKey) {
-      const resourceKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+      const resourceKey = getPlanOutputKeyForEdge(ratePlans.get(edge.source), edge);
+      if (!resourceKey) {
+        continue;
+      }
       addToMapList(nodeToStorageEdges, edge.source, edge);
       addToMapList(storageProducersByResource, targetStorageKey, {
         nodeId: edge.source,
@@ -1356,6 +1363,77 @@ function buildRatePlan(node: FactoryNode, recipe: Recipe | undefined): RatePlan 
     enabled: true,
     valid: true,
   };
+}
+
+function edgeCanUseOutputKey(
+  plan: RatePlan | undefined,
+  edge: Pick<FactoryEdge, "resourceKind" | "resourceId">,
+  outputKey: ResourceKey,
+): boolean {
+  return getPlanOutputKeyForEdge(plan, edge) === outputKey;
+}
+
+function getPlanOutputKeyForEdge(
+  plan: RatePlan | undefined,
+  edge: Pick<FactoryEdge, "resourceKind" | "resourceId">,
+): ResourceKey | undefined {
+  if (!plan?.enabled || !plan.valid) {
+    return undefined;
+  }
+
+  const edgeKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+  if ((plan.outputs.get(edgeKey) ?? 0) > EPSILON) {
+    return edgeKey;
+  }
+
+  const edgeResource = { kind: edge.resourceKind, id: edge.resourceId };
+  for (const output of plan.effectiveRecipe?.outputs ?? []) {
+    if (!resourceMatchesInput(edgeResource, output)) {
+      continue;
+    }
+
+    const outputKey = makeResourceKey(output.kind, output.id);
+    if ((plan.outputs.get(outputKey) ?? 0) > EPSILON) {
+      return outputKey;
+    }
+  }
+
+  return undefined;
+}
+
+function convertOutputRateForEdge(
+  plan: RatePlan,
+  edge: Pick<FactoryEdge, "resourceKind" | "resourceId">,
+  outputKey: ResourceKey | undefined,
+  outputRate: number,
+): number {
+  if (!outputKey || outputRate <= EPSILON) {
+    return 0;
+  }
+
+  const edgeKey = makeResourceKey(edge.resourceKind, edge.resourceId);
+  if (outputKey === edgeKey) {
+    return outputRate;
+  }
+
+  const output = plan.effectiveRecipe?.outputs.find(
+    (entry) => makeResourceKey(entry.kind, entry.id) === outputKey,
+  );
+  if (!output) {
+    return outputRate;
+  }
+
+  if (edge.resourceKind === "fluid" && output.kind === "item") {
+    const fluid = getFilledCellFluidEquivalent({
+      ...output,
+      amount: outputRate,
+    });
+    if (fluid?.id === edge.resourceId && fluid.amount !== undefined) {
+      return fluid.amount;
+    }
+  }
+
+  return outputRate;
 }
 
 function getEdgeTargetDemandKey(context: GraphContext, edge: FactoryEdge): ResourceKey | undefined {
