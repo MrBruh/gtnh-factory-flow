@@ -42,7 +42,6 @@ import {
   embedProjectJsonInSvg,
 } from "@/lib/import-export/plan-image";
 import {
-  formatRate,
   applyRecipeInputOverrides,
   restoreCrossKindInputOverrideVisuals,
   applyMachineHandlerToRecipe,
@@ -108,8 +107,8 @@ type ResourceEdgeData = {
     "kind" | "id" | "amount" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor"
   >;
   color: string;
-  demand: string;
-  transferred?: string;
+  demand: number;
+  transferred?: number;
   unit: string;
   isLimited: boolean;
   isStorageEdge: boolean;
@@ -131,8 +130,8 @@ type ResourceEdgeData = {
     sourceHandleIds: string[];
     primarySourceHandleId: string;
     edgeIds: string[];
-    demand?: string;
-    transferred?: string;
+    demand?: number;
+    transferred?: number;
     isLimited: boolean;
   };
   isFlowHighlighted?: boolean;
@@ -356,8 +355,8 @@ export function FactoryFlow() {
         data: {
           resource,
           color: edgeColor,
-          demand: formatRate(demand),
-          transferred: edgeResult?.isLimited === true ? formatRate(transferred) : undefined,
+          demand,
+          transferred: edgeResult?.isLimited === true ? transferred : undefined,
           unit,
           isLimited: edgeResult?.isLimited === true,
           isStorageEdge,
@@ -1540,8 +1539,8 @@ function getEdgeBundles(
         sourceHandleIds,
         primarySourceHandleId,
         edgeIds,
-        demand: mode === "single-target" ? formatRate(demand) : undefined,
-        transferred: mode === "single-target" && isLimited ? formatRate(transferred) : undefined,
+        demand: mode === "single-target" ? demand : undefined,
+        transferred: mode === "single-target" && isLimited ? transferred : undefined,
         isLimited,
       });
     }
@@ -3689,12 +3688,7 @@ function formatEdgeRateLabel(data: ResourceEdgeData | undefined) {
   return `${formatEdgeValue(visibleRate)} ${data.unit}`;
 }
 
-function formatEdgeValue(valueText: string) {
-  const value = Number(valueText);
-  if (!Number.isFinite(value)) {
-    return valueText;
-  }
-
+function formatEdgeValue(value: number) {
   return trimEdgeNumber(value);
 }
 
