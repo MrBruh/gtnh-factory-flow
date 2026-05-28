@@ -33,6 +33,8 @@ const RESOURCE_PAGER_HEIGHT = 40;
 const RESOURCE_HISTORY_VISIBLE_FALLBACK = 8;
 const RECIPE_QUERY_CACHE_TTL_MS = 90_000;
 const RESOURCE_QUERY_CACHE_TTL_MS = 90_000;
+const RESOURCE_SEARCH_DEBOUNCE_MS = 125;
+const RECIPE_SEARCH_DEBOUNCE_MS = 200;
 
 export function RecipeBrowser() {
   const dataset = useFactoryStore((state) => state.dataset);
@@ -73,6 +75,11 @@ export function RecipeBrowser() {
   const [recipeQueryError, setRecipeQueryError] = useState<string | undefined>();
   const recipeQueryCacheRef = useRef<Map<string, RecipeQueryCacheEntry>>(new Map());
   const resourceQueryCacheRef = useRef<Map<string, ResourceQueryCacheEntry>>(new Map());
+  const debouncedRecipeSearch = useDebouncedValue(recipeSearch, RESOURCE_SEARCH_DEBOUNCE_MS);
+  const debouncedRecipeBookSearch = useDebouncedValue(
+    recipeBookSearch,
+    RECIPE_SEARCH_DEBOUNCE_MS,
+  );
 
   const activeResource = useMemo(() => {
     if (!browserResource) {
@@ -99,7 +106,9 @@ export function RecipeBrowser() {
   );
 
   const activeRecipeMap = recipeMaps.includes(selectedRecipeMap) ? selectedRecipeMap : "";
-  const activeRecipeQuery = activeResource ? recipeBookSearch.trim() : recipeSearch.trim();
+  const activeRecipeQuery = activeResource
+    ? debouncedRecipeBookSearch.trim()
+    : debouncedRecipeSearch.trim();
 
   const selectedDatasetVersion = useMemo(
     () => datasetManifest?.versions.find((entry) => entry.id === selectedDatasetVersionId),
@@ -128,12 +137,12 @@ export function RecipeBrowser() {
       selectedDatasetVersion
         ? getResourceQueryCacheKey({
             versionId: getDatasetVersionCacheKey(selectedDatasetVersion),
-            query: recipeSearch.trim(),
+            query: debouncedRecipeSearch.trim(),
             offset: page * resourcePageSize,
             limit: resourcePageSize,
           })
         : "",
-    [recipeSearch, resourcePageSize, selectedDatasetVersion],
+    [debouncedRecipeSearch, resourcePageSize, selectedDatasetVersion],
   );
 
   const prefetchRecipeMap = useCallback(
@@ -231,7 +240,7 @@ export function RecipeBrowser() {
 
   useEffect(() => {
     return deferStateUpdate(() => setResourcePage(0));
-  }, [recipeSearch, selectedDatasetVersion?.id]);
+  }, [debouncedRecipeSearch, selectedDatasetVersion?.id]);
 
   useEffect(() => {
     const maxPage = Math.max(0, Math.ceil(resourceTotal / resourcePageSize) - 1);
@@ -251,7 +260,7 @@ export function RecipeBrowser() {
       });
     }
 
-    const query = recipeSearch.trim();
+    const query = debouncedRecipeSearch.trim();
     const cacheKey = getResourceQueryKey(resourcePage);
     const cached = getCachedResourceQuery(resourceQueryCacheRef.current, cacheKey);
     if (cached) {
@@ -306,7 +315,7 @@ export function RecipeBrowser() {
   }, [
     datasetManifestUrl,
     getResourceQueryKey,
-    recipeSearch,
+    debouncedRecipeSearch,
     resourcePage,
     resourcePageSize,
     selectedDatasetVersion,
@@ -1612,6 +1621,25 @@ function getResourceQueryCacheKey({
   limit: number;
 }) {
   return [versionId, query.trim().toLowerCase(), offset, limit].join("|");
+}
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
+  useEffect(() => {
+    if (typeof value === "string" && value.length === 0) {
+      setDebouncedValue(value);
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      setDebouncedValue(value);
+    }, delayMs);
+
+    return () => window.clearTimeout(timer);
+  }, [delayMs, value]);
+
+  return debouncedValue;
 }
 
 function getCachedRecipeQuery(cache: Map<string, RecipeQueryCacheEntry>, key: string) {
