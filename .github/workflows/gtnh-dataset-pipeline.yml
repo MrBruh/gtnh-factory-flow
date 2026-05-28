@@ -252,7 +252,7 @@ jobs:
   deploy:
     name: Deploy site to exotiserver
     needs: publish
-    if: ${{ needs.publish.result == 'success' }}
+    if: ${{ always() && needs.publish.result == 'success' }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
       - uses: actions/checkout@v6
