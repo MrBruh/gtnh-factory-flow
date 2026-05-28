@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import { useState, type CSSProperties } from "react";
+import { memo, useState, type CSSProperties } from "react";
 import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
@@ -62,7 +62,7 @@ export interface RecipeNodeData extends Record<string, unknown> {
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
-export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
+function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
   const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
@@ -563,6 +563,8 @@ export function RecipeNode({ data, selected }: NodeProps<RecipeFlowNode>) {
     </div>
   );
 }
+
+export const RecipeNode = memo(RecipeNodeComponent);
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
   const normalizedQuery = normalizeSearch(query);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 export function MinecraftTooltip({
@@ -15,16 +15,66 @@ export function MinecraftTooltip({
     [label],
   );
   const [position, setPosition] = useState<{ x: number; y: number } | undefined>();
+  const frameRef = useRef<number | undefined>(undefined);
+  const pendingPositionRef = useRef<{ x: number; y: number } | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (frameRef.current !== undefined) {
+        window.cancelAnimationFrame(frameRef.current);
+      }
+    },
+    [],
+  );
 
   const handleMouseMove = (event: MouseEvent) => {
     if (lines.length === 0) {
       return;
     }
 
-    setPosition({
+    if (event.buttons !== 0) {
+      pendingPositionRef.current = undefined;
+      if (position !== undefined) {
+        setPosition(undefined);
+      }
+      return;
+    }
+
+    pendingPositionRef.current = {
       x: Math.min(event.clientX + 12, window.innerWidth - 260),
       y: Math.min(event.clientY + 12, window.innerHeight - 80),
+    };
+
+    if (frameRef.current !== undefined) {
+      return;
+    }
+
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = undefined;
+      const nextPosition = pendingPositionRef.current;
+      if (!nextPosition) {
+        return;
+      }
+
+      setPosition((currentPosition) =>
+        currentPosition &&
+        Math.abs(currentPosition.x - nextPosition.x) < 2 &&
+        Math.abs(currentPosition.y - nextPosition.y) < 2
+          ? currentPosition
+          : nextPosition,
+      );
     });
+  };
+
+  const clearTooltip = () => {
+    pendingPositionRef.current = undefined;
+    if (frameRef.current !== undefined) {
+      window.cancelAnimationFrame(frameRef.current);
+      frameRef.current = undefined;
+    }
+    if (position !== undefined) {
+      setPosition(undefined);
+    }
   };
 
   return (
@@ -32,7 +82,7 @@ export function MinecraftTooltip({
       className="contents"
       onMouseEnter={handleMouseMove}
       onMouseMove={handleMouseMove}
-      onMouseLeave={() => setPosition(undefined)}
+      onMouseLeave={clearTooltip}
     >
       {children}
       {position && lines.length > 0 && typeof document !== "undefined"

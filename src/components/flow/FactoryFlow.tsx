@@ -157,6 +157,9 @@ const directRouteCache = new Map<
     segments: ReturnType<typeof getPolylineSegments>;
   }
 >();
+const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
+const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
+let measuredSlotCacheClearScheduled = false;
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
@@ -209,11 +212,19 @@ export function FactoryFlow() {
   const isProjectImporting = useFactoryStore((state) => state.isProjectImporting);
   const activeFlowResourceKey = hoveredFlowResourceKey ?? selectedFlowResourceKey;
   const activeNodeBottlenecks = hoveredNodeBottlenecks || selectedNodeBottlenecks;
+  const recipesById = useMemo(
+    () => new Map(project.recipes.map((recipe) => [recipe.id, recipe])),
+    [project.recipes],
+  );
+  const storagesById = useMemo(
+    () => new Map((project.storages ?? []).map((storage) => [storage.id, storage])),
+    [project.storages],
+  );
 
   const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
       ...project.nodes.map((node) => {
-        const recipe = project.recipes.find((entry) => entry.id === node.recipeId);
+        const recipe = recipesById.get(node.recipeId);
         return {
           id: node.id,
           type: "recipeNode",
@@ -263,8 +274,8 @@ export function FactoryFlow() {
       activeFlowResourceKey,
       activeNodeBottlenecks,
       project.nodes,
-      project.recipes,
       project.storages,
+      recipesById,
       result.nodes,
       result.storages,
     ],
@@ -313,8 +324,8 @@ export function FactoryFlow() {
       const unit = edge.resourceKind === "fluid" ? "L/s" : "/s";
       const demand = edgeResult?.demandPerSecond ?? edge.ratePerSecond ?? 0;
       const transferred = edgeResult?.transferredPerSecond ?? demand;
-      const sourceStorage = (project.storages ?? []).find((storage) => storage.id === edge.source);
-      const targetStorage = (project.storages ?? []).find((storage) => storage.id === edge.target);
+      const sourceStorage = storagesById.get(edge.source);
+      const targetStorage = storagesById.get(edge.target);
       const isStorageEdge = Boolean(sourceStorage || targetStorage);
       const storageResourceKey = sourceStorage
         ? `${sourceStorage.kind}:${sourceStorage.resourceId}`
@@ -395,6 +406,7 @@ export function FactoryFlow() {
     project,
     recipeSearch,
     result.edges,
+    storagesById,
   ]);
 
   const connectResourceEdges = useCallback(
@@ -466,11 +478,7 @@ export function FactoryFlow() {
         const sourceHandle = parseResourceHandleId(connection.sourceHandle);
         const targetHandle = parseResourceHandleId(connection.targetHandle);
 
-        if (
-          sourceHandle &&
-          targetHandle &&
-          sourceHandle.side !== targetHandle.side
-        ) {
+        if (sourceHandle && targetHandle && sourceHandle.side !== targetHandle.side) {
           const outputHandle =
             sourceHandle.side === "output"
               ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
@@ -673,7 +681,12 @@ export function FactoryFlow() {
     );
   }, [setFlowViewportCenter]);
 
+  const handleMoveStart = useCallback(() => {
+    boardRef.current?.classList.add("factory-flow-board--moving");
+  }, []);
+
   const handleMoveEnd = useCallback(() => {
+    boardRef.current?.classList.remove("factory-flow-board--moving");
     updateFlowViewportCenter();
   }, [updateFlowViewportCenter]);
 
@@ -962,6 +975,7 @@ export function FactoryFlow() {
         onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         onInit={handleInit}
+        onMoveStart={handleMoveStart}
         onMoveEnd={handleMoveEnd}
         isValidConnection={isValidResourceConnection}
         connectionLineComponent={ResourceConnectionLine}
@@ -979,6 +993,7 @@ export function FactoryFlow() {
         onEdgesDelete={handleEdgesDelete}
         fitView
         fitViewOptions={fitViewOptions}
+        onlyRenderVisibleElements
         minZoom={0.15}
         maxZoom={1.8}
       >
@@ -1122,6 +1137,9 @@ function ResourceEdge({
     ? getInitialResourceColor(data.resource)
     : (data?.color ?? DEFAULT_ITEM_EDGE_COLOR);
   const edgeColor = resourceColor;
+  const isGlobalView = zoom < 0.45;
+  const isHighlighted = selected || data?.isFlowHighlighted === true;
+  const shouldUsePreciseRouting = !isGlobalView;
   const visualSourceCandidates = getSlotEdgeEndpointCandidates({
     nodeId: source,
     handleId: data?.sourceHandleId ?? sourceHandleId,
@@ -1133,6 +1151,7 @@ function ResourceEdge({
     isStorageSlotEndpoint: data?.sourceStorageEndpoint,
     counterpartX: targetX,
     counterpartY: targetY,
+    measureEndpoints: shouldUsePreciseRouting,
   });
   const visualTargetCandidates = getSlotEdgeEndpointCandidates({
     nodeId: target,
@@ -1145,13 +1164,13 @@ function ResourceEdge({
     isStorageSlotEndpoint: data?.targetStorageEndpoint,
     counterpartX: sourceX,
     counterpartY: sourceY,
+    measureEndpoints: shouldUsePreciseRouting,
   });
   const visualSource = visualSourceCandidates[0];
   const visualTarget = visualTargetCandidates[0];
   const rate = data?.bundle?.demand
     ? `${formatEdgeValue(data.bundle.demand)} ${data.unit}`
     : formatEdgeRateLabel(data);
-  const isGlobalView = zoom < 0.45;
   const isHiddenBundleMember =
     data?.bundle?.role === "member" && data.bundle.mode === "single-target";
   const showLabel = Boolean(
@@ -1159,7 +1178,6 @@ function ResourceEdge({
     !isHiddenBundleMember &&
     (selected || data.isFlowHighlighted || zoom >= EDGE_LABEL_ZOOM),
   );
-  const isHighlighted = selected || data?.isFlowHighlighted === true;
   const showArrowHead = isHighlighted || zoom >= EDGE_ARROW_ZOOM;
   const labelOffset = isLabelDragging ? draftLabelOffset : storedLabelOffset;
   const routedEdge =
@@ -1174,6 +1192,7 @@ function ResourceEdge({
           targetX: visualTarget.x,
           targetY: visualTarget.y,
           targetPosition: visualTarget.side,
+          usePreciseRouting: shouldUsePreciseRouting,
         })
       : data?.bundle?.mode === "multi-target"
         ? getBundledMemberEdgePath({
@@ -1187,6 +1206,7 @@ function ResourceEdge({
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
             bundleSourceHandleIds: data.bundle.sourceHandleIds,
+            usePreciseRouting: shouldUsePreciseRouting,
           })
         : getDirectEdgePath({
             edgeId: id,
@@ -1202,6 +1222,7 @@ function ResourceEdge({
             targetY: visualTarget.y,
             targetPosition: visualTarget.side,
             laneOffset: getEdgeLaneOffset(id),
+            useSmartRouting: shouldUsePreciseRouting,
           });
   const labelX = routedEdge.labelX + labelOffset.x;
   const labelY = routedEdge.labelY + labelOffset.y;
@@ -1673,6 +1694,7 @@ function getDirectEdgePath({
   targetX,
   targetY,
   targetPosition,
+  useSmartRouting = true,
 }: {
   edgeId?: string;
   laneOffset?: number;
@@ -1689,23 +1711,26 @@ function getDirectEdgePath({
   targetX: number;
   targetY: number;
   targetPosition: Position;
+  useSmartRouting?: boolean;
 }) {
   const points =
-    getBestDirectEdgePoints({
-      edgeId,
-      laneOffset,
-      routeIndex,
-      sourceNodeId,
-      sourceCandidates,
-      sourceX,
-      sourceY,
-      sourcePosition,
-      targetNodeId,
-      targetCandidates,
-      targetX,
-      targetY,
-      targetPosition,
-    }) ??
+    (useSmartRouting
+      ? getBestDirectEdgePoints({
+          edgeId,
+          laneOffset,
+          routeIndex,
+          sourceNodeId,
+          sourceCandidates,
+          sourceX,
+          sourceY,
+          sourcePosition,
+          targetNodeId,
+          targetCandidates,
+          targetX,
+          targetY,
+          targetPosition,
+        })
+      : undefined) ??
     getSimpleOrthogonalEdgePoints({
       sourceX,
       sourceY,
@@ -2596,6 +2621,7 @@ function getBundledEdgePath({
   targetX,
   targetY,
   targetPosition,
+  usePreciseRouting = true,
 }: {
   edgeId: string;
   sourceNodeId: string;
@@ -2606,7 +2632,23 @@ function getBundledEdgePath({
   targetX: number;
   targetY: number;
   targetPosition: Position;
+  usePreciseRouting?: boolean;
 }) {
+  if (!usePreciseRouting) {
+    return getDirectEdgePath({
+      sourceNodeId,
+      sourceX: estimatedSource.x,
+      sourceY: estimatedSource.y,
+      sourcePosition,
+      targetNodeId,
+      targetX,
+      targetY,
+      targetPosition,
+      laneOffset: getEdgeLaneOffset(edgeId),
+      useSmartRouting: false,
+    });
+  }
+
   const sourcePoints = sourceHandleIds
     .map((handleId) =>
       getMeasuredSlotEndpoint({
@@ -2679,6 +2721,7 @@ function getBundledMemberEdgePath({
   targetY,
   targetPosition,
   bundleSourceHandleIds,
+  usePreciseRouting = true,
 }: {
   edgeId: string;
   sourceNodeId: string;
@@ -2690,7 +2733,23 @@ function getBundledMemberEdgePath({
   targetY: number;
   targetPosition: Position;
   bundleSourceHandleIds: string[];
+  usePreciseRouting?: boolean;
 }) {
+  if (!usePreciseRouting) {
+    return getDirectEdgePath({
+      sourceNodeId,
+      sourceX: estimatedSource.x,
+      sourceY: estimatedSource.y,
+      sourcePosition,
+      targetNodeId,
+      targetX,
+      targetY,
+      targetPosition,
+      laneOffset: getEdgeLaneOffset(edgeId),
+      useSmartRouting: false,
+    });
+  }
+
   const allSourcePoints = bundleSourceHandleIds
     .map((handleId) =>
       getMeasuredSlotEndpoint({
@@ -3148,6 +3207,7 @@ function getSlotEdgeEndpointCandidates({
   isStorageSlotEndpoint,
   counterpartX,
   counterpartY,
+  measureEndpoints = true,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -3159,6 +3219,7 @@ function getSlotEdgeEndpointCandidates({
   isStorageSlotEndpoint?: boolean;
   counterpartX?: number;
   counterpartY?: number;
+  measureEndpoints?: boolean;
 }) {
   const estimatedSide = positionToEdgeSide(position);
   if (!isRecipeSlotEndpoint && !isStorageSlotEndpoint) {
@@ -3168,7 +3229,10 @@ function getSlotEdgeEndpointCandidates({
   const handle = parseResourceHandleId(handleId);
   const logicalRecipeSide = handle?.side === "input" ? Position.Left : Position.Right;
   const preferredSide =
-    isRecipeSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
+    measureEndpoints &&
+    isRecipeSlotEndpoint &&
+    counterpartX !== undefined &&
+    counterpartY !== undefined
       ? getRecipeSlotEdgeSideTowardPoint({
           nodeId,
           handleId,
@@ -3178,7 +3242,10 @@ function getSlotEdgeEndpointCandidates({
           counterpartY,
           logicalSide: logicalRecipeSide,
         })
-      : isStorageSlotEndpoint && counterpartX !== undefined && counterpartY !== undefined
+      : measureEndpoints &&
+          isStorageSlotEndpoint &&
+          counterpartX !== undefined &&
+          counterpartY !== undefined
         ? getSlotEdgeSideTowardPoint({
             nodeId,
             handleId,
@@ -3208,6 +3275,7 @@ function getSlotEdgeEndpointCandidates({
       estimatedY,
       endpointOffset,
       isStorageSlotEndpoint,
+      measureEndpoint: measureEndpoints,
     }),
   );
 }
@@ -3220,6 +3288,7 @@ function getSlotEdgeEndpointForSide({
   estimatedY,
   endpointOffset,
   isStorageSlotEndpoint,
+  measureEndpoint = true,
 }: {
   nodeId: string;
   handleId?: string | null;
@@ -3228,13 +3297,16 @@ function getSlotEdgeEndpointForSide({
   estimatedY: number;
   endpointOffset?: number;
   isStorageSlotEndpoint?: boolean;
+  measureEndpoint?: boolean;
 }): SlotEdgeEndpoint {
-  const measuredEndpoint = getMeasuredSlotEndpoint({
-    nodeId,
-    handleId,
-    edgeSide,
-    endpointOffset,
-  });
+  const measuredEndpoint = measureEndpoint
+    ? getMeasuredSlotEndpoint({
+        nodeId,
+        handleId,
+        edgeSide,
+        endpointOffset,
+      })
+    : undefined;
   if (measuredEndpoint) {
     return { ...measuredEndpoint, side: edgeSide };
   }
@@ -3393,6 +3465,19 @@ function getMeasuredSlotEndpoint({
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
+  scheduleMeasuredSlotCacheClear();
+
+  const cacheKey = [
+    getViewportMeasurementSignature(),
+    "endpoint",
+    nodeId,
+    handleId,
+    edgeSide,
+    endpointOffset,
+  ].join("|");
+  if (measuredSlotEndpointCache.has(cacheKey)) {
+    return measuredSlotEndpointCache.get(cacheKey);
+  }
 
   const slotElement =
     findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
@@ -3402,6 +3487,7 @@ function getMeasuredSlotEndpoint({
     document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
 
   if (!nodeElement || !slotElement) {
+    measuredSlotEndpointCache.set(cacheKey, undefined);
     return undefined;
   }
 
@@ -3410,15 +3496,24 @@ function getMeasuredSlotEndpoint({
   const flowPoint = screenToFlowPoint(screenPoint, nodeElement);
 
   if (!flowPoint) {
+    measuredSlotEndpointCache.set(cacheKey, undefined);
     return undefined;
   }
 
-  return offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
+  const measuredEndpoint = offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
+  measuredSlotEndpointCache.set(cacheKey, measuredEndpoint);
+  return measuredEndpoint;
 }
 
 function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
+  }
+  scheduleMeasuredSlotCacheClear();
+
+  const cacheKey = [getViewportMeasurementSignature(), "center", nodeId, handleId].join("|");
+  if (measuredSlotCenterCache.has(cacheKey)) {
+    return measuredSlotCenterCache.get(cacheKey);
   }
 
   const slotElement =
@@ -3429,14 +3524,17 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
     document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
 
   if (!nodeElement || !slotElement) {
+    measuredSlotCenterCache.set(cacheKey, undefined);
     return undefined;
   }
 
   const slotRect = slotElement.getBoundingClientRect();
-  return screenToFlowPoint(
+  const measuredCenter = screenToFlowPoint(
     { x: slotRect.left + slotRect.width / 2, y: slotRect.top + slotRect.height / 2 },
     nodeElement,
   );
+  measuredSlotCenterCache.set(cacheKey, measuredCenter);
+  return measuredCenter;
 }
 
 function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string) {
@@ -3548,10 +3646,33 @@ function parseCssMatrix(transform: string) {
 }
 
 function findResourceEndpointElement(selector: string, nodeId: string, handleId: string) {
-  return [...document.querySelectorAll<HTMLElement>(selector)].find(
-    (element) =>
-      element.dataset.resourceNodeId === nodeId && element.dataset.resourceHandleId === handleId,
+  return document.querySelector<HTMLElement>(
+    `${selector}[data-resource-node-id="${cssEscape(nodeId)}"][data-resource-handle-id="${cssEscape(
+      handleId,
+    )}"]`,
   );
+}
+
+function scheduleMeasuredSlotCacheClear() {
+  if (measuredSlotCacheClearScheduled || typeof window === "undefined") {
+    return;
+  }
+
+  measuredSlotCacheClearScheduled = true;
+  window.requestAnimationFrame(() => {
+    measuredSlotEndpointCache.clear();
+    measuredSlotCenterCache.clear();
+    measuredSlotCacheClearScheduled = false;
+  });
+}
+
+function getViewportMeasurementSignature() {
+  if (typeof document === "undefined") {
+    return "server";
+  }
+
+  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+  return viewport?.style.transform || viewport?.getAttribute("style") || "none";
 }
 
 function cssEscape(value: string) {
@@ -3871,9 +3992,7 @@ function isCompatibleResourceConnection(
   const output = sourceHandle.side === "output" ? sourceResource : targetResource;
   const input = sourceHandle.side === "input" ? sourceResource : targetResource;
 
-  return (
-    sourceHandle.side !== targetHandle.side && resourceMatchesInput(output, input)
-  );
+  return sourceHandle.side !== targetHandle.side && resourceMatchesInput(output, input);
 }
 
 function getDraggedResourceForHandle(
@@ -3975,10 +4094,14 @@ function getNodeRecipeForHandles(recipe: Recipe, node: FactoryProject["nodes"][n
     node,
     overclockedStats.tier,
   );
-  return restoreCrossKindInputOverrideVisuals({
-    ...effectiveRecipe,
-    ...adjustedRecipe,
-  }, recipe, node);
+  return restoreCrossKindInputOverrideVisuals(
+    {
+      ...effectiveRecipe,
+      ...adjustedRecipe,
+    },
+    recipe,
+    node,
+  );
 }
 
 function getClientPosition(event: MouseEvent | TouchEvent) {
