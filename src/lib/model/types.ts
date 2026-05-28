@@ -74,7 +74,8 @@ export interface ResourceAmount {
 export type ResourceAlternative = Pick<
   ResourceAmount,
   "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip" | "modId"
->;
+> &
+  Partial<Pick<ResourceAmount, "amount">>;
 
 export interface RecipeInput extends ResourceAmount {
   optional?: boolean;

@@ -65,6 +65,7 @@ export const resourceAmountSchema = z.object({
         dominantColor: dominantColorSchema,
         modId: z.string().min(1).optional(),
         tooltip: z.array(z.string()).optional(),
+        amount: z.number().positive().optional(),
       }),
     )
     .optional(),

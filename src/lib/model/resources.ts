@@ -160,7 +160,10 @@ export function getFilledCellFluidEquivalent<
       amount:
         resource.amount === undefined
           ? undefined
-          : getFilledCellFluidAmount({ amount: resource.amount }),
+          : getFilledCellFluidAmount({
+              amount: resource.amount,
+              cellFluidAmount: alternative.amount,
+            }),
     };
   }
 
@@ -174,12 +177,16 @@ export function getFilledCellFluidEquivalent<
     id: normalizeFluidId(fluidName),
     displayName: fluidName,
     amount:
-      resource.amount === undefined ? undefined : getFilledCellFluidAmount({ amount: resource.amount }),
+      resource.amount === undefined
+        ? undefined
+        : getFilledCellFluidAmount({ amount: resource.amount }),
   };
 }
 
-export function getFilledCellFluidAmount(resource: Pick<ResourceAmount, "amount">): number {
-  return resource.amount * 1000;
+export function getFilledCellFluidAmount(
+  resource: Pick<ResourceAmount, "amount"> & { cellFluidAmount?: number },
+): number {
+  return resource.amount * (resource.cellFluidAmount ?? 1000);
 }
 
 function isFluidEquivalentToFilledCell(

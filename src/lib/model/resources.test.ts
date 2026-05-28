@@ -57,11 +57,32 @@ describe("resource helpers", () => {
         id: "gregtech:gt.metaitem.99@143",
         amount: 2,
         displayName: "Molten Magmatter Cell",
+        alternatives: [
+          {
+            kind: "fluid",
+            id: "molten.magmatter",
+            displayName: "Molten Magmatter",
+            amount: 144,
+          },
+        ],
       }),
     ).toEqual({
       kind: "fluid",
       id: "molten.magmatter",
       displayName: "Molten Magmatter",
+      amount: 288,
+    });
+    expect(
+      getFilledCellFluidEquivalent({
+        kind: "item",
+        id: "gregtech:gt.metaitem.01@1",
+        amount: 2,
+        displayName: "Water Cell",
+      }),
+    ).toEqual({
+      kind: "fluid",
+      id: "water",
+      displayName: "Water",
       amount: 2000,
     });
   });

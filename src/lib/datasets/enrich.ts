@@ -107,13 +107,14 @@ function linkAlternatives(
     return;
   }
 
-  addAlternative(cellEntry, fluidEntry);
-  addAlternative(fluidEntry, cellEntry);
+  addAlternative(cellEntry, fluidEntry, getAlternativeUnitAmount(cell, fluid));
+  addAlternative(fluidEntry, cellEntry, getAlternativeUnitAmount(fluid, cell));
 }
 
 function addAlternative(
   resource: DatasetResourceIndexEntry,
   alternative: DatasetResourceIndexEntry,
+  amount: number | undefined,
 ): void {
   const alternatives = resource.alternatives ?? [];
   if (alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)) {
@@ -130,8 +131,16 @@ function addAlternative(
       iconAtlas: alternative.iconAtlas,
       dominantColor: alternative.dominantColor ?? alternative.iconAtlas?.dominantColor,
       tooltip: alternative.tooltip,
+      amount,
     },
   ];
+}
+
+function getAlternativeUnitAmount(resource: ResourceAmount, alternative: ResourceAmount): number | undefined {
+  if (resource.amount <= 0 || alternative.amount <= 0) {
+    return undefined;
+  }
+  return alternative.amount / resource.amount;
 }
 
 function isFluidCannerRecipe(recipe: Recipe): boolean {

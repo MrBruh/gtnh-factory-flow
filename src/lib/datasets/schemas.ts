@@ -30,6 +30,7 @@ export const datasetResourceSchema = z.object({
         dominantColor: dominantColorSchema,
         modId: z.string().optional(),
         tooltip: z.array(z.string()).optional(),
+        amount: z.number().positive().optional(),
       }),
     )
     .optional(),

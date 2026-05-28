@@ -174,11 +174,11 @@ function linkAlternatives(index, cell, fluid) {
     return;
   }
 
-  addAlternative(cellEntry, fluidEntry);
-  addAlternative(fluidEntry, cellEntry);
+  addAlternative(cellEntry, fluidEntry, getAlternativeUnitAmount(cell, fluid));
+  addAlternative(fluidEntry, cellEntry, getAlternativeUnitAmount(fluid, cell));
 }
 
-function addAlternative(resource, alternative) {
+function addAlternative(resource, alternative, amount) {
   const alternatives = resource.alternatives ?? [];
   if (alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)) {
     return;
@@ -194,8 +194,16 @@ function addAlternative(resource, alternative) {
       iconAtlas: alternative.iconAtlas,
       dominantColor: alternative.dominantColor ?? alternative.iconAtlas?.dominantColor,
       tooltip: alternative.tooltip,
+      amount,
     },
   ];
+}
+
+function getAlternativeUnitAmount(resource, alternative) {
+  if (!(resource.amount > 0) || !(alternative.amount > 0)) {
+    return undefined;
+  }
+  return alternative.amount / resource.amount;
 }
 
 function isFluidCannerRecipe(recipe) {
