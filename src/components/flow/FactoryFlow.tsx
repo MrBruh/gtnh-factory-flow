@@ -47,6 +47,7 @@ import {
   applyMachineHandlerToRecipe,
   isRecipeInputConsumed,
   makeResourceKey,
+  formatNumberWithThousands,
   resourceMatchesInput,
   trimTrailingDecimalZeros,
 } from "@/lib/model";
@@ -3695,7 +3696,7 @@ function formatEdgeValue(value: number) {
 function trimEdgeNumber(value: number) {
   const abs = Math.abs(value);
   const digits = abs >= 100 ? 0 : abs >= 10 ? 1 : 2;
-  return trimTrailingDecimalZeros(value.toFixed(digits));
+  return formatNumberWithThousands(trimTrailingDecimalZeros(value.toFixed(digits)));
 }
 
 function isPointerOverIncompatibleFlowHandle(
