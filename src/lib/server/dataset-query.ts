@@ -100,7 +100,7 @@ interface LoadedRecipeLookupIndex {
   tierIndexes: number[];
   iconScores: number[];
   searchText: string[];
-  searchIndex: TextSearchIndex;
+  searchIndex?: TextSearchIndex;
   entries: Map<string, Map<number, number[]>>;
 }
 
@@ -530,12 +530,15 @@ async function prewarmDatasetVersionOnce(
 
   if (catalog.version.recipeLookupIndexPath) {
     await loadRecipeLookupIndex(catalog.version);
+  } else {
+    const recipeCatalog = await loadRecipeIndex(versionId);
+    ensureIndexes(recipeCatalog);
   }
 
-  const recipeCatalog = await loadRecipeIndex(versionId);
-  ensureIndexes(recipeCatalog);
-
   if (includeShards) {
+    const recipeCatalog = catalog.version.recipeLookupIndexPath
+      ? catalog
+      : await loadRecipeIndex(versionId);
     await prewarmRecipeShards(recipeCatalog);
   }
 }
@@ -702,10 +705,6 @@ async function loadRecipeLookupIndex(version: DatasetVersion): Promise<LoadedRec
       tierIndexes: payload.tierIndexes,
       iconScores: payload.iconScores ?? [],
       searchText: payload.searchText ?? [],
-      searchIndex: buildTextSearchIndex(
-        payload.searchText ?? [],
-        (payload.searchText ?? []).map((_, index) => index),
-      ),
       entries: new Map(payload.entries.map(([key, recipesByMap]) => [key, new Map(recipesByMap)])),
     };
     loadedRecipeLookupIndexes.set(cacheKey, loaded);
@@ -911,13 +910,14 @@ async function getSearchMatchedRecipeIndexes(
   queryTokens: string[],
 ): Promise<Set<number>> {
   if (lookup?.searchText.length) {
-    const indexedCandidates = queryTextSearchIndex(lookup.searchIndex, queryTokens);
+    const searchIndex = ensureLookupSearchIndex(lookup);
+    const indexedCandidates = queryTextSearchIndex(searchIndex, queryTokens);
     const indexedCandidateSet = indexedCandidates ? new Set(indexedCandidates) : undefined;
     return new Set(
       recipeIndexes.filter(
         (recipeIndex) =>
           (!indexedCandidateSet || indexedCandidateSet.has(recipeIndex)) &&
-          searchTokensMatch(lookup.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens),
+          searchTokensMatch(searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens),
       ),
     );
   }
@@ -933,6 +933,14 @@ async function getSearchMatchedRecipeIndexes(
         searchTokensMatch(indexes.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens),
     ),
   );
+}
+
+function ensureLookupSearchIndex(lookup: LoadedRecipeLookupIndex): TextSearchIndex {
+  lookup.searchIndex ??= buildTextSearchIndex(
+    lookup.searchText,
+    lookup.searchText.map((_, index) => index),
+  );
+  return lookup.searchIndex;
 }
 
 async function getRecipeSummariesByIndexMap(
