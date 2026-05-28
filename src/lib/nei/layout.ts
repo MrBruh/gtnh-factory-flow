@@ -55,10 +55,11 @@ export interface NeiProgressBar {
   frame?: number;
 }
 
-export interface NeiLabel {
-  text: string;
+export interface NeiDecoration {
   x: number;
   y: number;
+  width: number;
+  height: number;
   color: string;
 }
 
@@ -70,7 +71,7 @@ export interface NeiRecipeLayout {
   slots: NeiPositionedSlot[];
   overflowGroups: NeiOverflowGroup[];
   progressBars: NeiProgressBar[];
-  labels: NeiLabel[];
+  decorations: NeiDecoration[];
   logo: NeiPoint;
 }
 
@@ -87,7 +88,7 @@ interface RecipeMapLayoutDefinition {
   fluidInputPositions?: PositionGetter;
   fluidOutputPositions?: PositionGetter;
   progressBars?: NeiProgressBar[];
-  labels?: NeiLabel[];
+  decorations?: NeiDecoration[];
 }
 
 type PositionGetter = (count: number, definition: RequiredRecipeMapLayoutDefinition) => NeiPoint[];
@@ -132,57 +133,14 @@ const COMPONENT_ASSEMBLY_LINE_LAYOUT: RecipeMapLayoutDefinition = {
   itemInputPositions: (count) => gridPositions(count, 16, 17, 3, 4),
   itemOutputPositions: (count) => (count > 0 ? [{ x: 151, y: 17 }] : []),
   fluidInputPositions: (count) => gridPositions(count, 97, 35, 4, 3),
-  progressBars: [
-    {
-      x: 73,
-      y: 17,
-      width: 17,
-      height: 18,
-      direction: "right",
-      texture: "assemblyline_1",
-      frame: 0,
-    },
-    {
-      x: 90,
-      y: 17,
-      width: 18,
-      height: 18,
-      direction: "right",
-      texture: "assemblyline_2",
-      frame: 0,
-    },
-    {
-      x: 108,
-      y: 17,
-      width: 18,
-      height: 18,
-      direction: "right",
-      texture: "assemblyline_2",
-      frame: 0,
-    },
-    {
-      x: 126,
-      y: 17,
-      width: 18,
-      height: 18,
-      direction: "right",
-      texture: "assemblyline_2",
-      frame: 0,
-    },
-    {
-      x: 144,
-      y: 17,
-      width: 10,
-      height: 18,
-      direction: "right",
-      texture: "assemblyline_3",
-      frame: 0,
-    },
-  ],
-  labels: [
-    { text: "F", x: 78, y: 25, color: "#3f94ff" },
-    { text: "M", x: 78, y: 43, color: "#e53935" },
-    { text: "E", x: 78, y: 61, color: "#24b47e" },
+  progressBars: [],
+  decorations: [
+    { x: 70, y: 17, width: 77, height: 2, color: "#f0f0f0" },
+    { x: 70, y: 19, width: 77, height: 1, color: "#777777" },
+    { x: 70, y: 20, width: 2, height: 15, color: "#f0f0f0" },
+    { x: 72, y: 20, width: 1, height: 15, color: "#777777" },
+    { x: 145, y: 17, width: 2, height: 18, color: "#f0f0f0" },
+    { x: 147, y: 17, width: 1, height: 18, color: "#777777" },
   ],
 };
 
@@ -397,7 +355,7 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
       recipeMap,
       explicitProgressBars ?? definition.progressBars,
     ),
-    labels: definition.labels ?? [],
+    decorations: definition.decorations ?? [],
     logo: definition.logo ?? { x: 152, y: 63 },
   };
 }

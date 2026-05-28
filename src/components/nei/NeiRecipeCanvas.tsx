@@ -86,21 +86,18 @@ export function NeiRecipeCanvas({
         <ProgressTexture key={`${bar.x}-${bar.y}-${index}`} bar={bar} scale={renderScale} />
       ))}
 
-      {layout.labels.map((label, index) => (
+      {layout.decorations.map((decoration, index) => (
         <div
-          key={`${label.text}-${label.x}-${label.y}-${index}`}
-          className="pointer-events-none absolute text-[10px] font-bold leading-none [text-shadow:1px_1px_0_#000]"
+          key={`${decoration.x}-${decoration.y}-${decoration.width}-${decoration.height}-${index}`}
+          className="pointer-events-none absolute"
           style={{
-            left: label.x * renderScale,
-            top: label.y * renderScale,
-            color: label.color,
-            fontFamily: "var(--font-minecraft), monospace",
-            transform: `scale(${renderScale})`,
-            transformOrigin: "top left",
+            left: decoration.x * renderScale,
+            top: decoration.y * renderScale,
+            width: decoration.width * renderScale,
+            height: decoration.height * renderScale,
+            backgroundColor: decoration.color,
           }}
-        >
-          {label.text}
-        </div>
+        />
       ))}
 
       {renderLayout.frames.map((frame) => {
