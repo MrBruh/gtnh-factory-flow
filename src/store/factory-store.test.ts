@@ -445,6 +445,14 @@ describe("factory resource links", () => {
               id: "gregtech:gt.metaitem.99@143",
               amount: 2,
               displayName: "Molten Magmatter Cell",
+              alternatives: [
+                {
+                  kind: "fluid",
+                  id: "molten.magmatter",
+                  displayName: "Molten Magmatter",
+                  amount: 144,
+                },
+              ],
             },
           ],
           outputs: [{ kind: "item", id: "plate", amount: 1 }],
@@ -461,6 +469,14 @@ describe("factory resource links", () => {
         id: "gregtech:gt.metaitem.99@143",
         amount: 2,
         displayName: "Molten Magmatter Cell",
+        alternatives: [
+          {
+            kind: "fluid",
+            id: "molten.magmatter",
+            displayName: "Molten Magmatter",
+            amount: 144,
+          },
+        ],
       },
       "cell-consumer-node",
       "input",
@@ -489,7 +505,7 @@ describe("factory resource links", () => {
       expect.objectContaining({
         kind: "fluid",
         id: "molten.magmatter",
-        amount: 2000,
+        amount: 288,
         displayName: "Molten Magmatter",
       }),
     );
