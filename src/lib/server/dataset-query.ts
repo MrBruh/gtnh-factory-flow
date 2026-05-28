@@ -100,6 +100,7 @@ interface LoadedRecipeLookupIndex {
   tierIndexes: number[];
   iconScores: number[];
   searchText: string[];
+  searchIndex: TextSearchIndex;
   entries: Map<string, Map<number, number[]>>;
 }
 
@@ -116,6 +117,7 @@ interface QueryIndexes {
   recipeMapIcons: Map<string, DatasetResourceIndexEntry | undefined>;
   tierIndexes: number[];
   searchText: string[];
+  searchIndex: TextSearchIndex;
   iconScores: number[];
   allRecipeIndexes: number[];
 }
@@ -123,6 +125,12 @@ interface QueryIndexes {
 interface ResourceQueryIndexes {
   sortedResourceIndexes: number[];
   searchText: string[];
+  searchIndex: TextSearchIndex;
+}
+
+interface TextSearchIndex {
+  tokensByEntry: string[][];
+  trigramToEntries: Map<string, number[]>;
 }
 
 interface RecipeShardPayload {
@@ -236,10 +244,11 @@ export async function queryDatasetResources(
 ) {
   const catalog = await loadCatalog(versionId);
   const indexes = ensureResourceIndexes(catalog);
-  const query = normalizeText(request.query);
+  const queryTokens = splitSearchTokens(request.query);
+  const candidateIndexes = queryTextSearchIndex(indexes.searchIndex, queryTokens);
   const matches: number[] = [];
 
-  for (const resourceIndex of indexes.sortedResourceIndexes) {
+  for (const resourceIndex of candidateIndexes ?? indexes.sortedResourceIndexes) {
     const resource = catalog.resourceIndex[resourceIndex];
     if (
       !resource ||
@@ -248,7 +257,10 @@ export async function queryDatasetResources(
     ) {
       continue;
     }
-    if (query && !resourceSearchTextMatches(indexes.searchText[resourceIndex] ?? "", query)) {
+    if (
+      queryTokens.length &&
+      !searchTokensMatch(indexes.searchIndex.tokensByEntry[resourceIndex] ?? [], queryTokens)
+    ) {
       continue;
     }
     matches.push(resourceIndex);
@@ -285,22 +297,32 @@ export async function queryDatasetRecipes(
 
   const recipeCatalog = await loadRecipeIndex(versionId);
   const indexes = ensureIndexes(recipeCatalog);
-  const query = normalizeText(request.query);
+  const queryTokens = splitSearchTokens(request.query);
   const resourceScope = request.resource
     ? getRecipeResourceScope(recipeCatalog, request.resource, request.mode)
     : undefined;
   const candidates = request.resource
     ? getResourceIndexes(indexes.recipeIndexesByResource, resourceScope!, request.mode)
     : indexes.allRecipeIndexes;
+  const searchCandidates = queryTextSearchIndex(indexes.searchIndex, queryTokens);
+  const searchCandidateSet = searchCandidates ? new Set(searchCandidates) : undefined;
   const eligibleRecipeMaps = request.resource
     ? getResourceRecipeMaps(indexes.recipeMapsByResource, resourceScope!, request.mode)
     : [...new Set(indexes.recipeMaps.filter(Boolean))];
   const sortedRecipeMaps = eligibleRecipeMaps
     .filter((recipeMap) =>
-      recipeMapHasMatchingIndexedRecipe(indexes, candidates, recipeMap, request.maxTier, query, {
-        scope: resourceScope,
-        mode: request.mode,
-      }),
+      recipeMapHasMatchingIndexedRecipe(
+        indexes,
+        candidates,
+        recipeMap,
+        request.maxTier,
+        queryTokens,
+        searchCandidateSet,
+        {
+          scope: resourceScope,
+          mode: request.mode,
+        },
+      ),
     )
     .sort((a, b) => a.localeCompare(b));
   const effectiveMap =
@@ -326,7 +348,13 @@ export async function queryDatasetRecipes(
     if (!recipeMatchesTierIndex(indexes, recipeIndex, request.maxTier)) {
       continue;
     }
-    if (query && !indexes.searchText[recipeIndex]?.includes(query)) {
+    if (searchCandidateSet && !searchCandidateSet.has(recipeIndex)) {
+      continue;
+    }
+    if (
+      queryTokens.length &&
+      !searchTokensMatch(indexes.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens)
+    ) {
       continue;
     }
     if (effectiveMap && indexes.recipeMaps[recipeIndex] !== effectiveMap) {
@@ -379,7 +407,7 @@ async function queryDatasetRecipesFromLookup(
   },
 ) {
   const lookup = await loadRecipeLookupIndex(catalog.version);
-  const query = normalizeText(request.query);
+  const queryTokens = splitSearchTokens(request.query);
   const resourceScope = getRecipeResourceScope(catalog, request.resource, request.mode);
   const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, request.mode);
   const tierCandidatesByMap = new Map<number, number[]>();
@@ -393,12 +421,12 @@ async function queryDatasetRecipesFromLookup(
     }
   }
 
-  const searchMatchedRecipeIndexes = query
+  const searchMatchedRecipeIndexes = queryTokens.length
     ? await getSearchMatchedRecipeIndexes(
         catalog,
         lookup,
         [...new Set([...tierCandidatesByMap.values()].flat())],
-        query,
+        queryTokens,
       )
     : undefined;
 
@@ -674,6 +702,10 @@ async function loadRecipeLookupIndex(version: DatasetVersion): Promise<LoadedRec
       tierIndexes: payload.tierIndexes,
       iconScores: payload.iconScores ?? [],
       searchText: payload.searchText ?? [],
+      searchIndex: buildTextSearchIndex(
+        payload.searchText ?? [],
+        (payload.searchText ?? []).map((_, index) => index),
+      ),
       entries: new Map(payload.entries.map(([key, recipesByMap]) => [key, new Map(recipesByMap)])),
     };
     loadedRecipeLookupIndexes.set(cacheKey, loaded);
@@ -876,17 +908,30 @@ async function getSearchMatchedRecipeIndexes(
   catalog: LoadedRecipeIndex,
   lookup: LoadedRecipeLookupIndex | undefined,
   recipeIndexes: number[],
-  query: string,
+  queryTokens: string[],
 ): Promise<Set<number>> {
-  const searchText = lookup?.searchText.length ? lookup.searchText : catalog.recipeSearchText;
-  if (searchText?.length) {
-    return new Set(recipeIndexes.filter((recipeIndex) => searchText[recipeIndex]?.includes(query)));
+  if (lookup?.searchText.length) {
+    const indexedCandidates = queryTextSearchIndex(lookup.searchIndex, queryTokens);
+    const indexedCandidateSet = indexedCandidates ? new Set(indexedCandidates) : undefined;
+    return new Set(
+      recipeIndexes.filter(
+        (recipeIndex) =>
+          (!indexedCandidateSet || indexedCandidateSet.has(recipeIndex)) &&
+          searchTokensMatch(lookup.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens),
+      ),
+    );
   }
 
   const recipeCatalog = catalog.recipes ? catalog : await loadRecipeIndex(catalog.version.id);
   const indexes = ensureIndexes(recipeCatalog);
+  const indexedCandidates = queryTextSearchIndex(indexes.searchIndex, queryTokens);
+  const indexedCandidateSet = indexedCandidates ? new Set(indexedCandidates) : undefined;
   return new Set(
-    recipeIndexes.filter((recipeIndex) => indexes.searchText[recipeIndex]?.includes(query)),
+    recipeIndexes.filter(
+      (recipeIndex) =>
+        (!indexedCandidateSet || indexedCandidateSet.has(recipeIndex)) &&
+        searchTokensMatch(indexes.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens),
+    ),
   );
 }
 
@@ -1373,6 +1418,7 @@ function ensureIndexes(catalog: LoadedRecipeIndex): QueryIndexes {
     recipeMapIcons: buildRecipeMapIconMap([...recipeMapSet], catalog.resourceIndex),
     tierIndexes,
     searchText,
+    searchIndex: buildTextSearchIndex(searchText, allRecipeIndexes),
     iconScores,
     allRecipeIndexes,
   };
@@ -1406,6 +1452,7 @@ function ensureResourceIndexes(catalog: LoadedRecipeIndex): ResourceQueryIndexes
   catalog.resourceIndexes = {
     sortedResourceIndexes,
     searchText,
+    searchIndex: buildTextSearchIndex(searchText, sortedResourceIndexes),
   };
   return catalog.resourceIndexes;
 }
@@ -1433,7 +1480,8 @@ function recipeMapHasMatchingIndexedRecipe(
   candidates: number[],
   recipeMap: string,
   maxTier: TierFilter,
-  query: string,
+  queryTokens: string[],
+  searchCandidateSet: Set<number> | undefined,
   scope: { scope?: RecipeResourceScope; mode: "recipes" | "uses" },
 ) {
   const scopedCandidates = scope.scope
@@ -1449,7 +1497,11 @@ function recipeMapHasMatchingIndexedRecipe(
       return false;
     }
 
-    return Boolean(!query || indexes.searchText[recipeIndex]?.includes(query));
+    return Boolean(
+      (!searchCandidateSet || searchCandidateSet.has(recipeIndex)) &&
+        (!queryTokens.length ||
+          searchTokensMatch(indexes.searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens)),
+    );
   });
 }
 
@@ -1508,16 +1560,112 @@ function normalizeResourceSearchText(resource: DatasetResourceIndexEntry): strin
   );
 }
 
-function resourceSearchTextMatches(searchText: string, query: string): boolean {
-  const queryTokens = splitSearchTokens(query);
-  if (queryTokens.length === 0) {
-    return true;
+export function buildTextSearchIndex(
+  searchText: string[],
+  entryIndexes: number[],
+): TextSearchIndex {
+  const tokensByEntry: string[][] = [];
+  const trigramToEntries = new Map<string, number[]>();
+
+  for (const entryIndex of entryIndexes) {
+    const tokens = [...new Set(splitSearchTokens(searchText[entryIndex] ?? ""))];
+    tokensByEntry[entryIndex] = tokens;
+
+    const entryTrigrams = new Set<string>();
+    for (const token of tokens) {
+      for (const trigram of getTokenTrigrams(token)) {
+        entryTrigrams.add(trigram);
+      }
+    }
+
+    for (const trigram of entryTrigrams) {
+      const existing = trigramToEntries.get(trigram);
+      if (existing) {
+        existing.push(entryIndex);
+      } else {
+        trigramToEntries.set(trigram, [entryIndex]);
+      }
+    }
   }
 
-  const resourceTokens = splitSearchTokens(searchText);
+  return {
+    tokensByEntry,
+    trigramToEntries,
+  };
+}
+
+export function queryTextSearchIndex(
+  index: TextSearchIndex,
+  queryTokens: string[],
+): number[] | undefined {
+  if (queryTokens.length === 0) {
+    return undefined;
+  }
+
+  const indexedTokens = queryTokens.filter((token) => token.length >= 3);
+  if (indexedTokens.length === 0) {
+    return undefined;
+  }
+
+  let candidates: number[] | undefined;
+  for (const token of indexedTokens) {
+    const tokenCandidates = queryTokenCandidates(index, token);
+    if (tokenCandidates.length === 0) {
+      return [];
+    }
+
+    candidates = candidates
+      ? intersectOrderedIndexes(candidates, tokenCandidates)
+      : tokenCandidates;
+
+    if (candidates.length === 0) {
+      return [];
+    }
+  }
+
+  return candidates;
+}
+
+function queryTokenCandidates(index: TextSearchIndex, token: string): number[] {
+  const trigrams = getTokenTrigrams(token);
+  let candidates: number[] | undefined;
+
+  for (const trigram of trigrams) {
+    const entries = index.trigramToEntries.get(trigram);
+    if (!entries?.length) {
+      return [];
+    }
+
+    candidates = candidates ? intersectOrderedIndexes(candidates, entries) : entries;
+    if (candidates.length === 0) {
+      return [];
+    }
+  }
+
+  return candidates ?? [];
+}
+
+function intersectOrderedIndexes(left: number[], right: number[]): number[] {
+  const rightSet = new Set(right);
+  return left.filter((entry) => rightSet.has(entry));
+}
+
+export function searchTokensMatch(entryTokens: string[], queryTokens: string[]): boolean {
   return queryTokens.every((queryToken) =>
-    resourceTokens.some((resourceToken) => resourceToken.startsWith(queryToken)),
+    entryTokens.some((entryToken) => entryToken.includes(queryToken)),
   );
+}
+
+function getTokenTrigrams(token: string): string[] {
+  if (token.length < 3) {
+    return [];
+  }
+
+  const trigrams = new Set<string>();
+  for (let index = 0; index <= token.length - 3; index += 1) {
+    trigrams.add(token.slice(index, index + 3));
+  }
+  return [...trigrams];
 }
 
 function splitSearchTokens(value: string): string[] {
