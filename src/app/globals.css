@@ -43,6 +43,14 @@ textarea {
   z-index: 20 !important;
 }
 
+.factory-flow-board .react-flow__viewport {
+  will-change: transform;
+}
+
+.factory-flow-board .react-flow__node {
+  contain: layout style;
+}
+
 .factory-flow-board--moving .react-flow__edges,
 .factory-flow-board--moving .react-flow__edgelabel-renderer,
 .factory-flow-board--moving .react-flow__nodes {
@@ -51,6 +59,7 @@ textarea {
 
 .factory-flow-board--moving .react-flow__edgelabel-renderer {
   opacity: 0;
+  visibility: hidden;
 }
 
 .factory-flow-board .react-flow__node.selected {

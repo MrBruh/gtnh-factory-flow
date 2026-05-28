@@ -157,6 +157,9 @@ const directRouteCache = new Map<
     segments: ReturnType<typeof getPolylineSegments>;
   }
 >();
+const measuredSlotEndpointCache = new Map<string, { x: number; y: number } | undefined>();
+const measuredSlotCenterCache = new Map<string, { x: number; y: number } | undefined>();
+let measuredSlotCacheClearScheduled = false;
 
 type DraggedResourceConnection = Pick<
   ResourceAmount,
@@ -954,7 +957,6 @@ export function FactoryFlow() {
   );
 
   const fitViewOptions = useMemo(() => ({ padding: 0.18 }), []);
-  const shouldVirtualizeFlow = flowNodes.length > 250 || edges.length > 400;
 
   return (
     <div
@@ -991,7 +993,7 @@ export function FactoryFlow() {
         onEdgesDelete={handleEdgesDelete}
         fitView
         fitViewOptions={fitViewOptions}
-        onlyRenderVisibleElements={shouldVirtualizeFlow}
+        onlyRenderVisibleElements
         minZoom={0.15}
         maxZoom={1.8}
       >
@@ -3463,6 +3465,19 @@ function getMeasuredSlotEndpoint({
   if (!handleId || typeof document === "undefined") {
     return undefined;
   }
+  scheduleMeasuredSlotCacheClear();
+
+  const cacheKey = [
+    getViewportMeasurementSignature(),
+    "endpoint",
+    nodeId,
+    handleId,
+    edgeSide,
+    endpointOffset,
+  ].join("|");
+  if (measuredSlotEndpointCache.has(cacheKey)) {
+    return measuredSlotEndpointCache.get(cacheKey);
+  }
 
   const slotElement =
     findResourceEndpointElement("[data-resource-edge-anchor='true']", nodeId, handleId) ??
@@ -3472,6 +3487,7 @@ function getMeasuredSlotEndpoint({
     document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
 
   if (!nodeElement || !slotElement) {
+    measuredSlotEndpointCache.set(cacheKey, undefined);
     return undefined;
   }
 
@@ -3480,15 +3496,24 @@ function getMeasuredSlotEndpoint({
   const flowPoint = screenToFlowPoint(screenPoint, nodeElement);
 
   if (!flowPoint) {
+    measuredSlotEndpointCache.set(cacheKey, undefined);
     return undefined;
   }
 
-  return offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
+  const measuredEndpoint = offsetFlowPointForEdgeSide(flowPoint, edgeSide, endpointOffset);
+  measuredSlotEndpointCache.set(cacheKey, measuredEndpoint);
+  return measuredEndpoint;
 }
 
 function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?: string | null }) {
   if (!handleId || typeof document === "undefined") {
     return undefined;
+  }
+  scheduleMeasuredSlotCacheClear();
+
+  const cacheKey = [getViewportMeasurementSignature(), "center", nodeId, handleId].join("|");
+  if (measuredSlotCenterCache.has(cacheKey)) {
+    return measuredSlotCenterCache.get(cacheKey);
   }
 
   const slotElement =
@@ -3499,14 +3524,17 @@ function getMeasuredSlotCenter({ nodeId, handleId }: { nodeId: string; handleId?
     document.querySelector<HTMLElement>(`.react-flow__node[data-id="${cssEscape(nodeId)}"]`);
 
   if (!nodeElement || !slotElement) {
+    measuredSlotCenterCache.set(cacheKey, undefined);
     return undefined;
   }
 
   const slotRect = slotElement.getBoundingClientRect();
-  return screenToFlowPoint(
+  const measuredCenter = screenToFlowPoint(
     { x: slotRect.left + slotRect.width / 2, y: slotRect.top + slotRect.height / 2 },
     nodeElement,
   );
+  measuredSlotCenterCache.set(cacheKey, measuredCenter);
+  return measuredCenter;
 }
 
 function getSlotRectEdgePoint(rect: DOMRect, edgeSide: string) {
@@ -3618,10 +3646,33 @@ function parseCssMatrix(transform: string) {
 }
 
 function findResourceEndpointElement(selector: string, nodeId: string, handleId: string) {
-  return [...document.querySelectorAll<HTMLElement>(selector)].find(
-    (element) =>
-      element.dataset.resourceNodeId === nodeId && element.dataset.resourceHandleId === handleId,
+  return document.querySelector<HTMLElement>(
+    `${selector}[data-resource-node-id="${cssEscape(nodeId)}"][data-resource-handle-id="${cssEscape(
+      handleId,
+    )}"]`,
   );
+}
+
+function scheduleMeasuredSlotCacheClear() {
+  if (measuredSlotCacheClearScheduled || typeof window === "undefined") {
+    return;
+  }
+
+  measuredSlotCacheClearScheduled = true;
+  window.requestAnimationFrame(() => {
+    measuredSlotEndpointCache.clear();
+    measuredSlotCenterCache.clear();
+    measuredSlotCacheClearScheduled = false;
+  });
+}
+
+function getViewportMeasurementSignature() {
+  if (typeof document === "undefined") {
+    return "server";
+  }
+
+  const viewport = document.querySelector<HTMLElement>(".react-flow__viewport");
+  return viewport?.style.transform || viewport?.getAttribute("style") || "none";
 }
 
 function cssEscape(value: string) {
