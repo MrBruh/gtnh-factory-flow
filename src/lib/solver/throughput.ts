@@ -399,6 +399,7 @@ function addFlow(record: FlowRecord, resource: ResourceAmount, amountPerSecond: 
     kind: resource.kind,
     resourceId: resource.id,
     displayName: resource.displayName,
+    alternatives: resource.alternatives ?? existing?.alternatives,
     amountPerSecond: (existing?.amountPerSecond ?? 0) + amountPerSecond,
   };
 }
@@ -551,6 +552,7 @@ function applyConvertedStorageOutputBalances(
       kind: output.kind,
       id: output.resourceId,
       displayName: output.displayName,
+      alternatives: output.alternatives,
       amount: transferredPerSecond,
     };
     const edgeResource = {
@@ -1044,6 +1046,7 @@ function getCompatibleOutputFlowForResource(
       kind: output.kind,
       id: output.resourceId,
       displayName: output.displayName,
+      alternatives: output.alternatives,
     };
     if (!resourceMatchesInput(resource, outputResource)) {
       continue;

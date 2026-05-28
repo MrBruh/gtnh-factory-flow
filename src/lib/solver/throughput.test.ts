@@ -1751,4 +1751,84 @@ describe("calculateThroughput", () => {
       expect.arrayContaining([expect.objectContaining({ kind: "fluid", resourceId: "oxygen" })]),
     );
   });
+
+  it("uses filled-cell output alternatives for non-name-matching molten fluids", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "molten-cell-fluid-storage-flow",
+      name: "Molten cell fluid storage flow",
+      recipes: [
+        {
+          id: "silicone-cell-source",
+          name: "Fluid Canner: Molten Silicone Rubber Cell",
+          machineType: "Fluid Canner",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 16,
+          inputs: [
+            {
+              kind: "fluid",
+              id: "molten.silicone",
+              amount: 144,
+              displayName: "Molten Silicone Rubber",
+            },
+          ],
+          outputs: [
+            {
+              kind: "item",
+              id: "gregtech:gt.metaitem.99@471",
+              amount: 1,
+              displayName: "Molten Silicone Rubber Cell",
+              alternatives: [
+                {
+                  kind: "fluid",
+                  id: "molten.silicone",
+                  displayName: "Molten Silicone Rubber",
+                  amount: 144,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+      nodes: [
+        {
+          id: "silicone-cell-source-node",
+          recipeId: "silicone-cell-source",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      storages: [
+        {
+          id: "silicone-tank",
+          kind: "fluid",
+          resourceId: "molten.silicone",
+          displayName: "Molten Silicone Rubber",
+          position: { x: 100, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "silicone-cell-to-tank",
+          source: "silicone-cell-source-node",
+          target: "silicone-tank",
+          sourceHandle: "output:item:gregtech%3Agt.metaitem.99%40471:0",
+          targetHandle: "input:fluid:molten.silicone",
+          resourceKind: "fluid",
+          resourceId: "molten.silicone",
+          label: "Molten Silicone Rubber Cell",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.edges["silicone-cell-to-tank"].transferredPerSecond).toBeCloseTo(144);
+    expect(result.storages["silicone-tank"].producedPerSecond).toBeCloseTo(144);
+  });
 });

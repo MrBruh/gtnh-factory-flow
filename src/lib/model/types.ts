@@ -270,6 +270,7 @@ export interface ResourceFlow {
   kind: ResourceKind;
   resourceId: ResourceId;
   displayName?: string;
+  alternatives?: ResourceAlternative[];
   amountPerSecond: number;
 }
 
