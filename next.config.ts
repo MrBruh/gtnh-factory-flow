@@ -1,5 +1,7 @@
 import type { NextConfig } from "next";
 
+const datasetBackendUrl = process.env.GTNH_DATASET_BACKEND_URL?.replace(/\/+$/, "");
+
 const nextConfig: NextConfig = {
   outputFileTracingRoot: process.cwd(),
   turbopack: {
@@ -19,7 +21,7 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    return [
+    const appRewrites = [
       {
         source: "/umami",
         destination: "http://127.0.0.1:8582/umami",
@@ -33,6 +35,24 @@ const nextConfig: NextConfig = {
         destination: "http://127.0.0.1:8582/umami/:path*",
       },
     ];
+
+    if (!datasetBackendUrl) {
+      return appRewrites;
+    }
+
+    return {
+      beforeFiles: [
+        {
+          source: "/api/datasets/:path*",
+          destination: `${datasetBackendUrl}/api/datasets/:path*`,
+        },
+        {
+          source: "/datasets/gtnh/:path*",
+          destination: `${datasetBackendUrl}/datasets/gtnh/:path*`,
+        },
+      ],
+      afterFiles: appRewrites,
+    };
   },
 };
 
