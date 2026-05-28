@@ -43,11 +43,6 @@ textarea {
   z-index: 20 !important;
 }
 
-.factory-flow-board .react-flow__renderer,
-.factory-flow-board .react-flow__viewport {
-  will-change: transform;
-}
-
 .factory-flow-board--moving .react-flow__edges,
 .factory-flow-board--moving .react-flow__edgelabel-renderer,
 .factory-flow-board--moving .react-flow__nodes {

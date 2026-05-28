@@ -1,10 +1,11 @@
 "use client";
 
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties } from "react";
 import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
 import type {
   FactoryNode,
+  FactoryNodeColorTag,
   MachineTier,
   NodeThroughputResult,
   Recipe,
@@ -53,6 +54,7 @@ import { GT_NODE_COLORS } from "./node-colors";
 import { GT_TIER_COLORS } from "./tier-colors";
 
 const CROP_CONFIG_PANEL_WIDTH_CLASS = "w-[398px]";
+const COMPACT_NODE_ZOOM = 0.34;
 
 export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
@@ -64,6 +66,7 @@ export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const { projectNode, recipe, result } = data;
+  const zoom = useStore((store) => store.transform[2]);
   const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
@@ -90,6 +93,25 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     (hoveredNodeBottlenecks || selectedNodeBottlenecks) && result?.status === "bottleneck";
   const isInspectorHighlighted = isFlowResourceHighlighted || isNodeBottleneckHighlighted;
   const nodeColor = projectNode.colorTag ? GT_NODE_COLORS[projectNode.colorTag] : undefined;
+  const isCompactView =
+    zoom < COMPACT_NODE_ZOOM &&
+    !selected &&
+    !isSearchHighlighted &&
+    !isFlowResourceHighlighted &&
+    !isNodeBottleneckHighlighted;
+
+  if (isCompactView) {
+    return (
+      <CompactRecipeNode
+        projectNode={projectNode}
+        recipe={recipe}
+        result={result}
+        nodeColor={nodeColor}
+        nodeColorPaintMode={nodeColorPaintMode}
+      />
+    );
+  }
+
   const machineHandlers = getRecipeMachineHandlers(recipe);
   const selectedMachineHandler = getSelectedMachineHandler(recipe, projectNode);
   const nodeRecipe = applyRecipeInputOverrides(recipe, projectNode);
@@ -565,6 +587,108 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
 }
 
 export const RecipeNode = memo(RecipeNodeComponent);
+
+function CompactRecipeNode({
+  projectNode,
+  recipe,
+  result,
+  nodeColor,
+  nodeColorPaintMode,
+}: {
+  projectNode: FactoryNode;
+  recipe: Recipe;
+  result?: NodeThroughputResult;
+  nodeColor?: (typeof GT_NODE_COLORS)[FactoryNodeColorTag];
+  nodeColorPaintMode?: FactoryNodeColorTag | null;
+}) {
+  const tier = getOverclockedRecipeStats(
+    applyRecipeInputOverrides(recipe, projectNode),
+    projectNode,
+  ).tier;
+  const tierColor =
+    tier in GT_TIER_COLORS ? GT_TIER_COLORS[tier as keyof typeof GT_TIER_COLORS] : undefined;
+  const utilization = result?.utilization ?? 0;
+  const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
+
+  return (
+    <div
+      className={[
+        "relative w-[240px] border-2 border-[#f4f4f4] bg-[#c6c6c6] font-mono text-[#202020] shadow-[inset_2px_2px_0_#ffffff,inset_-2px_-2px_0_#555]",
+        nodeColorPaintMode !== undefined ? "cursor-crosshair" : "",
+      ].join(" ")}
+      style={
+        nodeColor
+          ? {
+              backgroundColor: nodeColor.panel,
+              borderColor: nodeColor.border,
+              boxShadow: `inset 2px 2px 0 #ffffff, inset -2px -2px 0 #555, 0 0 0 2px ${nodeColor.shadow}`,
+            }
+          : undefined
+      }
+      title={`${recipe.name}\nMachines ${projectNode.machineCount}\nUsage ${formatRate(utilizationPercent, 1)}%`}
+    >
+      <CompactResourceHandles recipe={recipe} nodeId={projectNode.id} />
+      <div className="grid h-6 grid-cols-[minmax(0,1fr)_42px] border-b-2 border-[#555] bg-[#8b8b8b] text-white shadow-[inset_1px_1px_0_#e5e5e5]">
+        <div className="minecraft-title truncate px-2 text-center text-[12px] leading-5">
+          {recipe.machineType || recipe.name}
+        </div>
+        <div
+          className="border-l-2 border-[#555] text-center text-[12px] leading-5 text-white"
+          style={{ backgroundColor: tierColor?.background, color: tierColor?.text }}
+        >
+          {tier}
+        </div>
+      </div>
+      <div className="grid grid-cols-[1fr_54px_58px] gap-1 p-1 text-[10px] leading-3">
+        <CompactStat label="Machines" value={String(projectNode.machineCount)} />
+        <CompactStat label="Usage" value={`${formatRate(utilizationPercent, 0)}%`} />
+        <CompactStat label="EU/t" value={formatRate(result?.euT ?? recipe.eut ?? 0, 0)} />
+      </div>
+    </div>
+  );
+}
+
+function CompactResourceHandles({ recipe, nodeId }: { recipe: Recipe; nodeId: string }) {
+  return (
+    <>
+      {recipe.inputs.map((resource, index) => (
+        <Handle
+          key={`compact-input-${index}`}
+          type="target"
+          position={Position.Left}
+          id={makeResourceHandleId("input", resource, index)}
+          data-resource-handle="true"
+          data-resource-node-id={nodeId}
+          data-resource-handle-id={makeResourceHandleId("input", resource, index)}
+          className="resource-slot-handle !absolute !left-0 !right-auto !h-2 !w-2 !min-w-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+          style={{ top: `${((index + 1) / (recipe.inputs.length + 1)) * 100}%` }}
+        />
+      ))}
+      {recipe.outputs.map((resource, index) => (
+        <Handle
+          key={`compact-output-${index}`}
+          type="source"
+          position={Position.Right}
+          id={makeResourceHandleId("output", resource, index)}
+          data-resource-handle="true"
+          data-resource-node-id={nodeId}
+          data-resource-handle-id={makeResourceHandleId("output", resource, index)}
+          className="resource-slot-handle !absolute !left-auto !right-0 !h-2 !w-2 !min-w-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+          style={{ top: `${((index + 1) / (recipe.outputs.length + 1)) * 100}%` }}
+        />
+      ))}
+    </>
+  );
+}
+
+function CompactStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 border border-[#777] bg-[#b6b6b6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="truncate text-[7px] uppercase text-[#424242]">{label}</div>
+      <div className="truncate text-[10px] text-black">{value}</div>
+    </div>
+  );
+}
 
 function recipeContainsSearchResource(recipe: Recipe, query: string) {
   const normalizedQuery = normalizeSearch(query);

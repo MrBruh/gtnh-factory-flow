@@ -1,6 +1,6 @@
 "use client";
 
-import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
+import { Handle, Position, useStore, type Node, type NodeProps } from "@xyflow/react";
 import { memo, type CSSProperties } from "react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
 import { formatRate, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
@@ -8,6 +8,8 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { useFactoryStore } from "@/store/factory-store";
 import { makeResourceHandleId } from "./resource-handles";
 import { GT_NODE_COLORS } from "./node-colors";
+
+const COMPACT_NODE_ZOOM = 0.34;
 
 export interface StorageNodeData extends Record<string, unknown> {
   storage: FactoryStorage;
@@ -18,6 +20,7 @@ export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 
 function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
+  const zoom = useStore((state) => state.transform[2]);
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
   const hoveredFlowResourceKey = useFactoryStore((state) => state.hoveredFlowResourceKey);
@@ -44,6 +47,26 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
     kind: storage.kind,
     id: storage.resourceId,
   });
+  const isCompactView =
+    zoom < COMPACT_NODE_ZOOM && !selected && !isHighlighted && !isSearchHighlighted;
+
+  if (isCompactView) {
+    return (
+      <CompactStorageNode
+        storage={storage}
+        title={title}
+        produced={produced}
+        consumed={consumed}
+        net={net}
+        unit={unit}
+        inputHandleId={inputHandleId}
+        outputHandleId={outputHandleId}
+        storageColor={storageColor}
+        onMouseEnter={() => setHoveredStorageResourceKey(resourceKey)}
+        onMouseLeave={() => setHoveredStorageResourceKey(undefined)}
+      />
+    );
+  }
 
   return (
     <div
@@ -99,6 +122,91 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
 }
 
 export const StorageNode = memo(StorageNodeComponent);
+
+function CompactStorageNode({
+  storage,
+  title,
+  produced,
+  consumed,
+  net,
+  unit,
+  inputHandleId,
+  outputHandleId,
+  storageColor,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  storage: FactoryStorage;
+  title: string;
+  produced: number;
+  consumed: number;
+  net: number;
+  unit: string;
+  inputHandleId: string;
+  outputHandleId: string;
+  storageColor?: (typeof GT_NODE_COLORS)[NonNullable<FactoryStorage["colorTag"]>];
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
+}) {
+  return (
+    <div
+      data-storage-node-id={storage.id}
+      data-storage-kind={storage.kind}
+      data-storage-resource-id={storage.resourceId}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      className="relative w-[150px] border-2 border-[#252525] bg-[#b9c2d4] text-[#202020] shadow-[inset_2px_2px_0_rgba(255,255,255,0.55),inset_-2px_-2px_0_rgba(0,0,0,0.35)]"
+      style={
+        storageColor
+          ? {
+              borderColor: storageColor.border,
+              backgroundColor: storageColor.panel,
+            }
+          : storage.kind === "item"
+            ? { backgroundColor: "#8a6030" }
+            : undefined
+      }
+      title={`${title}\nIn ${formatRate(produced, 3)}${unit}\nOut ${formatRate(consumed, 3)}${unit}\nNet ${net >= 0 ? "+" : ""}${formatRate(net, 3)}${unit}`}
+    >
+      <Handle
+        type="target"
+        position={Position.Left}
+        id={inputHandleId}
+        data-resource-handle="true"
+        data-resource-node-id={storage.id}
+        data-resource-handle-id={inputHandleId}
+        className="resource-slot-handle !absolute !left-0 !right-auto !top-1/2 !h-2 !w-2 !min-w-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id={outputHandleId}
+        data-resource-handle="true"
+        data-resource-node-id={storage.id}
+        data-resource-handle-id={outputHandleId}
+        className="resource-slot-handle !absolute !left-auto !right-0 !top-1/2 !h-2 !w-2 !min-w-0 !rounded-none !border-0 !bg-transparent !opacity-0"
+      />
+      <div className="h-5 truncate border-b-2 border-[#4f3518] px-1 text-center text-[11px] leading-5 text-white [text-shadow:1px_1px_0_#3f3f3f]">
+        {storage.kind === "fluid" ? "Super Tank" : "Drawer"}
+      </div>
+      <div className="truncate px-2 py-1 text-center text-[10px] leading-3">{title}</div>
+      <div className="grid grid-cols-3 gap-1 p-1 text-[8px] leading-3">
+        <CompactStorageStat label="In" value={formatCompact(produced, unit)} />
+        <CompactStorageStat label="Out" value={formatCompact(consumed, unit)} />
+        <CompactStorageStat label="Net" value={formatCompact(net, unit, { forceSign: true })} />
+      </div>
+    </div>
+  );
+}
+
+function CompactStorageStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 border border-[#777] bg-[#c6c6c6] px-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="truncate text-[7px] uppercase text-[#424242]">{label}</div>
+      <div className="truncate text-[8px] text-black">{value}</div>
+    </div>
+  );
+}
 
 function StorageHeader({ title, variant }: { title: string; variant: "tank" | "drawer" }) {
   return (

@@ -475,11 +475,7 @@ export function FactoryFlow() {
         const sourceHandle = parseResourceHandleId(connection.sourceHandle);
         const targetHandle = parseResourceHandleId(connection.targetHandle);
 
-        if (
-          sourceHandle &&
-          targetHandle &&
-          sourceHandle.side !== targetHandle.side
-        ) {
+        if (sourceHandle && targetHandle && sourceHandle.side !== targetHandle.side) {
           const outputHandle =
             sourceHandle.side === "output"
               ? { nodeId: connection.source, handleId: connection.sourceHandle ?? undefined }
@@ -958,6 +954,7 @@ export function FactoryFlow() {
   );
 
   const fitViewOptions = useMemo(() => ({ padding: 0.18 }), []);
+  const shouldVirtualizeFlow = flowNodes.length > 250 || edges.length > 400;
 
   return (
     <div
@@ -994,7 +991,7 @@ export function FactoryFlow() {
         onEdgesDelete={handleEdgesDelete}
         fitView
         fitViewOptions={fitViewOptions}
-        onlyRenderVisibleElements
+        onlyRenderVisibleElements={shouldVirtualizeFlow}
         minZoom={0.15}
         maxZoom={1.8}
       >
@@ -3944,9 +3941,7 @@ function isCompatibleResourceConnection(
   const output = sourceHandle.side === "output" ? sourceResource : targetResource;
   const input = sourceHandle.side === "input" ? sourceResource : targetResource;
 
-  return (
-    sourceHandle.side !== targetHandle.side && resourceMatchesInput(output, input)
-  );
+  return sourceHandle.side !== targetHandle.side && resourceMatchesInput(output, input);
 }
 
 function getDraggedResourceForHandle(
@@ -4048,10 +4043,14 @@ function getNodeRecipeForHandles(recipe: Recipe, node: FactoryProject["nodes"][n
     node,
     overclockedStats.tier,
   );
-  return restoreCrossKindInputOverrideVisuals({
-    ...effectiveRecipe,
-    ...adjustedRecipe,
-  }, recipe, node);
+  return restoreCrossKindInputOverrideVisuals(
+    {
+      ...effectiveRecipe,
+      ...adjustedRecipe,
+    },
+    recipe,
+    node,
+  );
 }
 
 function getClientPosition(event: MouseEvent | TouchEvent) {
