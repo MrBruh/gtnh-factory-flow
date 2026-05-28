@@ -75,6 +75,7 @@ export function RecipeBrowser() {
   const [recipeQueryError, setRecipeQueryError] = useState<string | undefined>();
   const recipeQueryCacheRef = useRef<Map<string, RecipeQueryCacheEntry>>(new Map());
   const resourceQueryCacheRef = useRef<Map<string, ResourceQueryCacheEntry>>(new Map());
+  const pendingRecipePrefetchesRef = useRef<Set<string>>(new Set());
   const debouncedRecipeSearch = useDebouncedValue(recipeSearch, RESOURCE_SEARCH_DEBOUNCE_MS);
   const debouncedRecipeBookSearch = useDebouncedValue(
     recipeBookSearch,
@@ -157,10 +158,15 @@ export function RecipeBrowser() {
       }
 
       const cacheKey = getRecipeQueryKey(recipeMap, 0);
-      if (!cacheKey || getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey)) {
+      if (
+        !cacheKey ||
+        getCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey) ||
+        pendingRecipePrefetchesRef.current.has(cacheKey)
+      ) {
         return;
       }
 
+      pendingRecipePrefetchesRef.current.add(cacheKey);
       void queryRecipeDatasetRecipes(
         datasetManifestUrl ?? DEFAULT_DATASET_MANIFEST_URL,
         selectedDatasetVersion,
@@ -178,10 +184,17 @@ export function RecipeBrowser() {
           offset: 0,
           limit: RECIPE_QUERY_LIMIT,
         },
-      ).then((result) => {
-        setCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey, result);
-        trimRecipeQueryCache(recipeQueryCacheRef.current);
-      });
+      )
+        .then((result) => {
+          setCachedRecipeQuery(recipeQueryCacheRef.current, cacheKey, result);
+          trimRecipeQueryCache(recipeQueryCacheRef.current);
+        })
+        .catch(() => {
+          // Prefetch is opportunistic; normal tab selection will surface real errors.
+        })
+        .finally(() => {
+          pendingRecipePrefetchesRef.current.delete(cacheKey);
+        });
     },
     [
       activeResource,
@@ -272,6 +285,7 @@ export function RecipeBrowser() {
       });
     }
 
+    const controller = new AbortController();
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {
@@ -288,6 +302,7 @@ export function RecipeBrowser() {
         offset: resourcePage * resourcePageSize,
         limit: resourcePageSize,
       },
+      { signal: controller.signal },
     )
       .then((result) => {
         if (cancelled) {
@@ -311,6 +326,7 @@ export function RecipeBrowser() {
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [
     datasetManifestUrl,
@@ -377,6 +393,7 @@ export function RecipeBrowser() {
       });
     }
 
+    const controller = new AbortController();
     let cancelled = false;
     queueMicrotask(() => {
       if (!cancelled) {
@@ -408,6 +425,7 @@ export function RecipeBrowser() {
           offset: recipePage * RECIPE_QUERY_LIMIT,
           limit: RECIPE_QUERY_LIMIT,
         },
+        { signal: controller.signal },
       )
         .then((result) => {
           if (cancelled) {
@@ -443,6 +461,7 @@ export function RecipeBrowser() {
 
     return () => {
       cancelled = true;
+      controller.abort();
       cancelAfterPaint();
     };
   }, [

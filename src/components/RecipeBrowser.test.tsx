@@ -187,6 +187,7 @@ describe("RecipeBrowser", () => {
         expect.any(String),
         expect.any(Object),
         expect.objectContaining({ mode: "uses" }),
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
 

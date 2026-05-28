@@ -63,26 +63,28 @@ export interface RecipeDatasetResolveResult {
 export async function initRecipeDatasetVersion(
   _manifestUrl: string,
   version: DatasetVersion,
+  options: { signal?: AbortSignal } = {},
 ): Promise<RecipeDataset> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/catalog`,
     window.location.origin,
   );
   addDatasetCacheKey(url, version);
-  return fetchJson<RecipeDataset>(url.toString());
+  return fetchJson<RecipeDataset>(url.toString(), { signal: options.signal });
 }
 
 export async function getRecipeDatasetRecipe(
   _manifestUrl: string,
   version: DatasetVersion,
   recipeId: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<Recipe> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipes/${encodeURIComponent(recipeId)}`,
     window.location.origin,
   );
   addDatasetCacheKey(url, version);
-  return fetchJson<Recipe>(url.toString());
+  return fetchJson<Recipe>(url.toString(), { signal: options.signal });
 }
 
 export async function getRecipeDatasetRecipeIds(
@@ -118,6 +120,7 @@ export async function queryRecipeDatasetRecipes(
   _manifestUrl: string,
   version: DatasetVersion,
   query: RecipeDatasetQuery,
+  options: { signal?: AbortSignal } = {},
 ): Promise<RecipeDatasetQueryResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/recipes`,
@@ -137,13 +140,14 @@ export async function queryRecipeDatasetRecipes(
     url.searchParams.set("resourceId", query.resource.id);
   }
 
-  return fetchJson<RecipeDatasetQueryResult>(url.toString());
+  return fetchJson<RecipeDatasetQueryResult>(url.toString(), { signal: options.signal });
 }
 
 export async function queryRecipeDatasetResources(
   _manifestUrl: string,
   version: DatasetVersion,
   query: RecipeDatasetResourceQuery,
+  options: { signal?: AbortSignal } = {},
 ): Promise<RecipeDatasetResourceQueryResult> {
   const url = new URL(
     `/api/datasets/${encodeURIComponent(version.id)}/resources`,
@@ -154,7 +158,7 @@ export async function queryRecipeDatasetResources(
   url.searchParams.set("limit", String(query.limit));
   addDatasetCacheKey(url, version);
 
-  return fetchJson<RecipeDatasetResourceQueryResult>(url.toString());
+  return fetchJson<RecipeDatasetResourceQueryResult>(url.toString(), { signal: options.signal });
 }
 
 export const loadRecipeDatasetVersion = initRecipeDatasetVersion;
