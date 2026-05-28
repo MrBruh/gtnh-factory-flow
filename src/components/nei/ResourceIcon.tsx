@@ -1,5 +1,6 @@
 "use client";
 
+import type { CSSProperties } from "react";
 import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
 import {
   formatNumberWithThousands,
@@ -188,17 +189,31 @@ function AmountLabel({ resource }: { resource: Pick<ResourceAmount, "kind" | "am
 
   const position =
     resource.kind === "fluid" ? "bottom-0 left-0.5" : "bottom-0 right-0.5 text-right";
+  const style = getAmountLabelStyle(label, resource.kind);
 
   return (
     <span
       className={[
-        "absolute max-w-[95%] truncate font-mono text-[10px] font-black leading-none text-white drop-shadow-[1px_1px_0_#000]",
+        "absolute max-w-[95%] whitespace-nowrap font-mono font-black text-white drop-shadow-[1px_1px_0_#000]",
         position,
       ].join(" ")}
+      style={style}
     >
       {label}
     </span>
   );
+}
+
+function getAmountLabelStyle(label: string, kind: ResourceKind): CSSProperties {
+  const length = label.length;
+  const fontSize = length <= 4 ? 10 : length <= 6 ? 8 : length <= 9 ? 6 : 5;
+  const scaleX = length <= 9 ? 1 : length <= 12 ? 0.9 : 0.78;
+  return {
+    fontSize,
+    lineHeight: `${fontSize}px`,
+    transform: scaleX === 1 ? undefined : `scaleX(${scaleX})`,
+    transformOrigin: kind === "fluid" ? "bottom left" : "bottom right",
+  };
 }
 
 function formatMinecraftAmount(amount: number, kind: ResourceKind): string | undefined {

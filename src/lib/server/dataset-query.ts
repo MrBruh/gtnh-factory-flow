@@ -380,7 +380,8 @@ async function queryDatasetRecipesFromLookup(
 ) {
   const lookup = await loadRecipeLookupIndex(catalog.version);
   const query = normalizeText(request.query);
-  const resourceScope = getRecipeResourceScope(catalog, request.resource, request.mode);
+  const recipeCatalog = await loadRecipeIndex(catalog.version.id);
+  const resourceScope = getRecipeResourceScope(recipeCatalog, request.resource, request.mode);
   const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, request.mode);
   const tierCandidatesByMap = new Map<number, number[]>();
 
@@ -1088,26 +1089,66 @@ function getFilledCellEquivalentResources(
   resource: Pick<ResourceAmount, "kind" | "id" | "displayName">,
 ): Array<Pick<ResourceAmount, "kind" | "id">> {
   const resourcesByKey = getCatalogResourcesByKey(catalog);
+  const equivalents: Array<Pick<ResourceAmount, "kind" | "id">> = [];
+  const addEquivalent = (equivalent: Pick<ResourceAmount, "kind" | "id">) => {
+    addScopedResource(equivalents, equivalent);
+  };
+
   if (resource.kind === "item") {
     const fluid = getFilledCellFluidEquivalent(resource);
-    if (!fluid) {
-      return [];
+    if (fluid) {
+      const indexedFluid = resourcesByKey.get(`fluid:${fluid.id}`);
+      addEquivalent({ kind: "fluid", id: indexedFluid?.id ?? fluid.id });
     }
 
-    const indexedFluid = resourcesByKey.get(`fluid:${fluid.id}`);
-    return [{ kind: "fluid", id: indexedFluid?.id ?? fluid.id }];
+    for (const recipe of catalog.recipes ?? []) {
+      const allResources = [...(recipe.inputs ?? []), ...(recipe.outputs ?? [])];
+      const hasSelectedCell = allResources.some(
+        (entry) => entry.kind === "item" && resourceIdsAreCompatible(entry.id, resource.id),
+      );
+      if (!hasSelectedCell) {
+        continue;
+      }
+      for (const entry of allResources) {
+        if (entry.kind === "fluid") {
+          addEquivalent({ kind: "fluid", id: entry.id });
+        }
+      }
+    }
+
+    return equivalents;
   }
 
-  const cells: Array<Pick<ResourceAmount, "kind" | "id">> = [];
   for (const candidate of resourcesByKey.values()) {
-    if (candidate.kind !== "item" || isOreDictionaryResource(candidate)) {
+    if (
+      candidate.kind === "item" &&
+      !isOreDictionaryResource(candidate) &&
+      resourceMatchesInput(resource, candidate)
+    ) {
+      addEquivalent({ kind: "item", id: candidate.id });
+    }
+  }
+
+  for (const recipe of catalog.recipes ?? []) {
+    const allResources = [...(recipe.inputs ?? []), ...(recipe.outputs ?? [])];
+    const hasSelectedFluid = allResources.some(
+      (entry) => entry.kind === "fluid" && entry.id === resource.id,
+    );
+    if (!hasSelectedFluid) {
       continue;
     }
-    if (resourceMatchesInput(resource, candidate)) {
-      cells.push({ kind: "item", id: candidate.id });
+    for (const entry of allResources) {
+      if (
+        entry.kind === "item" &&
+        !isOreDictionaryResource(entry) &&
+        resourceMatchesInput(resource, entry)
+      ) {
+        addEquivalent({ kind: "item", id: entry.id });
+      }
     }
   }
-  return cells;
+
+  return equivalents;
 }
 
 function addScopedResource(
