@@ -1,7 +1,7 @@
 "use client";
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
-import type { CSSProperties } from "react";
+import { memo, type CSSProperties } from "react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
 import { formatRate, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -16,7 +16,7 @@ export interface StorageNodeData extends Record<string, unknown> {
 
 export type StorageFlowNode = Node<StorageNodeData, "storageNode">;
 
-export function StorageNode({ data, selected }: NodeProps<StorageFlowNode>) {
+function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
   const { storage, result } = data;
   const recipeSearch = useFactoryStore((state) => state.recipeSearch);
   const hoveredStorageResourceKey = useFactoryStore((state) => state.hoveredStorageResourceKey);
@@ -97,6 +97,8 @@ export function StorageNode({ data, selected }: NodeProps<StorageFlowNode>) {
     </div>
   );
 }
+
+export const StorageNode = memo(StorageNodeComponent);
 
 function StorageHeader({ title, variant }: { title: string; variant: "tank" | "drawer" }) {
   return (
