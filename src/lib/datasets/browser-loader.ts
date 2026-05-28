@@ -169,12 +169,27 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     ...init,
   });
 
-  const payload = (await response.json()) as T | { error?: string };
+  const contentType = response.headers.get("content-type") ?? "";
+  const body = await response.text();
+  const payload =
+    body && contentType.includes("application/json")
+      ? (JSON.parse(body) as T | { error?: string })
+      : undefined;
+
   if (!response.ok) {
     throw new Error(
       typeof payload === "object" && payload && "error" in payload && payload.error
         ? payload.error
-        : `Request failed (${response.status}).`,
+        : `Request failed (${response.status} ${response.statusText || "HTTP error"}).`,
+    );
+  }
+
+  if (!payload) {
+    const preview = body.trim().replace(/\s+/g, " ").slice(0, 120);
+    throw new Error(
+      `Expected JSON but received ${contentType || "an unknown content type"}${
+        preview ? `: ${preview}` : "."
+      }`,
     );
   }
 
