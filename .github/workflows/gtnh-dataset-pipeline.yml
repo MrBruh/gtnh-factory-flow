@@ -171,7 +171,7 @@ jobs:
   publish:
     name: Publish generated datasets
     needs: build
-    if: ${{ needs.build.result == 'success' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || inputs.publish == true || inputs.force_rebuild == true) }}
+    if: ${{ always() && needs.build.result != 'cancelled' && needs.build.result != 'skipped' && (github.event_name == 'schedule' || github.event_name == 'repository_dispatch' || inputs.publish == true || inputs.force_rebuild == true) }}
     runs-on: [self-hosted, Linux, X64, gtnh-export]
     steps:
       - uses: actions/checkout@v6
@@ -197,27 +197,34 @@ jobs:
             exit 0
           fi
 
+          generated_versions=()
           has_daily=false
           for line in "${versions[@]}"; do
             IFS=$'\t' read -r channel version_id <<<"$line"
             source_dir="$staging_root/$version_id"
             incoming_dir="$dataset_root/.incoming-$version_id"
             if [ ! -d "$source_dir" ]; then
-              echo "Missing staged dataset: $source_dir" >&2
-              exit 1
+              echo "::warning::Skipping $channel dataset $version_id because no staged output exists at $source_dir"
+              continue
             fi
             if [ "$channel" = "daily" ]; then
               has_daily=true
             fi
             rm -rf "$incoming_dir"
             cp -a "$source_dir" "$incoming_dir"
+            generated_versions+=("$line")
           done
+
+          if [ "${#generated_versions[@]}" -eq 0 ]; then
+            echo "No staged datasets were generated successfully; refusing to publish." >&2
+            exit 1
+          fi
 
           if [ "$has_daily" = "true" ]; then
             find "$dataset_root" -mindepth 1 -maxdepth 1 -type d -name 'daily-*' -exec rm -rf {} +
           fi
 
-          for line in "${versions[@]}"; do
+          for line in "${generated_versions[@]}"; do
             IFS=$'\t' read -r _channel version_id <<<"$line"
             rm -rf "$dataset_root/$version_id"
             mv "$dataset_root/.incoming-$version_id" "$dataset_root/$version_id"
