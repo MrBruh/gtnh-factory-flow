@@ -95,6 +95,7 @@ interface LoadedRecipeLookupIndex {
   shards: RecipeIndexShard[];
   recipeMaps: string[];
   recipeMapIds: Map<string, number>;
+  recipeMapIdsByRecipeIndex: Int32Array;
   recipeIds: string[];
   recipeIndexesById?: Map<string, number>;
   tierIndexes: number[];
@@ -291,8 +292,8 @@ export async function queryDatasetRecipes(
   },
 ) {
   const catalog = await loadCatalog(versionId);
-  if (request.resource && catalog.version.recipeLookupIndexPath) {
-    return queryDatasetRecipesFromLookup(catalog, { ...request, resource: request.resource });
+  if (catalog.version.recipeLookupIndexPath) {
+    return queryDatasetRecipesFromLookup(catalog, request);
   }
 
   const recipeCatalog = await loadRecipeIndex(versionId);
@@ -398,7 +399,7 @@ async function queryDatasetRecipesFromLookup(
   catalog: LoadedRecipeIndex,
   request: {
     query: string;
-    resource: Pick<ResourceAmount, "kind" | "id">;
+    resource?: Pick<ResourceAmount, "kind" | "id">;
     mode: "recipes" | "uses";
     recipeMap?: string;
     maxTier: TierFilter;
@@ -408,9 +409,18 @@ async function queryDatasetRecipesFromLookup(
 ) {
   const lookup = await loadRecipeLookupIndex(catalog.version);
   const queryTokens = splitSearchTokens(request.query);
-  const resourceScope = getRecipeResourceScope(catalog, request.resource, request.mode);
-  const recipesByMap = getLookupRecipesByMap(lookup, resourceScope, request.mode);
   const tierCandidatesByMap = new Map<number, number[]>();
+
+  if (!request.resource && queryTokens.length === 0) {
+    return emptyRecipeQueryResult(request);
+  }
+
+  const resourceScope = request.resource
+    ? getRecipeResourceScope(catalog, request.resource, request.mode)
+    : undefined;
+  const recipesByMap = resourceScope
+    ? getLookupRecipesByMap(lookup, resourceScope, request.mode)
+    : getLookupRecipesByMapForSearch(lookup, queryTokens);
 
   for (const [recipeMapId, recipeIndexes] of recipesByMap.entries()) {
     const candidates = recipeIndexes.filter((recipeIndex) =>
@@ -468,7 +478,7 @@ async function queryDatasetRecipesFromLookup(
   return {
     recipes,
     total: matchingRecipeIndexes.length,
-    recipeMaps: sortedRecipeMaps,
+      recipeMaps: sortedRecipeMaps,
     recipeMapIcons: Object.fromEntries(
       sortedRecipeMaps
         .map((recipeMap) => [recipeMap, getRecipeMapIcon(catalog, recipeMap)] as const)
@@ -479,6 +489,18 @@ async function queryDatasetRecipesFromLookup(
     offset: request.offset,
     limit: request.limit,
     hasMore: request.offset + request.limit < matchingRecipeIndexes.length,
+  };
+}
+
+function emptyRecipeQueryResult(request: { offset: number; limit: number }) {
+  return {
+    recipes: [],
+    total: 0,
+    recipeMaps: [],
+    recipeMapIcons: {},
+    offset: request.offset,
+    limit: request.limit,
+    hasMore: false,
   };
 }
 
@@ -702,6 +724,10 @@ async function loadRecipeLookupIndex(version: DatasetVersion): Promise<LoadedRec
       shards: payload.shards,
       recipeMaps: payload.recipeMaps,
       recipeMapIds: new Map(payload.recipeMaps.map((recipeMap, index) => [recipeMap, index])),
+      recipeMapIdsByRecipeIndex: buildLookupRecipeMapIdsByRecipeIndex(
+        payload.recipeCount,
+        payload.entries,
+      ),
       recipeIds: payload.recipeIds ?? [],
       tierIndexes: payload.tierIndexes,
       iconScores: payload.iconScores ?? [],
@@ -729,6 +755,26 @@ async function getRecipeIndexFromLookup(
     );
   }
   return lookup.recipeIndexesById.get(recipeId) ?? -1;
+}
+
+function buildLookupRecipeMapIdsByRecipeIndex(
+  recipeCount: number,
+  entries: RecipeLookupIndexFile["entries"],
+): Int32Array {
+  const recipeMapIdsByRecipeIndex = new Int32Array(recipeCount);
+  recipeMapIdsByRecipeIndex.fill(-1);
+
+  for (const [, recipesByMap] of entries) {
+    for (const [recipeMapId, recipeIndexes] of recipesByMap) {
+      for (const recipeIndex of recipeIndexes) {
+        if (recipeIndex >= 0 && recipeIndex < recipeCount && recipeMapIdsByRecipeIndex[recipeIndex] === -1) {
+          recipeMapIdsByRecipeIndex[recipeIndex] = recipeMapId;
+        }
+      }
+    }
+  }
+
+  return recipeMapIdsByRecipeIndex;
 }
 
 async function loadShard(version: DatasetVersion, shard: RecipeIndexShard): Promise<Recipe[]> {
@@ -1264,6 +1310,51 @@ function getLookupRecipesByMap(
       recipesByMap.set(recipeMapId, [...new Set([...existing, ...recipeIndexes])]);
     }
   }
+  return recipesByMap;
+}
+
+function getLookupRecipesByMapForSearch(
+  lookup: LoadedRecipeLookupIndex,
+  queryTokens: string[],
+): Map<number, number[]> {
+  const searchIndex = ensureLookupSearchIndex(lookup);
+  const indexedCandidates = queryTextSearchIndex(searchIndex, queryTokens);
+  const recipesByMap = new Map<number, number[]>();
+  const addRecipe = (recipeIndex: number) => {
+    if (
+      queryTokens.length &&
+      !searchTokensMatch(searchIndex.tokensByEntry[recipeIndex] ?? [], queryTokens)
+    ) {
+      return;
+    }
+    const recipeMapId = lookup.recipeMapIdsByRecipeIndex[recipeIndex] ?? -1;
+    if (recipeMapId < 0) {
+      return;
+    }
+    const recipeIndexes = recipesByMap.get(recipeMapId);
+    if (recipeIndexes) {
+      recipeIndexes.push(recipeIndex);
+    } else {
+      recipesByMap.set(recipeMapId, [recipeIndex]);
+    }
+  };
+
+  if (indexedCandidates) {
+    for (const recipeIndex of indexedCandidates) {
+      addRecipe(recipeIndex);
+    }
+  } else {
+    for (let recipeIndex = 0; recipeIndex < lookup.recipeCount; recipeIndex += 1) {
+      addRecipe(recipeIndex);
+    }
+  }
+
+  for (const recipeIndexes of recipesByMap.values()) {
+    recipeIndexes.sort(
+      (left, right) => (lookup.iconScores[right] ?? 0) - (lookup.iconScores[left] ?? 0) || left - right,
+    );
+  }
+
   return recipesByMap;
 }
 
