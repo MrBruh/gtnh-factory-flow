@@ -111,6 +111,9 @@ jobs:
           mkdir -p "$icon_cache_root"
           container_name="gtnh-export-${GTNH_VERSION_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
+          docker ps -aq --filter "name=^/gtnh-export-" | xargs -r docker rm -f
+          trap 'docker rm -f "$container_name" >/dev/null 2>&1 || true' EXIT INT TERM
+
           docker run --rm \
             --name "$container_name" \
             --user "$(id -u):$(id -g)" \
@@ -143,6 +146,16 @@ jobs:
             -w /workspace \
             gtnh-factory-flow-dataset:ci \
             bash -lc 'npm install && node tools/dataset-pipeline/scripts/generate-dataset.mjs'
+
+      - name: Cleanup GTNH export containers
+        if: always()
+        continue-on-error: true
+        env:
+          GTNH_VERSION_ID: ${{ matrix.id }}
+        run: |
+          current_container="gtnh-export-${GTNH_VERSION_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker rm -f "$current_container" >/dev/null 2>&1 || true
+          docker ps -aq --filter "name=^/gtnh-export-" | xargs -r docker rm -f
 
       - uses: actions/upload-artifact@v7
         if: always()
