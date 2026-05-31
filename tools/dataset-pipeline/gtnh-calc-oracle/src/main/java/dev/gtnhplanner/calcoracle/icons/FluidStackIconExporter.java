@@ -1,11 +1,11 @@
-package com.bigbass.recex.icons;
+package dev.gtnhplanner.calcoracle.icons;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import net.minecraftforge.fluids.FluidStack;
 
-import com.bigbass.recex.RecipeExporterMod;
+import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
 public final class FluidStackIconExporter {
 
@@ -14,12 +14,12 @@ public final class FluidStackIconExporter {
     private FluidStackIconExporter() {}
 
     public static String captureIcon(FluidStack stack) {
-        if (stack == null || !Boolean.getBoolean("recex.renderIcons")) {
+        if (stack == null || !Boolean.getBoolean("gtnh.oracle.renderIcons")) {
             return null;
         }
 
         try {
-            Class<?> renderer = Class.forName("com.bigbass.recex.icons.ClientFluidStackIconRenderer");
+            Class<?> renderer = Class.forName("dev.gtnhplanner.calcoracle.icons.ClientFluidStackIconRenderer");
             Method method = renderer.getMethod("captureIcon", FluidStack.class);
             Object value = method.invoke(null, stack);
             return value instanceof String ? (String) value : null;
@@ -38,6 +38,6 @@ public final class FluidStackIconExporter {
         }
 
         warned = true;
-        RecipeExporterMod.log.warn("GTNH 1.7.10 fluid icon exporter is unavailable; continuing without fluid icons.", t);
+        GtnhCalcOracleMod.LOG.warn("GTNH 1.7.10 fluid icon exporter is unavailable; continuing without fluid icons.", t);
     }
 }

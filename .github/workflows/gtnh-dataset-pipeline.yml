@@ -110,13 +110,13 @@ jobs:
           previous_datasets_root="$HOME/data/gtnh-factory-flow/datasets/gtnh"
           pipeline_cache_root="$HOME/data/gtnh-factory-flow/pipeline-cache"
           pack_cache_root="$pipeline_cache_root/pack"
-          recex_cache_root="$pipeline_cache_root/recex"
+          oracle_cache_root="$pipeline_cache_root/oracle"
           client_runtime_cache_root="$pipeline_cache_root/client-runtime"
           icon_cache_root="$HOME/data/gtnh-factory-flow/icon-cache/${GTNH_ATLAS_ICON_SIZE}"
           rm -rf "$staging_root/${GTNH_VERSION_ID}"
           mkdir -p "$staging_root"
           mkdir -p "$previous_datasets_root"
-          mkdir -p "$pack_cache_root" "$recex_cache_root" "$client_runtime_cache_root"
+          mkdir -p "$pack_cache_root" "$oracle_cache_root" "$client_runtime_cache_root"
           mkdir -p "$icon_cache_root"
           container_name="gtnh-export-${GTNH_VERSION_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
@@ -149,7 +149,7 @@ jobs:
             -e GTNH_SPLIT_SERVER_CLIENT_EXPORT \
             -e GTNH_ORACLE_STRICT \
             -e GTNH_PACK_CACHE_DIR=/pack-cache \
-            -e GTNH_RECEX_BUILD_CACHE_DIR=/recex-cache \
+            -e GTNH_ORACLE_BUILD_CACHE_DIR=/oracle-cache \
             -e GTNH_CLIENT_RUNTIME_CACHE_DIR=/client-runtime-cache \
             -e GTNH_ICON_CACHE_DIR=/icon-cache \
             -e GTNH_PREVIOUS_DATASETS_ROOT=/previous-datasets \
@@ -158,7 +158,7 @@ jobs:
             -v "$staging_root:/datasets" \
             -v "$previous_datasets_root:/previous-datasets:ro" \
             -v "$pack_cache_root:/pack-cache" \
-            -v "$recex_cache_root:/recex-cache" \
+            -v "$oracle_cache_root:/oracle-cache" \
             -v "$client_runtime_cache_root:/client-runtime-cache" \
             -v "$icon_cache_root:/icon-cache" \
             -v "$PWD:/workspace" \
@@ -184,7 +184,11 @@ jobs:
           path: |
             .pipeline/raw-export/${{ matrix.id }}/*.log
             .pipeline/raw-export/${{ matrix.id }}/rendered-icons/*.json
+            .pipeline/raw-export/${{ matrix.id }}/oracle-records/*.json
+            .pipeline/raw-export/${{ matrix.id }}/oracle-records/oracle/*.json
+            .pipeline/raw-export/${{ matrix.id }}/oracle-export.json
             .pipeline/${{ matrix.id }}.pipeline.json
+            ~/data/gtnh-factory-flow/staging/${{ github.run_id }}/datasets/gtnh/${{ matrix.id }}/oracle/*.json
           if-no-files-found: warn
 
   publish:

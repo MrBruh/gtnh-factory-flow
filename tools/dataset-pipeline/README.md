@@ -8,7 +8,7 @@ Responsibilities:
 
 - Detect GTNH stable and daily versions.
 - Download or locate a clean GTNH client/server build.
-- Run NESQL Exporter, RecEx, or NERD outside the browser and outside the deployed app.
+- Run the GTNH Calculation Oracle outside the browser and outside the deployed app.
 - Normalize raw exporter output into the internal `RecipeDataset` model.
 - Compress and checksum generated JSON.
 - Publish datasets to the persistent dataset root, then expose them publicly at
@@ -34,10 +34,11 @@ It currently:
 - Detects the latest successful daily build from `GTNewHorizons/DreamAssemblerXXL`.
 - Creates one build job per detected channel.
 - Installs a headless runtime with Xvfb for exporters that need a Minecraft client GUI.
-- Runs `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh` by default.
+- Runs `tools/dataset-pipeline/scripts/run-gtnh-oracle-export.sh` by default.
 - Expects the exporter to write `recipes.json` to `$GTNH_DATASET_OUT_DIR`.
-- Launches the GTNH client by default, patches RecEx with a Forge 1.7.10 icon exporter,
-  and stores only actually referenced `ItemStack`/`FluidStack` PNGs in
+- Builds and injects `tools/dataset-pipeline/gtnh-calc-oracle`, a small Forge 1.7.10
+  oracle mod that exports live GTNH registries and queues only actually referenced
+  `ItemStack`/`FluidStack` PNGs in
   `$GTNH_DATASET_OUT_DIR/textures/rendered`.
 - Extracts matched real PNG textures from the selected GTNH mods for any remaining
   resources into `$GTNH_DATASET_OUT_DIR/textures`.
@@ -59,7 +60,7 @@ exporter output and not a public dump.
 The command receives:
 
 - `GTNH_DATASET_OUT_DIR` - write normalized `recipes.json` here.
-- `GTNH_RAW_EXPORT_DIR` - optional raw NESQL/RecEx/NERD output staging directory.
+- `GTNH_RAW_EXPORT_DIR` - optional raw oracle output staging directory.
 - `GTNH_INSTANCE_DIR` - optional GTNH client instance/cache directory.
 - `GTNH_DATASET_VERSION_ID` - normalized id such as `stable-2.8.4`.
 - `GTNH_DATASET_VERSION_LABEL` - upstream GTNH version label.
@@ -69,13 +70,12 @@ The command receives:
 If the runner fails or produces no recipes, the workflow fails before publishing. This is
 deliberate: the site must not expose empty placeholder datasets as GTNH versions.
 
-## RecEx Notes
+## Oracle Notes
 
-RecEx is a GTNH recipe exporter mod. Its README states that export happens while a
-world/server is loaded, and that exported files are placed in `RecEx-Records/` at the
-Minecraft instance root. The default CI runner builds a patched RecEx jar that auto-runs
-the existing exporter entry point, launches the selected GTNH build, then normalizes
-`RecEx-Records/` into `$GTNH_DATASET_OUT_DIR/recipes.json`.
+The default exporter is the in-repo `gtnhcalcoracle` Forge mod. It launches inside the
+selected GTNH runtime and writes a versioned `dev.gtnhplanner.oracle.v1` JSON export under
+`GTNH-Calc-Oracle`. The Node normalizer consumes that oracle format directly; it does not
+patch or depend on RecEx.
 
 ## Texture Icons
 
@@ -83,10 +83,8 @@ the existing exporter entry point, launches the selected GTNH build, then normal
 assets from `assets/<modid>/textures/items`, `blocks`, and `fluids`. Matched icons are
 copied under `/datasets/gtnh/<version>/textures/` and referenced through `iconPath`.
 
-Before the static scan runs, the default RecEx patch installs
-`tools/dataset-pipeline/icon-exporter-1.7.10`, a small Forge 1.7.10 client-side exporter
-inspired by IconExporter. When `GTNH_RENDER_STACK_ICONS=true`, the recipe export only
-queues icon keys while writing RecEx JSON. After the recipe JSON is complete, the client
+Before the static scan runs, the oracle mod queues stack/fluid icon keys while writing
+oracle JSON. When `GTNH_RENDER_STACK_ICONS=true`, after the recipe JSON is complete the client
 opens a temporary GUI screen, renders just those queued item/fluid icons in batches,
 filters blank and Minecraft missing-texture outputs, reuses a shared cache across
 stable/daily when the rendered filename key matches, then the Node pipeline publishes

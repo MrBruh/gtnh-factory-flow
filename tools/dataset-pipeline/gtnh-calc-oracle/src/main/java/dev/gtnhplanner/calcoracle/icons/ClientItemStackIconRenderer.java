@@ -1,4 +1,4 @@
-package com.bigbass.recex.icons;
+package dev.gtnhplanner.calcoracle.icons;
 
 import java.awt.image.BufferedImage;
 import java.awt.Graphics2D;
@@ -18,7 +18,7 @@ import java.util.Map;
 
 import javax.imageio.ImageIO;
 
-import com.bigbass.recex.RecipeExporterMod;
+import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
@@ -37,12 +37,12 @@ import org.lwjgl.opengl.GL12;
 
 public final class ClientItemStackIconRenderer {
 
-    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 256);
+    private static final int ICON_SIZE = Integer.getInteger("gtnh.oracle.iconSize", 256);
     private static final int GUI_ICON_CANVAS_SIZE = 32;
     private static final int GUI_ITEM_SIZE = 16;
-    private static final int ICON_EXPORT_BATCH_SIZE = Integer.getInteger("recex.iconExportBatchSize", 64);
-    private static final int ICON_PROGRESS_EVERY = Integer.getInteger("recex.iconProgressEvery", 256);
-    private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxIconRenderWarnings", 50);
+    private static final int ICON_EXPORT_BATCH_SIZE = Integer.getInteger("gtnh.oracle.iconExportBatchSize", 64);
+    private static final int ICON_PROGRESS_EVERY = Integer.getInteger("gtnh.oracle.iconProgressEvery", 256);
+    private static final int MAX_RENDER_WARNINGS = Integer.getInteger("gtnh.oracle.maxIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_STACK_KEY = new LinkedHashMap<String, String>();
     private static final Map<String, ItemStack> PENDING_STACKS_BY_KEY = new LinkedHashMap<String, ItemStack>();
     private static final RenderItem RENDER_ITEM = new RenderItem();
@@ -91,7 +91,7 @@ public final class ClientItemStackIconRenderer {
             return;
         }
 
-        RecipeExporterMod.log.info("GTNH 1.7.10 icon exporter is ready for on-demand ItemStack rendering.");
+        GtnhCalcOracleMod.LOG.info("GTNH 1.7.10 icon exporter is ready for on-demand ItemStack rendering.");
         minecraft.displayGuiScreen(new IconExportScreen(afterExport));
     }
 
@@ -268,7 +268,7 @@ public final class ClientItemStackIconRenderer {
             }
             done = true;
             writeIconMap();
-            RecipeExporterMod.log.info("GTNH 1.7.10 icon exporter finished initialisation.");
+            GtnhCalcOracleMod.LOG.info("GTNH 1.7.10 icon exporter finished initialisation.");
             mc.displayGuiScreen(null);
             afterExport.run();
         }
@@ -289,7 +289,7 @@ public final class ClientItemStackIconRenderer {
             this.afterExport = afterExport;
             this.iterator = PENDING_STACKS_BY_KEY.entrySet().iterator();
             this.total = PENDING_STACKS_BY_KEY.size();
-            RecipeExporterMod.log.info(
+            GtnhCalcOracleMod.LOG.info(
                 "GTNH 1.7.10 item icon batch started: "
                     + total
                     + " queued, size "
@@ -327,7 +327,7 @@ public final class ClientItemStackIconRenderer {
                 }
 
                 if (processed % ICON_PROGRESS_EVERY == 0 || processed == total) {
-                    RecipeExporterMod.log.info(
+                    GtnhCalcOracleMod.LOG.info(
                         "GTNH item icon progress "
                             + processed
                             + "/"
@@ -346,7 +346,7 @@ public final class ClientItemStackIconRenderer {
             if (!iterator.hasNext()) {
                 finished = true;
                 writeIconMap();
-                RecipeExporterMod.log.info(
+                GtnhCalcOracleMod.LOG.info(
                     "GTNH item icon batch finished: rendered "
                         + rendered
                         + ", cache "
@@ -625,15 +625,15 @@ public final class ClientItemStackIconRenderer {
     }
 
     static File iconDir() {
-        String configured = System.getProperty("recex.iconDir");
+        String configured = System.getProperty("gtnh.oracle.iconDir");
         if (configured != null && configured.trim().length() > 0) {
             return new File(configured);
         }
-        return new File(Minecraft.getMinecraft().mcDataDir, "RecEx-Rendered-Icons");
+        return new File(Minecraft.getMinecraft().mcDataDir, "GTNH-Calc-Oracle-Rendered-Icons");
     }
 
     static File cacheDir() {
-        String configured = System.getProperty("recex.iconCacheDir");
+        String configured = System.getProperty("gtnh.oracle.iconCacheDir");
         if (configured != null && configured.trim().length() > 0) {
             return new File(configured);
         }
@@ -670,7 +670,7 @@ public final class ClientItemStackIconRenderer {
     private static void warnRenderFailure(ItemStack stack, Throwable throwable) {
         renderWarnings++;
         if (renderWarnings <= MAX_RENDER_WARNINGS || renderWarnings % 1000 == 0) {
-            RecipeExporterMod.log.warn(
+            GtnhCalcOracleMod.LOG.warn(
                 "GTNH 1.7.10 icon exporter failed for "
                     + stack
                     + " ("
@@ -697,7 +697,7 @@ public final class ClientItemStackIconRenderer {
             }
             writer.write("\n}\n");
         } catch (IOException e) {
-            RecipeExporterMod.log.warn("Could not write GTNH icon map.", e);
+            GtnhCalcOracleMod.LOG.warn("Could not write GTNH icon map.", e);
         } finally {
             if (writer != null) {
                 try {

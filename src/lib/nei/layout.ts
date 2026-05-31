@@ -279,8 +279,10 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   const requiredDefinition = withRequiredMaxes(definition, recipe);
   const itemInputs = withResourceIndexes(recipe.inputs, "item");
   const fluidInputs = withResourceIndexes(recipe.inputs, "fluid");
+  const aspectInputs = withResourceIndexes(recipe.inputs, "aspect");
   const itemOutputs = withResourceIndexes(recipe.outputs, "item");
   const fluidOutputs = withResourceIndexes(recipe.outputs, "fluid");
+  const aspectOutputs = withResourceIndexes(recipe.outputs, "aspect");
 
   const shouldUseRecipeMapLayout =
     definition.id === "bee-produce" || definition.id === "component-assembly-line";
@@ -289,8 +291,10 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
     : getExplicitSlotFrames(recipe, {
         itemInputs,
         fluidInputs,
+        aspectInputs,
         fluidOutputs,
         itemOutputs,
+        aspectOutputs,
       });
   const explicitProgressBars = shouldUseRecipeMapLayout
     ? undefined
@@ -318,6 +322,12 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
       ),
     ),
     ...positionFrames(
+      aspectInputs,
+      "input",
+      "aspect",
+      aspectPositions(aspectInputs.length, "input", requiredDefinition),
+    ),
+    ...positionFrames(
       itemOutputs,
       "output",
       "item",
@@ -334,6 +344,12 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
         Math.max(fluidOutputs.length, requiredDefinition.maxFluidOutputs),
         requiredDefinition,
       ),
+    ),
+    ...positionFrames(
+      aspectOutputs,
+      "output",
+      "aspect",
+      aspectPositions(aspectOutputs.length, "output", requiredDefinition),
     ),
   ];
   const slots = frames.filter((frame): frame is NeiPositionedSlot => Boolean(frame.resource));
@@ -353,6 +369,8 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
           itemOutputs: itemOutputs.length,
           fluidInputs: fluidInputs.length,
           fluidOutputs: fluidOutputs.length,
+          aspectInputs: aspectInputs.length,
+          aspectOutputs: aspectOutputs.length,
         }),
     progressBars: getProgressBarsForRecipeMap(
       recipeMap,
@@ -368,8 +386,10 @@ function getExplicitSlotFrames(
   resources: {
     itemInputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
     fluidInputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+    aspectInputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
     itemOutputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
     fluidOutputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
+    aspectOutputs: Array<{ resource: ResourceAmount; resourceIndex: number }>;
   },
 ): NeiSlotFrame[] | undefined {
   const slots = recipe.nei?.slots;
@@ -380,12 +400,14 @@ function getExplicitSlotFrames(
   const pools = {
     "input:item": [...resources.itemInputs],
     "input:fluid": [...resources.fluidInputs],
+    "input:aspect": [...resources.aspectInputs],
     "output:item": [...resources.itemOutputs],
     "output:fluid": [...resources.fluidOutputs],
+    "output:aspect": [...resources.aspectOutputs],
   };
 
   return slots
-    .filter((slot) => slot.kind === "item" || slot.kind === "fluid")
+    .filter((slot) => slot.kind === "item" || slot.kind === "fluid" || slot.kind === "aspect")
     .map((slot) => {
       const poolKey = `${slot.side}:${slot.kind}` as keyof typeof pools;
       const pool = pools[poolKey];
@@ -872,6 +894,19 @@ function gridPositions(
   return results;
 }
 
+function aspectPositions(
+  totalCount: number,
+  side: NeiSlotSide,
+  definition: RequiredRecipeMapLayoutDefinition,
+): NeiPoint[] {
+  if (totalCount <= 0) {
+    return [];
+  }
+  const y = 8 + Math.ceil(Math.max(definition.maxItemInputs, definition.maxItemOutputs, 1) / 3) * SLOT_SIZE;
+  const x = side === "input" ? 8 : 98;
+  return gridPositions(totalCount, x, y, 4, 3);
+}
+
 function withResourceIndexes(resources: ResourceAmount[], kind: ResourceKind) {
   return resources
     .map((resource, index) => ({ resource, resourceIndex: index }))
@@ -939,6 +974,8 @@ function buildOverflowGroups(
     itemOutputs: number;
     fluidInputs: number;
     fluidOutputs: number;
+    aspectInputs: number;
+    aspectOutputs: number;
   },
 ): NeiOverflowGroup[] {
   const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
@@ -972,6 +1009,8 @@ function buildOverflowGroups(
       knownCapacity(definition.maxFluidOutputs, capacity?.maxFluidOutputs),
       counts.fluidOutputs,
     ),
+    overflowGroup("input", "aspect", 12, counts.aspectInputs),
+    overflowGroup("output", "aspect", 12, counts.aspectOutputs),
   ].filter((group): group is NeiOverflowGroup => Boolean(group));
 }
 
@@ -1012,6 +1051,8 @@ function needsLargeLayout(recipe: Recipe) {
     countKind(recipe.inputs, "item") > 6 ||
     countKind(recipe.outputs, "item") > 6 ||
     countKind(recipe.inputs, "fluid") > 3 ||
-    countKind(recipe.outputs, "fluid") > 3
+    countKind(recipe.outputs, "fluid") > 3 ||
+    countKind(recipe.inputs, "aspect") > 6 ||
+    countKind(recipe.outputs, "aspect") > 6
   );
 }

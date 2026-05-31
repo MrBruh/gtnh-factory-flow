@@ -7,7 +7,7 @@ artifacts.
 ## Goals
 
 - Track stable and daily GTNH versions.
-- Preserve source metadata for NESQL Exporter, RecEx, and NERD.
+- Preserve source metadata for the GTNH Calculation Oracle.
 - Normalize raw exporter output into the internal `RecipeDataset` model.
 - Publish immutable datasets at the public URL `/datasets/gtnh/<version>/`, backed by
   a persistent server volume outside the git repository.
@@ -24,8 +24,7 @@ artifacts.
    - Record pack version, mod list checksum, and exporter versions.
 
 3. Run exporters
-   - Execute NESQL Exporter, RecEx, or NERD in a controlled offline/headless
-     environment.
+   - Execute the GTNH Calculation Oracle in a controlled offline/headless environment.
    - Store raw output as build artifacts, not as app runtime data.
 
 4. Normalize
@@ -88,17 +87,17 @@ recipe creation as a substitute for missing GTNH data.
 `.github/workflows/gtnh-dataset-pipeline.yml` detects the current stable and daily GTNH
 targets, then calls the exporter runner.
 
-The default runner is `tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh`. It:
+The default runner is `tools/dataset-pipeline/scripts/run-gtnh-oracle-export.sh`. It:
 
 - Downloads the official selected GTNH client build by default.
-- Downloads/builds RecEx from the upstream repository.
-- Patches RecEx to auto-run the existing exporter entry point in CI and to render real
-  `ItemStack` icons from the Minecraft client renderer.
+- Builds and injects the in-repo `gtnhcalcoracle` Forge mod.
+- Exports a versioned oracle JSON format from live GTNH registries and renders real
+  `ItemStack` icons from the Minecraft client renderer when the client pass is needed.
 - Prepares a Forge 1.7.10 client launch from the GTNH Prism/MultiMC instance metadata,
   Minecraft launcher metadata, and Xvfb when no display is available.
 - Launches the pack headlessly as a client unless `GTNH_EXPORT_PACK_KIND=server` is set.
-- Uses the real runtime recipe registry from the GTNH build/exporter.
-- Normalize raw output into the internal `RecipeDataset` shape.
+- Uses the real runtime recipe registries from the GTNH build/exporter.
+- Normalizes oracle output into the internal `RecipeDataset` shape.
 - Stores rendered client stack icons first, publishes them as standalone `textures/icons`
   PNGs, then extracts real matching texture PNGs from the selected GTNH mods for resources
   that still do not have an icon.
@@ -120,17 +119,17 @@ It also receives version metadata through `GTNH_DATASET_VERSION_ID`,
 If the runner fails or produces no recipes, the workflow fails and publishes nothing. This
 prevents fake GTNH versions from appearing in the hosted UI.
 
-## RecEx Integration Notes
+## Oracle Integration Notes
 
-The official GTNH RecEx repository describes RecEx as a recipe exporter mod for
-Minecraft that exports recipes during runtime to JSON. Its README also notes that the
-export runs while a world/server is loaded and writes files to `RecEx-Records/` at the
-Minecraft instance root. The CI runner patches RecEx to call `RecipeExporter.run()`
-automatically and then normalizes the raw output.
+The oracle mod writes `dev.gtnhplanner.oracle.v1` JSON under `GTNH-Calc-Oracle` in the
+selected instance. It has adapters for GregTech recipe maps, Minecraft/Forge crafting and
+smelting, Thaumcraft crafting registries, Forestry bee species products, and IC2 crop-card
+metadata. The normalizer fails strict mode for oracle-eligible recipes that lack computed
+runtime variants and writes coverage details to `oracle/oracle-report.json`.
 
 ## Non-Goals For MVP
 
 - No in-browser modpack parsing.
-- No direct dependency on raw NESQL, RecEx, or NERD output in the planner UI.
+- No direct dependency on raw exporter output in the planner UI.
 - No claim that demo data is authoritative.
 - No public dump import as a substitute for running a client/exporter.

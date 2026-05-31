@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { PROJECT_SCHEMA_VERSION } from "./types";
 
-export const resourceKindSchema = z.enum(["item", "fluid"]);
+export const resourceKindSchema = z.enum(["item", "fluid", "aspect"]);
 export const resourceIconAtlasRefSchema = z.object({
   imagePath: z.string().min(1),
   atlasWidth: z.number().int().positive(),
@@ -108,6 +108,7 @@ export const runtimeCalculationSchema = z.object({
     "gregtech-processing-logic",
     "gregtech-overclock-calculator",
     "gregtech-recipe-baseline",
+    "thaumcraft-runtime",
     "passive-bee",
     "passive-crop",
     "synthetic-passive-bootstrap",
@@ -181,7 +182,7 @@ export const recipeSchema = z.object({
     .object({
       datasetVersionId: z.string().optional(),
       recipeMap: z.string().optional(),
-      exporter: z.enum(["nesql", "recex", "nerd", "unknown"]).optional(),
+      exporter: z.enum(["nesql", "recex", "nerd", "gtnh-oracle", "unknown"]).optional(),
       rawRecipeId: z.string().optional(),
     })
     .optional(),

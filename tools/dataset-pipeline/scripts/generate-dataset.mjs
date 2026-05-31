@@ -13,7 +13,7 @@ const sourceRef = requiredEnv("GTNH_SOURCE_REF");
 const sourceUrl = process.env.GTNH_SOURCE_URL;
 const defaultExportCommand =
   process.env.GTNH_CLIENT_EXPORT_COMMAND ||
-  "bash tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh";
+  "bash tools/dataset-pipeline/scripts/run-gtnh-oracle-export.sh";
 const splitServerClientExport = envFlag(
   "GTNH_SPLIT_SERVER_CLIENT_EXPORT",
   !process.env.GTNH_CLIENT_EXPORT_COMMAND,
@@ -52,7 +52,7 @@ if (splitServerClientExport) {
     GTNH_EXPORT_PACK_KIND: process.env.GTNH_SERVER_EXPORT_PACK_KIND ?? "server",
     GTNH_EXPORT_PHASE: "server",
     GTNH_RENDER_STACK_ICONS: "false",
-    JAVA_TOOL_OPTIONS: stripJavaProperty(process.env.JAVA_TOOL_OPTIONS, "recex.renderIcons"),
+    JAVA_TOOL_OPTIONS: stripJavaProperty(process.env.JAVA_TOOL_OPTIONS, "gtnh.oracle.renderIcons"),
   });
 
   const clientIconDecision = await shouldRunClientIconPass();
@@ -138,13 +138,13 @@ function validateDataset(dataset) {
     );
   }
   if (!dataset.sourceInfo || dataset.sourceInfo.sourceId === "unknown") {
-    throw new Error("recipes.json sourceInfo.sourceId must identify nesql, recex, or nerd.");
+    throw new Error("recipes.json sourceInfo.sourceId must identify nesql, recex, nerd, or gtnh-oracle.");
   }
   if (!Array.isArray(dataset.resources)) {
     throw new Error("recipes.json resources must be an array.");
   }
   if (!Array.isArray(dataset.recipes) || dataset.recipes.length === 0) {
-    throw new Error("recipes.json recipes must be a non-empty array from the client export.");
+    throw new Error("recipes.json recipes must be a non-empty array from the GTNH export.");
   }
   if (!Array.isArray(dataset.recipeMaps)) {
     throw new Error("recipes.json recipeMaps must be an array.");

@@ -1,4 +1,4 @@
-package com.bigbass.recex.icons;
+package dev.gtnhplanner.calcoracle.icons;
 
 import java.awt.image.BufferedImage;
 import java.io.File;
@@ -14,7 +14,7 @@ import java.util.Map;
 
 import javax.imageio.ImageIO;
 
-import com.bigbass.recex.RecipeExporterMod;
+import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -29,12 +29,12 @@ import org.lwjgl.opengl.GL11;
 
 public final class ClientFluidStackIconRenderer {
 
-    private static final int ICON_SIZE = Integer.getInteger("recex.iconSize", 256);
+    private static final int ICON_SIZE = Integer.getInteger("gtnh.oracle.iconSize", 256);
     private static final int GUI_ICON_CANVAS_SIZE = 32;
     private static final int GUI_ITEM_SIZE = 16;
-    private static final int ICON_EXPORT_BATCH_SIZE = Integer.getInteger("recex.iconExportBatchSize", 64);
-    private static final int ICON_PROGRESS_EVERY = Integer.getInteger("recex.iconProgressEvery", 256);
-    private static final int MAX_RENDER_WARNINGS = Integer.getInteger("recex.maxFluidIconRenderWarnings", 50);
+    private static final int ICON_EXPORT_BATCH_SIZE = Integer.getInteger("gtnh.oracle.iconExportBatchSize", 64);
+    private static final int ICON_PROGRESS_EVERY = Integer.getInteger("gtnh.oracle.iconProgressEvery", 256);
+    private static final int MAX_RENDER_WARNINGS = Integer.getInteger("gtnh.oracle.maxFluidIconRenderWarnings", 50);
     private static final Map<String, String> ICONS_BY_FLUID_KEY = new LinkedHashMap<String, String>();
     private static final Map<String, FluidStack> PENDING_FLUIDS_BY_KEY = new LinkedHashMap<String, FluidStack>();
     private static int renderWarnings;
@@ -91,7 +91,7 @@ public final class ClientFluidStackIconRenderer {
             this.afterExport = afterExport;
             this.iterator = PENDING_FLUIDS_BY_KEY.entrySet().iterator();
             this.total = PENDING_FLUIDS_BY_KEY.size();
-            RecipeExporterMod.log.info(
+            GtnhCalcOracleMod.LOG.info(
                 "GTNH 1.7.10 fluid icon batch started: "
                     + total
                     + " queued, size "
@@ -129,7 +129,7 @@ public final class ClientFluidStackIconRenderer {
                 }
 
                 if (processed % ICON_PROGRESS_EVERY == 0 || processed == total) {
-                    RecipeExporterMod.log.info(
+                    GtnhCalcOracleMod.LOG.info(
                         "GTNH fluid icon progress "
                             + processed
                             + "/"
@@ -148,7 +148,7 @@ public final class ClientFluidStackIconRenderer {
             if (!iterator.hasNext()) {
                 finished = true;
                 writeIconMap();
-                RecipeExporterMod.log.info(
+                GtnhCalcOracleMod.LOG.info(
                     "GTNH fluid icon batch finished: rendered "
                         + rendered
                         + ", cache "
@@ -311,7 +311,7 @@ public final class ClientFluidStackIconRenderer {
     private static void warnRenderFailure(FluidStack stack, Throwable throwable) {
         renderWarnings++;
         if (renderWarnings <= MAX_RENDER_WARNINGS || renderWarnings % 1000 == 0) {
-            RecipeExporterMod.log.warn(
+            GtnhCalcOracleMod.LOG.warn(
                 "GTNH 1.7.10 fluid icon exporter failed for "
                     + stack.getFluid().getName()
                     + " ("
@@ -364,7 +364,7 @@ public final class ClientFluidStackIconRenderer {
             }
             writer.write("\n}\n");
         } catch (IOException e) {
-            RecipeExporterMod.log.warn("Could not write GTNH fluid icon map.", e);
+            GtnhCalcOracleMod.LOG.warn("Could not write GTNH fluid icon map.", e);
         } finally {
             if (writer != null) {
                 try {

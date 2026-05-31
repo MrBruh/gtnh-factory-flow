@@ -7,7 +7,7 @@ import type {
 } from "../model/types";
 
 export interface DatasetSourceInfo {
-  sourceId: "nesql" | "recex" | "nerd" | "unknown";
+  sourceId: "nesql" | "recex" | "nerd" | "gtnh-oracle" | "unknown";
   sourceVersion?: string;
   generatedAt: string;
   gitCommit?: string;
@@ -16,7 +16,7 @@ export interface DatasetSourceInfo {
 
 export interface DatasetResource {
   id: string;
-  kind: "item" | "fluid";
+  kind: "item" | "fluid" | "aspect";
   displayName: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;
@@ -29,7 +29,7 @@ export interface DatasetResource {
 
 export interface DatasetResourceIndexEntry {
   id: string;
-  kind: "item" | "fluid";
+  kind: "item" | "fluid" | "aspect";
   displayName?: string;
   iconPath?: string;
   iconAtlas?: ResourceIconAtlasRef;

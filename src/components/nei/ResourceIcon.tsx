@@ -244,6 +244,10 @@ function formatMinecraftAmount(amount: number, kind: ResourceKind): string | und
     return Number.isInteger(amount) ? formatNumberWithThousands(amount) : trimAmount(amount);
   }
 
+  if (kind === "aspect") {
+    return trimAmount(amount);
+  }
+
   return `${trimAmount(amount)}L`;
 }
 

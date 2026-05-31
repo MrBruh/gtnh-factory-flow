@@ -3,8 +3,9 @@ export const TICKS_PER_SECOND = 20;
 
 export type ItemId = string;
 export type FluidId = string;
-export type ResourceId = ItemId | FluidId;
-export type ResourceKind = "item" | "fluid";
+export type AspectId = string;
+export type ResourceId = ItemId | FluidId | AspectId;
+export type ResourceKind = "item" | "fluid" | "aspect";
 export type ResourceKey = `${ResourceKind}:${string}`;
 
 export interface ResourceIconAtlasRef {
@@ -114,6 +115,7 @@ export interface RuntimeCalculation {
     | "gregtech-processing-logic"
     | "gregtech-overclock-calculator"
     | "gregtech-recipe-baseline"
+    | "thaumcraft-runtime"
     | "passive-bee"
     | "passive-crop"
     | "synthetic-passive-bootstrap";
@@ -183,7 +185,7 @@ export interface Recipe {
   source?: {
     datasetVersionId?: string;
     recipeMap?: string;
-    exporter?: "nesql" | "recex" | "nerd" | "unknown";
+    exporter?: "nesql" | "recex" | "nerd" | "gtnh-oracle" | "unknown";
     rawRecipeId?: string;
   };
   nei?: {

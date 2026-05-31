@@ -1,11 +1,11 @@
-package com.bigbass.recex.icons;
+package dev.gtnhplanner.calcoracle.icons;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 import net.minecraft.item.ItemStack;
 
-import com.bigbass.recex.RecipeExporterMod;
+import dev.gtnhplanner.calcoracle.GtnhCalcOracleMod;
 
 public final class ItemStackIconExporter {
 
@@ -14,12 +14,12 @@ public final class ItemStackIconExporter {
     private ItemStackIconExporter() {}
 
     public static String captureIcon(ItemStack stack) {
-        if (stack == null || !Boolean.getBoolean("recex.renderIcons")) {
+        if (stack == null || !Boolean.getBoolean("gtnh.oracle.renderIcons")) {
             return null;
         }
 
         try {
-            Class<?> renderer = Class.forName("com.bigbass.recex.icons.ClientItemStackIconRenderer");
+            Class<?> renderer = Class.forName("dev.gtnhplanner.calcoracle.icons.ClientItemStackIconRenderer");
             Method method = renderer.getMethod("captureIcon", ItemStack.class);
             Object value = method.invoke(null, stack);
             return value instanceof String ? (String) value : null;
@@ -38,6 +38,6 @@ public final class ItemStackIconExporter {
         }
 
         warned = true;
-        RecipeExporterMod.log.warn("GTNH 1.7.10 icon exporter is unavailable; continuing without item icons.", t);
+        GtnhCalcOracleMod.LOG.warn("GTNH 1.7.10 icon exporter is unavailable; continuing without item icons.", t);
     }
 }
