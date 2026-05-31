@@ -110,7 +110,16 @@ else
   else
     (cd "$oracle_project" && ./gradlew --no-daemon build)
   fi
-  oracle_jar="$(find "$oracle_project/build/libs" -maxdepth 1 -type f -name '*.jar' ! -name '*sources*' ! -name '*dev*' | sort | tail -n 1)"
+  echo "GTNH calculation oracle build outputs:"
+  find "$oracle_project/build/libs" -maxdepth 1 -type f -name '*.jar' -printf '  %f\n' | sort
+  oracle_jar="$(
+    find "$oracle_project/build/libs" -maxdepth 1 -type f -name '*.jar' \
+      ! -name '*-sources.jar' \
+      ! -name '*-dev.jar' \
+      ! -name '*-dev-preshadow.jar' \
+      ! -name '*-preshadow.jar' \
+      | sort | tail -n 1
+  )"
   if [[ -z "$oracle_jar" ]]; then
     echo "GTNH calculation oracle build did not produce a runtime jar." >&2
     exit 1
