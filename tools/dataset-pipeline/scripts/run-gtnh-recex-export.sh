@@ -17,10 +17,20 @@ export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-256}"
 export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$HOME/.cache/gtnh-factory-flow/icons/$GTNH_ATLAS_ICON_SIZE}"
 export GTNH_EXPORT_DISABLE_CLIENT_UI_MODS="${GTNH_EXPORT_DISABLE_CLIENT_UI_MODS:-false}"
 export GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS="${GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS:-true}"
+export GTNH_PACK_CACHE_DIR="${GTNH_PACK_CACHE_DIR:-}"
+export GTNH_RECEX_BUILD_CACHE_DIR="${GTNH_RECEX_BUILD_CACHE_DIR:-}"
+export GTNH_CLIENT_RUNTIME_CACHE_DIR="${GTNH_CLIENT_RUNTIME_CACHE_DIR:-}"
 
 mkdir -p "$GTNH_DATASET_OUT_DIR" "$GTNH_RAW_EXPORT_DIR" "$GTNH_INSTANCE_DIR"
 
-pack_archive="$GTNH_RAW_EXPORT_DIR/gtnh-pack.zip"
+safe_dataset_id="$(printf '%s' "$GTNH_DATASET_VERSION_ID" | tr -c 'A-Za-z0-9._-' '_')"
+safe_pack_kind="$(printf '%s' "$GTNH_EXPORT_PACK_KIND" | tr -c 'A-Za-z0-9._-' '_')"
+if [[ -n "$GTNH_PACK_CACHE_DIR" ]]; then
+  mkdir -p "$GTNH_PACK_CACHE_DIR"
+  pack_archive="$GTNH_PACK_CACHE_DIR/${safe_dataset_id}-${safe_pack_kind}.zip"
+else
+  pack_archive="$GTNH_RAW_EXPORT_DIR/gtnh-pack.zip"
+fi
 recex_work="$GTNH_RAW_EXPORT_DIR/recex-autostart"
 runner_log="$GTNH_RAW_EXPORT_DIR/export-runner.log"
 runtime_log="$GTNH_RAW_EXPORT_DIR/gtnh-runtime.log"
@@ -40,6 +50,9 @@ echo "Atlas icon size: $GTNH_ATLAS_ICON_SIZE"
 echo "Shared icon cache: $GTNH_ICON_CACHE_DIR"
 echo "Disable client UI-only mods: $GTNH_EXPORT_DISABLE_CLIENT_UI_MODS"
 echo "Fail fast on fatal runtime logs: $GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS"
+echo "Pack cache: ${GTNH_PACK_CACHE_DIR:-disabled}"
+echo "RecEx build cache: ${GTNH_RECEX_BUILD_CACHE_DIR:-disabled}"
+echo "Client runtime cache: ${GTNH_CLIENT_RUNTIME_CACHE_DIR:-disabled}"
 
 node tools/dataset-pipeline/scripts/download-gtnh-pack.mjs "$pack_archive"
 
@@ -64,25 +77,47 @@ fi
 export GTNH_INSTANCE_ROOT="$instance_root"
 mkdir -p "$instance_root/mods"
 
-rm -rf "$recex_work"
-git clone --depth 1 https://github.com/GTNewHorizons/RecEx.git "$recex_work"
-node tools/dataset-pipeline/scripts/patch-recex-autorun.mjs "$recex_work"
+recex_remote_ref="$(git ls-remote https://github.com/GTNewHorizons/RecEx.git HEAD | awk '{print $1}')"
+recex_patch_hash="$(
+  {
+    printf '%s\n' "$recex_remote_ref"
+    sha256sum tools/dataset-pipeline/scripts/patch-recex-autorun.mjs
+    find tools/dataset-pipeline/icon-exporter-1.7.10 -type f -print0 | sort -z | xargs -0 sha256sum
+  } | sha256sum | awk '{print $1}'
+)"
+recex_cached_jar=""
+if [[ -n "$GTNH_RECEX_BUILD_CACHE_DIR" ]]; then
+  mkdir -p "$GTNH_RECEX_BUILD_CACHE_DIR"
+  recex_cached_jar="$GTNH_RECEX_BUILD_CACHE_DIR/RecEx-autostart-$recex_patch_hash.jar"
+fi
 
-chmod +x "$recex_work/gradlew"
-gradle_java_paths=()
-while IFS= read -r java_bin; do
-  gradle_java_paths+=("$(dirname "$(dirname "$java_bin")")")
-done < <(find /opt/java/jvm17 /opt/java/openjdk /opt/java/jdk-25 -path '*/bin/java' -type f 2>/dev/null | sort)
-if (( ${#gradle_java_paths[@]} > 0 )); then
-  gradle_java_paths_csv="$(IFS=,; echo "${gradle_java_paths[*]}")"
-  export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.installations.paths=$gradle_java_paths_csv -Dorg.gradle.java.installations.auto-download=false"
-fi
-if [[ -x /opt/java/jdk-25/bin/java ]]; then
-  (cd "$recex_work" && JAVA_HOME=/opt/java/jdk-25 PATH="/opt/java/jdk-25/bin:$PATH" ./gradlew --no-daemon build -x spotlessJavaCheck)
+if [[ -n "$recex_cached_jar" && -f "$recex_cached_jar" ]]; then
+  echo "Using cached patched RecEx jar: $recex_cached_jar"
+  recex_jar="$recex_cached_jar"
 else
-  (cd "$recex_work" && ./gradlew --no-daemon build -x spotlessJavaCheck)
+  rm -rf "$recex_work"
+  git clone --depth 1 https://github.com/GTNewHorizons/RecEx.git "$recex_work"
+  node tools/dataset-pipeline/scripts/patch-recex-autorun.mjs "$recex_work"
+
+  chmod +x "$recex_work/gradlew"
+  gradle_java_paths=()
+  while IFS= read -r java_bin; do
+    gradle_java_paths+=("$(dirname "$(dirname "$java_bin")")")
+  done < <(find /opt/java/jvm17 /opt/java/openjdk /opt/java/jdk-25 -path '*/bin/java' -type f 2>/dev/null | sort)
+  if (( ${#gradle_java_paths[@]} > 0 )); then
+    gradle_java_paths_csv="$(IFS=,; echo "${gradle_java_paths[*]}")"
+    export GRADLE_OPTS="${GRADLE_OPTS:-} -Dorg.gradle.java.installations.paths=$gradle_java_paths_csv -Dorg.gradle.java.installations.auto-download=false"
+  fi
+  if [[ -x /opt/java/jdk-25/bin/java ]]; then
+    (cd "$recex_work" && JAVA_HOME=/opt/java/jdk-25 PATH="/opt/java/jdk-25/bin:$PATH" ./gradlew --no-daemon build -x spotlessJavaCheck)
+  else
+    (cd "$recex_work" && ./gradlew --no-daemon build -x spotlessJavaCheck)
+  fi
+  recex_jar="$(find "$recex_work/build/libs" -maxdepth 1 -type f -name 'RecEx-*.jar' ! -name '*sources*' ! -name '*dev*' | sort | tail -n 1)"
+  if [[ -n "$recex_cached_jar" ]]; then
+    cp "$recex_jar" "$recex_cached_jar"
+  fi
 fi
-recex_jar="$(find "$recex_work/build/libs" -maxdepth 1 -type f -name 'RecEx-*.jar' ! -name '*sources*' ! -name '*dev*' | sort | tail -n 1)"
 find "$instance_root/mods" -type f \( -iname '*recex*.jar' -o -iname '*recipe*export*.jar' \) -print -delete
 cp "$recex_jar" "$instance_root/mods/"
 
@@ -116,7 +151,11 @@ fi
 export _JAVA_OPTIONS="${_JAVA_OPTIONS:-} -Xms4G -Xmx${GTNH_EXPORT_MAX_MEMORY}"
 
 if [[ "$GTNH_EXPORT_PACK_KIND" == "client" ]]; then
-  client_runtime_dir="$GTNH_INSTANCE_DIR/client-runtime"
+  if [[ -n "$GTNH_CLIENT_RUNTIME_CACHE_DIR" ]]; then
+    client_runtime_dir="$GTNH_CLIENT_RUNTIME_CACHE_DIR/${safe_dataset_id}"
+  else
+    client_runtime_dir="$GTNH_INSTANCE_DIR/client-runtime"
+  fi
   launch_script="$(node tools/dataset-pipeline/scripts/prepare-forge-client-launch.mjs "$instance_root" "$client_runtime_dir")"
   bash tools/dataset-pipeline/scripts/install-ae2fc-nei-compat-shim.sh "$instance_root" "$client_runtime_dir" "$GTNH_RAW_EXPORT_DIR"
   if command -v xvfb-run >/dev/null 2>&1 && [[ -z "${DISPLAY:-}" ]]; then
@@ -221,4 +260,7 @@ echo "Normalizing RecEx export into dataset recipes.json"
 node tools/dataset-pipeline/scripts/normalize-recex-export.mjs "$raw_recex_json" "$GTNH_DATASET_OUT_DIR/recipes.json"
 echo "Applying texture icons to normalized dataset"
 node tools/dataset-pipeline/scripts/apply-texture-icons.mjs "$instance_root" "$GTNH_DATASET_OUT_DIR/recipes.json" "$GTNH_DATASET_OUT_DIR"
+echo "Computing GTNH asset fingerprint"
+fingerprint_name="${GTNH_EXPORT_PHASE:-runtime}-asset-fingerprint.json"
+node tools/dataset-pipeline/scripts/compute-asset-fingerprint.mjs "$instance_root" "$GTNH_DATASET_OUT_DIR/textures/$fingerprint_name"
 echo "RecEx export post-processing completed"

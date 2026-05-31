@@ -57,6 +57,64 @@ describe("calculateThroughput", () => {
     expect(result.fuelEstimate?.fuelPerSecond).toBeCloseTo(0.28125);
   });
 
+  it("prefers GTNH runtime calculation variants over local overclock formulas", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "runtime-oracle-project",
+      name: "Runtime oracle test",
+      recipes: [
+        {
+          id: "runtime-recipe",
+          name: "Runtime recipe",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 400,
+          eut: 30,
+          inputs: [{ kind: "item", id: "dust", amount: 1 }],
+          outputs: [{ kind: "item", id: "plate", amount: 1 }],
+          runtimeCalculation: {
+            sourceKind: "gregtech-overclock-calculator",
+            sourceClass: "gregtech.api.util.OverclockCalculator",
+            recipeMap: "Assembler",
+            status: "computed",
+            oracleEligible: true,
+            strict: true,
+            variants: [
+              {
+                id: "tier-mv",
+                overclockTier: "MV",
+                durationTicks: 7,
+                eut: 123,
+                outputs: [{ kind: "item", id: "plate", amount: 3, chance: 0.5 }],
+              },
+            ],
+          },
+        },
+      ],
+      nodes: [
+        {
+          id: "runtime-node",
+          recipeId: "runtime-recipe",
+          machineCount: 2,
+          parallel: 1,
+          overclockTier: "MV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+    const node = result.nodes["runtime-node"];
+
+    expect(node.operationRatePerSecond).toBeCloseTo((2 * 20) / 7);
+    expect(node.outputs["item:plate"].amountPerSecond).toBeCloseTo((3 * 0.5 * 2 * 20) / 7);
+    expect(node.euT).toBe(246);
+    expect(node.warnings).toEqual([]);
+  });
+
   it("derives edge demand from the target node consumption", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,

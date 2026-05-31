@@ -11,18 +11,24 @@ const versionLabel = requiredEnv("GTNH_VERSION_LABEL");
 const sourceKind = requiredEnv("GTNH_SOURCE_KIND");
 const sourceRef = requiredEnv("GTNH_SOURCE_REF");
 const sourceUrl = process.env.GTNH_SOURCE_URL;
-const exportCommand =
+const defaultExportCommand =
   process.env.GTNH_CLIENT_EXPORT_COMMAND ||
   "bash tools/dataset-pipeline/scripts/run-gtnh-recex-export.sh";
+const splitServerClientExport = envFlag(
+  "GTNH_SPLIT_SERVER_CLIENT_EXPORT",
+  !process.env.GTNH_CLIENT_EXPORT_COMMAND,
+);
 const datasetsRoot = process.env.GTNH_DATASETS_ROOT ?? path.join("public", "datasets", "gtnh");
 const outDir = path.join(datasetsRoot, versionId);
 const pipelineDir = ".pipeline";
-const instanceDir = path.join(pipelineDir, "client-instance", versionId);
+const serverInstanceDir = path.join(pipelineDir, "server-instance", versionId);
+const clientInstanceDir = path.join(pipelineDir, "client-instance", versionId);
 const rawExportDir = path.join(pipelineDir, "raw-export", versionId);
 
 await fs.mkdir(outDir, { recursive: true });
 await fs.mkdir(pipelineDir, { recursive: true });
-await fs.mkdir(instanceDir, { recursive: true });
+await fs.mkdir(serverInstanceDir, { recursive: true });
+await fs.mkdir(clientInstanceDir, { recursive: true });
 await fs.mkdir(rawExportDir, { recursive: true });
 
 const pipelineRecord = {
@@ -37,30 +43,38 @@ const pipelineRecord = {
   generatedAt: new Date().toISOString(),
 };
 
-console.log(`Running configured exporter for ${versionId}.`);
 const { spawn } = await import("node:child_process");
-const exitCode = await new Promise((resolve) => {
-  const child = spawn(exportCommand, {
-    shell: true,
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      GTNH_DATASET_OUT_DIR: outDir,
-      GTNH_DATASET_VERSION_ID: versionId,
-      GTNH_DATASET_CHANNEL: channel,
-      GTNH_DATASET_VERSION_LABEL: versionLabel,
-      GTNH_INSTANCE_DIR: instanceDir,
-      GTNH_RAW_EXPORT_DIR: rawExportDir,
-      GTNH_SOURCE_KIND: sourceKind,
-      GTNH_SOURCE_REF: sourceRef,
-      ...(sourceUrl ? { GTNH_SOURCE_URL: sourceUrl } : {}),
-    },
-  });
-  child.on("exit", (code) => resolve(code ?? 1));
-});
 
-if (exitCode !== 0) {
-  throw new Error(`Exporter command failed with exit code ${exitCode}.`);
+if (splitServerClientExport) {
+  console.log(`Running split server/client exporter for ${versionId}.`);
+  await runExporter("server oracle export", {
+    GTNH_INSTANCE_DIR: serverInstanceDir,
+    GTNH_EXPORT_PACK_KIND: process.env.GTNH_SERVER_EXPORT_PACK_KIND ?? "server",
+    GTNH_EXPORT_PHASE: "server",
+    GTNH_RENDER_STACK_ICONS: "false",
+    JAVA_TOOL_OPTIONS: stripJavaProperty(process.env.JAVA_TOOL_OPTIONS, "recex.renderIcons"),
+  });
+
+  const clientIconDecision = await shouldRunClientIconPass();
+  if (clientIconDecision.runClient) {
+    console.log(`Running client icon export for ${versionId}: ${clientIconDecision.reason}`);
+    await runExporter("client icon export", {
+      GTNH_INSTANCE_DIR: clientInstanceDir,
+      GTNH_EXPORT_PACK_KIND: "client",
+      GTNH_EXPORT_PHASE: "client",
+      GTNH_RENDER_STACK_ICONS: process.env.GTNH_RENDER_STACK_ICONS ?? "true",
+    });
+  } else {
+    console.log(`Skipping client icon export for ${versionId}: ${clientIconDecision.reason}`);
+    if (clientIconDecision.previousDatasetDir) {
+      await reusePreviousIcons(clientIconDecision.previousDatasetDir);
+    }
+  }
+} else {
+  console.log(`Running configured exporter for ${versionId}.`);
+  await runExporter("configured export", {
+    GTNH_INSTANCE_DIR: clientInstanceDir,
+  });
 }
 console.log(`Exporter finished for ${versionId}.`);
 
@@ -309,12 +323,160 @@ async function buildRecipeIndex(datasetPath, datasetOutDir) {
   }
 }
 
+async function runExporter(label, envOverrides = {}) {
+  const exitCode = await new Promise((resolve) => {
+    const childEnv = removeUndefined({
+      ...process.env,
+      GTNH_DATASET_OUT_DIR: outDir,
+      GTNH_DATASET_VERSION_ID: versionId,
+      GTNH_DATASET_CHANNEL: channel,
+      GTNH_DATASET_VERSION_LABEL: versionLabel,
+      GTNH_RAW_EXPORT_DIR: rawExportDir,
+      GTNH_SOURCE_KIND: sourceKind,
+      GTNH_SOURCE_REF: sourceRef,
+      ...(sourceUrl ? { GTNH_SOURCE_URL: sourceUrl } : {}),
+      ...envOverrides,
+    });
+    const child = spawn(defaultExportCommand, {
+      shell: true,
+      stdio: "inherit",
+      env: childEnv,
+    });
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+
+  if (exitCode !== 0) {
+    throw new Error(`${label} failed with exit code ${exitCode}.`);
+  }
+}
+
+async function shouldRunClientIconPass() {
+  if (!envFlag("GTNH_RENDER_STACK_ICONS", true)) {
+    return { runClient: false, reason: "GTNH_RENDER_STACK_ICONS is disabled." };
+  }
+  if (envFlag("GTNH_FORCE_CLIENT_ICON_EXPORT", false)) {
+    return { runClient: true, reason: "GTNH_FORCE_CLIENT_ICON_EXPORT is enabled." };
+  }
+
+  const currentFingerprint = await readJsonIfExists(
+    path.join(outDir, "textures", "server-asset-fingerprint.json"),
+  );
+  if (!currentFingerprint?.hash) {
+    return { runClient: true, reason: "server asset fingerprint is missing." };
+  }
+
+  const previousDatasetDir = await findPreviousDatasetDir();
+  if (!previousDatasetDir) {
+    return { runClient: true, reason: "no previous same-channel dataset is available." };
+  }
+
+  const previousFingerprint = await readJsonIfExists(
+    path.join(previousDatasetDir, "textures", "server-asset-fingerprint.json"),
+  );
+  if (!previousFingerprint?.hash) {
+    return {
+      runClient: true,
+      reason: "previous same-channel server asset fingerprint is missing.",
+      previousDatasetDir,
+    };
+  }
+  if (previousFingerprint.hash !== currentFingerprint.hash) {
+    return {
+      runClient: true,
+      reason: "server asset fingerprint changed.",
+      previousDatasetDir,
+    };
+  }
+
+  return {
+    runClient: false,
+    reason: "server asset fingerprint is unchanged.",
+    previousDatasetDir,
+  };
+}
+
+async function findPreviousDatasetDir() {
+  const previousRoot = process.env.GTNH_PREVIOUS_DATASETS_ROOT;
+  if (!previousRoot) {
+    return undefined;
+  }
+  const manifest = await readJsonIfExists(path.join(previousRoot, "datasets.manifest.json"));
+  const versions = (manifest?.versions ?? [])
+    .filter((version) => version.channel === channel && version.id !== versionId)
+    .sort((left, right) => String(right.publishedAt).localeCompare(String(left.publishedAt)));
+  for (const version of versions) {
+    const candidate = path.join(previousRoot, version.id);
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+async function reusePreviousIcons(previousDatasetDir) {
+  const exitCode = await new Promise((resolve) => {
+    const child = spawn(
+      "node",
+      [
+        "tools/dataset-pipeline/scripts/reuse-previous-icons.mjs",
+        path.join(outDir, "recipes.json"),
+        previousDatasetDir,
+        outDir,
+      ],
+      {
+        stdio: "inherit",
+        env: process.env,
+      },
+    );
+    child.on("exit", (code) => resolve(code ?? 1));
+  });
+
+  if (exitCode !== 0) {
+    throw new Error(`Previous icon reuse failed with exit code ${exitCode}.`);
+  }
+}
+
+async function readJsonIfExists(filePath) {
+  try {
+    return JSON.parse(await fs.readFile(filePath, "utf8"));
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return undefined;
+    }
+    throw error;
+  }
+}
+
+function stripJavaProperty(value, propertyName) {
+  if (!value) {
+    return value;
+  }
+  const propertyPattern = new RegExp(`(?:^|\\s)-D${escapeRegExp(propertyName)}(?:=[^\\s]*)?`, "g");
+  return value.replace(propertyPattern, "").trim();
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function removeUndefined(value) {
+  return Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined));
+}
+
 function requiredEnv(name) {
   const value = process.env[name];
   if (!value) {
     throw new Error(`Missing required environment variable ${name}.`);
   }
   return value;
+}
+
+function envFlag(name, defaultValue) {
+  const rawValue = process.env[name];
+  if (rawValue === undefined || rawValue === "") {
+    return defaultValue;
+  }
+  return /^(1|true|yes|on)$/i.test(rawValue);
 }
 
 function positiveIntEnv(name, defaultValue) {

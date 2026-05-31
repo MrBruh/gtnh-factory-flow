@@ -17,6 +17,7 @@ const gtnhVersion = requiredEnv("GTNH_DATASET_VERSION_LABEL");
 const generatedAt = new Date().toISOString();
 const outDir = path.dirname(outputPath);
 const renderedIconDir = process.env.GTNH_RENDERED_ICON_DIR;
+const oracleStrict = envFlag("GTNH_ORACLE_STRICT", false);
 console.log("Staging rendered icons.");
 const renderedIconFiles = await stageRenderedIcons(renderedIconDir, outDir);
 console.log(`Indexing rendered icon colors for ${renderedIconFiles.length} files.`);
@@ -440,6 +441,7 @@ if (dataset.recipes.length === 0) {
   throw new Error("RecEx normalization produced zero recipes.");
 }
 
+await writeOracleReport(dataset);
 await pruneUnusedRenderedIcons(dataset, outDir);
 
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -533,6 +535,7 @@ function normalizeGregtechRecipes(source) {
         eut: rawRecipe.eut ?? 0,
         inputs,
         outputs,
+        runtimeCalculation: buildGregtechRuntimeCalculation(machineType, rawRecipe, outputs),
         programmedCircuit: detectProgrammedCircuit(inputs),
         notes:
           "Generated from a real GTNH RecEx runtime export. Tier metadata is best-effort until a richer exporter normalizer is added.",
@@ -696,6 +699,12 @@ function normalizePassiveNeiSource(source) {
         eut: machineType === "Bee Production" ? 0 : 8,
         inputs,
         outputs,
+        runtimeCalculation: buildPassiveRuntimeCalculation(machineType, {
+          durationTicks: passiveNeiDurationTicks(rawRecipe, machineType),
+          eut: machineType === "Bee Production" ? 0 : 8,
+          outputs,
+          sourceClass: "RecEx NEI passive handler",
+        }),
         notes: "Generated from a GTNH RecEx NEI passive-production export.",
         source: {
           datasetVersionId,
@@ -1167,6 +1176,14 @@ function addSyntheticPassiveRecipe({
       neiSlot:
         entry.neiSlot ?? syntheticPassiveOutputPosition(slotIndex, outputFrameCount, machineType),
     })),
+    runtimeCalculation: buildPassiveRuntimeCalculation(machineType, {
+      durationTicks,
+      eut,
+      outputs: recipeOutputs,
+      sourceClass: passiveRuntimeSourceClass(machineType),
+      warning:
+        "Passive oracle data is exported as deterministic dataset variants until the runtime adapter can enumerate every server-side environment state.",
+    }),
     notes: note,
     source: {
       datasetVersionId,
@@ -1447,6 +1464,287 @@ function addRecipe(recipe) {
     addResource(resource);
   }
   recipes.push(recipe);
+}
+
+function buildGregtechRuntimeCalculation(machineType, rawRecipe, outputs) {
+  const exported = normalizeExportedRuntimeCalculation(rawRecipe?.rc, {
+    recipeMap: machineType,
+    fallbackOutputs: outputs,
+  });
+  if (exported) {
+    return exported;
+  }
+
+  return {
+    sourceKind: "gregtech-recipe-baseline",
+    sourceClass: "gregtech.api.util.GTRecipe",
+    recipeMap: machineType,
+    status: "computed",
+    oracleEligible: true,
+    strict: true,
+    generatedAt,
+    variants: [
+      {
+        id: "base",
+        label: "GTRecipe baseline",
+        durationTicks: Math.max(1, Math.trunc(Number(rawRecipe?.dur) || 1)),
+        eut: Math.max(0, Number(rawRecipe?.eut) || 0),
+        outputs: runtimeResources(outputs),
+      },
+    ],
+    warnings: [
+      "RecEx did not expose an overclock oracle payload for this recipe; using GTRecipe runtime baseline fields.",
+    ],
+  };
+}
+
+function normalizeExportedRuntimeCalculation(rawRuntimeCalculation, { recipeMap, fallbackOutputs }) {
+  if (!rawRuntimeCalculation || typeof rawRuntimeCalculation !== "object") {
+    return undefined;
+  }
+
+  const variants = Array.isArray(rawRuntimeCalculation.variants)
+    ? rawRuntimeCalculation.variants.map((variant, index) =>
+        normalizeRuntimeVariant(variant, index, fallbackOutputs),
+      )
+    : [];
+  const normalizedVariants = variants.filter(Boolean);
+  if (normalizedVariants.length === 0) {
+    return undefined;
+  }
+
+  return {
+    sourceKind: normalizeRuntimeSourceKind(
+      rawRuntimeCalculation.sourceKind,
+      "gregtech-overclock-calculator",
+    ),
+    sourceClass: text(rawRuntimeCalculation.sourceClass, "gregtech.api.util.OverclockCalculator"),
+    sourceVersion: optionalText(rawRuntimeCalculation.sourceVersion),
+    recipeMap: text(rawRuntimeCalculation.recipeMap, recipeMap),
+    status: normalizeRuntimeStatus(rawRuntimeCalculation.status),
+    oracleEligible: rawRuntimeCalculation.oracleEligible !== false,
+    strict: rawRuntimeCalculation.strict !== false,
+    generatedAt: optionalText(rawRuntimeCalculation.generatedAt) ?? generatedAt,
+    variants: normalizedVariants,
+    warnings: normalizeStringArray(rawRuntimeCalculation.warnings),
+  };
+}
+
+function normalizeRuntimeVariant(variant, index, fallbackOutputs) {
+  if (!variant || typeof variant !== "object") {
+    return undefined;
+  }
+  const durationTicks = Math.trunc(Number(variant.durationTicks ?? variant.duration));
+  const eut = Number(variant.eut ?? variant.euT ?? variant.consumption);
+  if (!Number.isFinite(durationTicks) || durationTicks <= 0 || !Number.isFinite(eut) || eut < 0) {
+    return undefined;
+  }
+
+  const outputs = Array.isArray(variant.outputs) ? runtimeResources(variant.outputs) : undefined;
+  return removeUndefined({
+    id: text(variant.id, `variant-${index}`),
+    label: optionalText(variant.label),
+    machineHandlerId: optionalText(variant.machineHandlerId),
+    overclockTier: optionalText(variant.overclockTier),
+    coilTier: optionalText(variant.coilTier),
+    machineConfigTiers:
+      variant.machineConfigTiers && typeof variant.machineConfigTiers === "object"
+        ? Object.fromEntries(
+            Object.entries(variant.machineConfigTiers)
+              .filter((entry) => entry[0] && entry[1])
+              .map(([key, value]) => [String(key), String(value)]),
+          )
+        : undefined,
+    durationTicks,
+    eut,
+    parallel:
+      Number.isFinite(Number(variant.parallel)) && Number(variant.parallel) > 0
+        ? Number(variant.parallel)
+        : undefined,
+    inputs: Array.isArray(variant.inputs) ? runtimeResources(variant.inputs) : undefined,
+    outputs: outputs && outputs.length > 0 ? outputs : runtimeResources(fallbackOutputs),
+    notes: optionalText(variant.notes),
+  });
+}
+
+function buildPassiveRuntimeCalculation(machineType, { durationTicks, eut, outputs, sourceClass, warning }) {
+  const sourceKind = passiveRuntimeSourceKind(machineType);
+  return {
+    sourceKind,
+    sourceClass,
+    recipeMap: machineType,
+    status: "computed",
+    oracleEligible: true,
+    strict: true,
+    generatedAt,
+    variants: [
+      {
+        id: "base",
+        label: "Passive baseline",
+        machineConfigTiers: defaultPassiveRuntimeConfig(machineType),
+        durationTicks,
+        eut,
+        outputs: runtimeResources(outputs),
+      },
+    ],
+    warnings: warning ? [warning] : undefined,
+  };
+}
+
+function passiveRuntimeSourceKind(machineType) {
+  const normalized = normalizeLabel(machineType);
+  if (normalized.includes("bee") || normalized.includes("apiary") || normalized.includes("alveary")) {
+    return "passive-bee";
+  }
+  if (normalized.includes("crop")) {
+    return "passive-crop";
+  }
+  return "synthetic-passive-bootstrap";
+}
+
+function passiveRuntimeSourceClass(machineType) {
+  const normalized = normalizeLabel(machineType);
+  if (normalized.includes("bee")) {
+    return "Forestry/KubaTech passive bee catalog adapter";
+  }
+  if (normalized.includes("cropnh")) {
+    return "CropsNH passive crop catalog adapter";
+  }
+  if (normalized.includes("crop")) {
+    return "IC2/KubaTech passive crop catalog adapter";
+  }
+  return "GTNH passive production adapter";
+}
+
+function defaultPassiveRuntimeConfig(machineType) {
+  const normalized = normalizeLabel(machineType);
+  if (normalized.includes("bee") || normalized.includes("apiary") || normalized.includes("alveary")) {
+    return {
+      beeFrameSlot1: "none",
+      beeFrameSlot2: "none",
+      beeFrameSlot3: "none",
+      beeEnvironment: "preferred",
+    };
+  }
+  if (normalized.includes("crop")) {
+    return {
+      cropStats: normalized.includes("cropnh") ? "31-31-31" : "23-31-0",
+      cropHydration: "normal",
+      cropNutrients: "none",
+      cropSoil: "farmland",
+      cropSoilDepth: "1",
+      cropAirQuality: "normal",
+    };
+  }
+  return undefined;
+}
+
+function runtimeResources(resources) {
+  return (resources ?? [])
+    .map((resource) =>
+      removeUndefined({
+        kind: resource?.kind,
+        id: resource?.id,
+        amount: Number(resource?.amount),
+        chance:
+          Number.isFinite(Number(resource?.chance)) && Number(resource.chance) >= 0
+            ? Number(resource.chance)
+            : undefined,
+      }),
+    )
+    .filter(
+      (resource) =>
+        (resource.kind === "item" || resource.kind === "fluid") &&
+        typeof resource.id === "string" &&
+        resource.id.length > 0 &&
+        Number.isFinite(resource.amount) &&
+        resource.amount > 0,
+    );
+}
+
+async function writeOracleReport(dataset) {
+  const report = {
+    schemaVersion: 1,
+    datasetVersionId,
+    generatedAt,
+    strict: oracleStrict,
+    totals: {
+      recipes: dataset.recipes.length,
+      eligible: 0,
+      computed: 0,
+      partial: 0,
+      missing: 0,
+    },
+    missing: [],
+    warnings: [],
+  };
+
+  for (const recipe of dataset.recipes) {
+    const runtimeCalculation = recipe.runtimeCalculation;
+    if (!runtimeCalculation?.oracleEligible) {
+      continue;
+    }
+    report.totals.eligible += 1;
+    if (runtimeCalculation.status === "computed" && runtimeCalculation.variants?.length > 0) {
+      report.totals.computed += 1;
+    } else if (runtimeCalculation.status === "partial") {
+      report.totals.partial += 1;
+      report.missing.push(oracleReportRecipe(recipe, "partial"));
+    } else {
+      report.totals.missing += 1;
+      report.missing.push(oracleReportRecipe(recipe, "missing"));
+    }
+    for (const warning of runtimeCalculation.warnings ?? []) {
+      report.warnings.push({ recipeId: recipe.id, recipeMap: recipe.source?.recipeMap, warning });
+    }
+  }
+
+  await fs.writeFile(path.join(outDir, "oracle-report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  console.log(
+    `Runtime oracle coverage: ${report.totals.computed}/${report.totals.eligible} eligible recipe(s) computed.`,
+  );
+
+  if (oracleStrict && report.missing.length > 0) {
+    const sample = report.missing
+      .slice(0, 20)
+      .map((entry) => `${entry.recipeId} (${entry.reason})`)
+      .join(", ");
+    throw new Error(
+      `GTNH runtime oracle strict mode failed: ${report.missing.length} eligible recipe(s) are missing or partial. ${sample}`,
+    );
+  }
+}
+
+function oracleReportRecipe(recipe, reason) {
+  return {
+    recipeId: recipe.id,
+    name: recipe.name,
+    recipeMap: recipe.source?.recipeMap ?? recipe.machineType,
+    reason,
+  };
+}
+
+function normalizeRuntimeSourceKind(value, fallback) {
+  const allowed = new Set([
+    "gregtech-processing-logic",
+    "gregtech-overclock-calculator",
+    "gregtech-recipe-baseline",
+    "passive-bee",
+    "passive-crop",
+    "synthetic-passive-bootstrap",
+  ]);
+  return allowed.has(value) ? value : fallback;
+}
+
+function normalizeRuntimeStatus(value) {
+  return value === "partial" || value === "missing" ? value : "computed";
+}
+
+function normalizeStringArray(value) {
+  const strings = Array.isArray(value)
+    ? value.map((entry) => optionalText(entry)).filter(Boolean)
+    : [];
+  return strings.length > 0 ? strings : undefined;
 }
 
 function machineConfigControlsForRecipe(machineType, specialValue, machineConfigControls = []) {
@@ -3096,6 +3394,11 @@ function text(value, defaultText) {
   return normalized.length > 0 ? normalized : defaultText;
 }
 
+function optionalText(value) {
+  const normalized = String(value ?? "").trim();
+  return normalized.length > 0 ? normalized : undefined;
+}
+
 function compareById(a, b) {
   return a.id.localeCompare(b.id);
 }
@@ -3114,6 +3417,14 @@ function requiredEnv(name) {
     throw new Error(`Missing required environment variable ${name}.`);
   }
   return value;
+}
+
+function envFlag(name, defaultValue) {
+  const value = process.env[name];
+  if (value === undefined || value === "") {
+    return defaultValue;
+  }
+  return /^(1|true|yes|on)$/i.test(value);
 }
 
 function stripBom(value) {

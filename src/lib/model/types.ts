@@ -87,6 +87,47 @@ export interface RecipeOutput extends ResourceAmount {
   byproduct?: boolean;
 }
 
+export interface RuntimeCalculationResource {
+  kind: ResourceKind;
+  id: ResourceId;
+  amount: number;
+  chance?: number;
+}
+
+export interface RuntimeCalculationVariant {
+  id: string;
+  label?: string;
+  machineHandlerId?: string;
+  overclockTier?: MachineTier | string;
+  coilTier?: string;
+  machineConfigTiers?: Record<string, string>;
+  durationTicks: number;
+  eut: number;
+  parallel?: number;
+  inputs?: RuntimeCalculationResource[];
+  outputs?: RuntimeCalculationResource[];
+  notes?: string;
+}
+
+export interface RuntimeCalculation {
+  sourceKind:
+    | "gregtech-processing-logic"
+    | "gregtech-overclock-calculator"
+    | "gregtech-recipe-baseline"
+    | "passive-bee"
+    | "passive-crop"
+    | "synthetic-passive-bootstrap";
+  sourceClass?: string;
+  sourceVersion?: string;
+  recipeMap?: string;
+  status: "computed" | "partial" | "missing";
+  oracleEligible: boolean;
+  strict?: boolean;
+  generatedAt?: string;
+  variants: RuntimeCalculationVariant[];
+  warnings?: string[];
+}
+
 export interface MachineProfile {
   machineType: string;
   minimumTier: MachineTier | string;
@@ -137,6 +178,7 @@ export interface Recipe {
   machineProfile?: MachineProfile;
   machineHandlers?: MachineHandler[];
   machineConfigControls?: MachineConfigControl[];
+  runtimeCalculation?: RuntimeCalculation;
   isDemo?: boolean;
   source?: {
     datasetVersionId?: string;

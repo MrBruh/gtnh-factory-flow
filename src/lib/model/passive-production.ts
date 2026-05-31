@@ -238,7 +238,9 @@ function enrichCropProductionRecipe(recipe: Recipe): Recipe {
     machineConfigControls,
     notes: withPassiveProductionNote(
       recipe.notes,
-      "Crop production controls are best-effort passive averages. Seed count multiplies output without adding power draw.",
+      recipe.runtimeCalculation?.status === "computed"
+        ? "Crop production uses GTNH runtime baseline data when a matching oracle variant exists; unmatched controls fall back to passive averages."
+        : "Crop production controls are best-effort passive averages. Seed count multiplies output without adding power draw.",
     ),
   };
 }
@@ -256,7 +258,9 @@ function enrichBeeProductionRecipe(recipe: Recipe): Recipe {
     machineConfigControls: mergeMachineConfigControls(recipe.machineConfigControls, controls),
     notes: withPassiveProductionNote(
       recipe.notes,
-      "Bee production controls are best-effort averages based on Forestry production chance modifiers.",
+      recipe.runtimeCalculation?.status === "computed"
+        ? "Bee production uses GTNH runtime baseline data when a matching oracle variant exists; unmatched controls fall back to Forestry production modifiers."
+        : "Bee production controls are best-effort averages based on Forestry production chance modifiers.",
     ),
   };
 }

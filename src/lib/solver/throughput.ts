@@ -28,6 +28,11 @@ import { applyRecipeInputOverrides } from "../model/recipe-input-overrides";
 import { applyMachineHandlerToRecipe } from "../model/recipe-rules";
 import { getMachineOutputMultiplier, getMachineParallelMultiplier } from "./machine-effects";
 import { getOverclockedRecipeStats } from "./overclock";
+import {
+  getRuntimeCalculationOutputs,
+  runtimeCalculationWarning,
+  selectRuntimeCalculationVariant,
+} from "./runtime-calculation";
 
 const EPSILON = 0.000001;
 
@@ -102,7 +107,10 @@ export function calculateThroughput(
     const nodeRecipe = applyRecipeInputOverrides(recipe, node);
     const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, node);
     const overclockedRecipe = getOverclockedRecipeStats(nodeRecipe, node);
-    const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, node);
+    const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
+    const runtimeOutputs = getRuntimeCalculationOutputs(effectiveRecipe, node);
+    const machineParallelMultiplier =
+      runtimeVariant?.parallel ?? getMachineParallelMultiplier(effectiveRecipe, node);
     const operationRatePerSecond =
       (node.machineCount * node.parallel * machineParallelMultiplier * TICKS_PER_SECOND) /
       overclockedRecipe.durationTicks;
@@ -118,11 +126,13 @@ export function calculateThroughput(
       addFlow(inputs, input, amountPerSecond);
     }
 
-    for (const output of effectiveRecipe.outputs) {
+    for (const output of runtimeOutputs ?? effectiveRecipe.outputs) {
       const amountPerSecond =
         output.amount *
         getChanceMultiplier(output) *
-        getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier) *
+        (runtimeOutputs
+          ? 1
+          : getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier)) *
         operationRatePerSecond;
       addFlow(outputs, output, amountPerSecond);
     }
@@ -145,7 +155,9 @@ export function calculateThroughput(
       utilization: 0,
       theoreticalMachinesRequired: 0,
       status: "underutilized",
-      warnings: [],
+      warnings: [runtimeCalculationWarning(effectiveRecipe, node)].filter(
+        (warning): warning is string => Boolean(warning),
+      ),
     };
   }
 
@@ -1458,6 +1470,10 @@ function selectLimitingOutput(
 
 function applyOutputMultipliers(recipe: Recipe, node: FactoryProject["nodes"][number]) {
   const effectiveRecipe = applyMachineHandlerToRecipe(recipe, node);
+  const runtimeOutputs = getRuntimeCalculationOutputs(effectiveRecipe, node);
+  if (runtimeOutputs) {
+    return runtimeOutputs;
+  }
   const overclockedRecipe = getOverclockedRecipeStats(recipe, node);
   return effectiveRecipe.outputs.map((output) => {
     const multiplier = getMachineOutputMultiplier(

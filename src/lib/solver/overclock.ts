@@ -12,6 +12,11 @@ import {
 } from "./machine-effects";
 import { isIndustrialApiaryMachineType } from "@/lib/model/passive-production";
 import type { FactoryNode, MachineTier, Recipe } from "@/lib/model/types";
+import {
+  resolveRuntimeTier,
+  runtimeOverclockSteps,
+  selectRuntimeCalculationVariant,
+} from "./runtime-calculation";
 
 type VoltageTier = Exclude<MachineTier, "DEMO">;
 type OverclockRecipeInput = Pick<Recipe, "durationTicks" | "eut" | "minimumTier"> &
@@ -24,6 +29,7 @@ type OverclockRecipeInput = Pick<Recipe, "durationTicks" | "eut" | "minimumTier"
       | "machineHandlers"
       | "machineProfile"
       | "machineConfigControls"
+      | "runtimeCalculation"
     >
   >;
 
@@ -49,6 +55,17 @@ export function getOverclockedRecipeStats(
       ? minimumTier
       : requestedTier;
   const overclockSteps = Math.max(0, getVoltageTierIndex(tier) - getVoltageTierIndex(minimumTier));
+  const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
+  if (runtimeVariant) {
+    const runtimeTier = resolveRuntimeTier(runtimeVariant, tier);
+    return {
+      tier: runtimeTier,
+      minimumTier,
+      overclockSteps: runtimeOverclockSteps(runtimeTier, minimumTier),
+      durationTicks: runtimeVariant.durationTicks,
+      eut: runtimeVariant.eut,
+    };
+  }
   if (isFixedTimeTierDrivenOutputRecipe(effectiveRecipe)) {
     return {
       tier,

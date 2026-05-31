@@ -81,6 +81,48 @@ export const recipeOutputSchema = resourceAmountSchema.extend({
   byproduct: z.boolean().optional(),
 });
 
+export const runtimeCalculationResourceSchema = z.object({
+  kind: resourceKindSchema,
+  id: z.string().min(1),
+  amount: z.number().positive(),
+  chance: z.number().min(0).max(1).optional(),
+});
+
+export const runtimeCalculationVariantSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).optional(),
+  machineHandlerId: z.string().min(1).optional(),
+  overclockTier: z.string().min(1).optional(),
+  coilTier: z.string().min(1).optional(),
+  machineConfigTiers: z.record(z.string().min(1), z.string().min(1)).optional(),
+  durationTicks: z.number().int().positive("Duration must be at least 1 tick"),
+  eut: z.number().min(0, "EU/t must be zero or positive"),
+  parallel: z.number().positive().optional(),
+  inputs: z.array(runtimeCalculationResourceSchema).optional(),
+  outputs: z.array(runtimeCalculationResourceSchema).optional(),
+  notes: z.string().optional(),
+});
+
+export const runtimeCalculationSchema = z.object({
+  sourceKind: z.enum([
+    "gregtech-processing-logic",
+    "gregtech-overclock-calculator",
+    "gregtech-recipe-baseline",
+    "passive-bee",
+    "passive-crop",
+    "synthetic-passive-bootstrap",
+  ]),
+  sourceClass: z.string().min(1).optional(),
+  sourceVersion: z.string().min(1).optional(),
+  recipeMap: z.string().min(1).optional(),
+  status: z.enum(["computed", "partial", "missing"]),
+  oracleEligible: z.boolean(),
+  strict: z.boolean().optional(),
+  generatedAt: z.string().optional(),
+  variants: z.array(runtimeCalculationVariantSchema),
+  warnings: z.array(z.string()).optional(),
+});
+
 export const machineProfileSchema = z.object({
   machineType: z.string().min(1),
   minimumTier: z.string().min(1),
@@ -133,6 +175,7 @@ export const recipeSchema = z.object({
   machineProfile: machineProfileSchema.optional(),
   machineHandlers: z.array(machineHandlerSchema).optional(),
   machineConfigControls: z.array(machineConfigControlSchema).optional(),
+  runtimeCalculation: runtimeCalculationSchema.optional(),
   isDemo: z.boolean().optional(),
   source: z
     .object({
