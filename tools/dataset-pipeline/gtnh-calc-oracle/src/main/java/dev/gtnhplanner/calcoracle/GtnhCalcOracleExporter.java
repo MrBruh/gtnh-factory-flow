@@ -559,9 +559,29 @@ public final class GtnhCalcOracleExporter {
         }
         if (variants.isEmpty()) {
             out.put("status", "missing");
-            out.put("warnings", Arrays.asList("OverclockCalculator runtime invocation did not return any variant."));
+            List<String> warnings = new ArrayList<String>();
+            warnings.add("OverclockCalculator runtime invocation did not return any variant.");
+            if ("blast-furnace-heat".equals(profile) && recipe.mSpecialValue > maxSupportedBlastFurnaceHeat()) {
+                out.put("oracleEligible", Boolean.FALSE);
+                out.put("strict", Boolean.FALSE);
+                warnings.add(
+                    "Recipe heat " + recipe.mSpecialValue
+                        + " K exceeds the exported EBF/Volcanus heat profiles; a Godforge/high-heat blast adapter is required."
+                );
+            }
+            out.put("warnings", warnings);
         }
         return out;
+    }
+
+    private int maxSupportedBlastFurnaceHeat() {
+        int maxHeat = 0;
+        for (HeatingCoilTier coil : HEATING_COIL_TIERS) {
+            for (int tier = 0; tier < GT_VOLTAGE_NAMES.length; tier++) {
+                maxHeat = Math.max(maxHeat, coil.heat + (100 * (tier - 2)));
+            }
+        }
+        return maxHeat;
     }
 
     private List<Object> buildGtOverclockVariant(GTRecipe recipe, int tier, VariantProfile profile) {
