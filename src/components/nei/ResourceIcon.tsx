@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import type { ResourceAmount, ResourceKind } from "@/lib/model/types";
+import type { ResourceAmount, ResourceIconAtlasRef, ResourceKind } from "@/lib/model/types";
 import {
   formatNumberWithThousands,
   resourceLabel,
@@ -122,7 +122,9 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
   const baseLines = resource.tooltip?.length
     ? [
         resourceLabel(resource),
-        ...resource.tooltip.filter((line) => stripOreDictionaryPrefix(line) && !isNbtTooltipLine(line)),
+        ...resource.tooltip.filter(
+          (line) => stripOreDictionaryPrefix(line) && !isNbtTooltipLine(line),
+        ),
       ]
     : [resourceLabel(resource)].filter(Boolean);
   const chanceLine =
@@ -134,13 +136,16 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
       ? "Not consumed"
       : undefined;
   const visibleAlternatives =
-    resource.alternatives?.filter((alternative) => !isFluidCellAlternative(resource, alternative)) ??
-    [];
+    resource.alternatives?.filter(
+      (alternative) => !isFluidCellAlternative(resource, alternative),
+    ) ?? [];
   const alternativesLine = visibleAlternatives.length
     ? `Accepts: ${visibleAlternatives
         .slice(0, 12)
         .map((alternative) => resourceLabel(alternative))
-        .join(", ")}${visibleAlternatives.length > 12 ? `, +${visibleAlternatives.length - 12} more` : ""}`
+        .join(
+          ", ",
+        )}${visibleAlternatives.length > 12 ? `, +${visibleAlternatives.length - 12} more` : ""}`
     : undefined;
 
   return [...baseLines, alternativesLine, chanceLine, consumedLine].filter(Boolean).join("\n");
@@ -179,6 +184,11 @@ function IconImage({
     return null;
   }
 
+  const atlas = resource.iconAtlas;
+  if (atlas) {
+    return <AtlasIconImage resource={resource} atlas={atlas} iconPixelSize={iconPixelSize} />;
+  }
+
   if (!resource.iconPath) {
     return null;
   }
@@ -190,14 +200,56 @@ function IconImage({
       alt={resourceLabel(resource)}
       className={
         iconPixelSize
-          ? "max-w-none object-contain"
-          : "h-[calc(200%-8px)] w-[calc(200%-8px)] max-w-none object-contain"
+          ? "minecraft-pixel-art max-w-none object-contain"
+          : "minecraft-pixel-art h-[calc(200%-8px)] w-[calc(200%-8px)] max-w-none object-contain"
       }
       style={{
         ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
       }}
     />
   );
+}
+
+function AtlasIconImage({
+  resource,
+  atlas,
+  iconPixelSize,
+}: {
+  resource: Pick<ResourceAmount, "id" | "displayName">;
+  atlas: ResourceIconAtlasRef;
+  iconPixelSize?: number;
+}) {
+  const positionX = getAtlasBackgroundPosition(atlas.x, atlas.atlasWidth, atlas.width);
+  const positionY = getAtlasBackgroundPosition(atlas.y, atlas.atlasHeight, atlas.height);
+
+  return (
+    <span
+      role="img"
+      aria-label={resourceLabel(resource)}
+      className={
+        iconPixelSize
+          ? "minecraft-pixel-art block max-w-none bg-no-repeat"
+          : "minecraft-pixel-art block h-[calc(200%-8px)] w-[calc(200%-8px)] max-w-none bg-no-repeat"
+      }
+      style={{
+        ...(iconPixelSize ? { width: iconPixelSize, height: iconPixelSize } : undefined),
+        backgroundImage: `url('${atlas.imagePath}')`,
+        backgroundSize: `${(atlas.atlasWidth / atlas.width) * 100}% ${
+          (atlas.atlasHeight / atlas.height) * 100
+        }%`,
+        backgroundPosition: `${positionX} ${positionY}`,
+      }}
+    />
+  );
+}
+
+function getAtlasBackgroundPosition(offset: number, atlasSize: number, iconSize: number) {
+  const travel = atlasSize - iconSize;
+  if (travel <= 0) {
+    return "0%";
+  }
+
+  return `${(offset / travel) * 100}%`;
 }
 
 function AmountLabel({ resource }: { resource: Pick<ResourceAmount, "kind" | "amount"> }) {

@@ -74,7 +74,10 @@ export function NeiRecipeCanvas({
   const renderedIconPixelSize = iconPixelSize ?? slotSize;
   return (
     <div
-      className={["relative overflow-visible border border-transparent", className].join(" ")}
+      className={[
+        "minecraft-pixel-art relative overflow-visible border border-transparent",
+        className,
+      ].join(" ")}
       style={{
         width,
         height,

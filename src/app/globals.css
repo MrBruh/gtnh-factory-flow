@@ -43,12 +43,18 @@ textarea {
   z-index: 20 !important;
 }
 
-.factory-flow-board .react-flow__viewport {
+.factory-flow-board--moving .react-flow__viewport {
   will-change: transform;
 }
 
 .factory-flow-board .react-flow__node {
   contain: layout style;
+}
+
+.minecraft-pixel-art,
+.minecraft-pixel-art * {
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
 }
 
 .factory-flow-board--moving .react-flow__edges,
