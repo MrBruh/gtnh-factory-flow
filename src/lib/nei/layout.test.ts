@@ -450,23 +450,43 @@ describe("NEI layout", () => {
     });
   });
 
+  it("does not let an infusion source label override an explicit arcane crafting machine type", () => {
+    expect(
+      getNeiRecipeLayout(
+        recipe({
+          machineType: "Shaped Arcane Crafting",
+          sourceRecipeMap: "Arcane Infusion",
+          inputs: [
+            { kind: "item", id: "center", amount: 1 },
+            { kind: "aspect", id: "thaumcraft:aspect:ordo", amount: 8 },
+          ],
+          outputs: [{ kind: "item", id: "result", amount: 1 }],
+        }),
+      ),
+    ).toMatchObject({
+      id: "thaumcraft-arcane",
+      chrome: "native",
+      title: "Shaped Arcane Crafting",
+    });
+  });
+
   it("uses Thaumcraft crucible NEI plugin positions for aspects and catalyst", () => {
     const layout = getNeiRecipeLayout(
       recipe({
         machineType: "Thaumcraft Crucible",
         sourceRecipeMap: "Thaumcraft Crucible",
         inputs: [
-          { kind: "item", id: "catalyst", amount: 1, neiSlot: { x: 51, y: 30 } },
-          { kind: "aspect", id: "thaumcraft:aspect:aer", amount: 4, neiSlot: { x: 61, y: 79 } },
-          { kind: "aspect", id: "thaumcraft:aspect:ordo", amount: 8, neiSlot: { x: 81, y: 79 } },
+          { kind: "item", id: "catalyst", amount: 1, neiSlot: { x: 60, y: 34 } },
+          { kind: "aspect", id: "thaumcraft:aspect:aer", amount: 4, neiSlot: { x: 70, y: 78 } },
+          { kind: "aspect", id: "thaumcraft:aspect:ordo", amount: 8, neiSlot: { x: 90, y: 78 } },
         ],
-        outputs: [{ kind: "item", id: "result", amount: 1, neiSlot: { x: 71, y: 8 } }],
+        outputs: [{ kind: "item", id: "result", amount: 1, neiSlot: { x: 76, y: 8 } }],
         nei: {
           slots: [
-            { side: "input", kind: "item", slotIndex: 0, x: 51, y: 30 },
-            { side: "input", kind: "aspect", slotIndex: 0, x: 61, y: 79 },
-            { side: "input", kind: "aspect", slotIndex: 1, x: 81, y: 79 },
-            { side: "output", kind: "item", slotIndex: 0, x: 71, y: 8 },
+            { side: "input", kind: "item", slotIndex: 0, x: 60, y: 34 },
+            { side: "input", kind: "aspect", slotIndex: 0, x: 70, y: 78 },
+            { side: "input", kind: "aspect", slotIndex: 1, x: 90, y: 78 },
+            { side: "output", kind: "item", slotIndex: 0, x: 76, y: 8 },
           ],
           progressBars: [],
         },
@@ -475,14 +495,20 @@ describe("NEI layout", () => {
 
     expect(layout.id).toBe("thaumcraft-crucible");
     expect(layout.chrome).toBe("native");
-    expect(layout.canvas).toMatchObject({ width: 170, height: 140 });
+    expect(layout.canvas).toMatchObject({ width: 170, height: 132 });
+    expect(layout.decorations[0]).toMatchObject({
+      kind: "texture",
+      imagePath: "/nei/thaumcraft/gui/gui_researchbook_overlay.png",
+      sourceX: 0,
+      sourceY: 20,
+    });
     expect(
       layout.slots.map((slot) => [slot.kind, slot.side, slot.resource.id, slot.x, slot.y]),
     ).toEqual([
-      ["item", "input", "catalyst", 51, 30],
-      ["aspect", "input", "thaumcraft:aspect:aer", 61, 79],
-      ["aspect", "input", "thaumcraft:aspect:ordo", 81, 79],
-      ["item", "output", "result", 71, 8],
+      ["item", "input", "catalyst", 60, 34],
+      ["aspect", "input", "thaumcraft:aspect:aer", 70, 78],
+      ["aspect", "input", "thaumcraft:aspect:ordo", 90, 78],
+      ["item", "output", "result", 76, 8],
     ]);
     expect(layout.progressBars).toEqual([]);
   });

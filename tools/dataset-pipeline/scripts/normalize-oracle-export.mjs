@@ -318,7 +318,7 @@ function normalizeThaumcraft(domain) {
     const inputs = normalizedRecipe.inputs;
 
     recipeMaps.add(machineType);
-    setRecipeMapIcon(machineType, rawRecipe.output);
+    setRecipeMapIcon(machineType, thaumcraftRecipeMapIcon(rawRecipe.type));
     const durationTicks = positiveInt(rawRecipe.durationTicks, thaumcraftDuration(rawRecipe.type));
     addRecipe({
       id: recipeId("thaumcraft", rawRecipe.type, rawRecipe.id),
@@ -385,7 +385,7 @@ function normalizeThaumcraftRecipe(rawRecipe) {
   };
 
   const outputSlot =
-    type === "infusion" ? { x: 75, y: 1 } : type === "crucible" ? { x: 71, y: 8 } : { x: 74, y: 2 };
+    type === "infusion" ? { x: 75, y: 1 } : type === "crucible" ? { x: 76, y: 8 } : { x: 74, y: 2 };
   const output = resourceAmount(rawRecipe.output, { neiSlot: outputSlot });
   if (output) {
     addSlot("output", output.kind, 0, outputSlot);
@@ -400,7 +400,7 @@ function normalizeThaumcraftRecipe(rawRecipe) {
     const aspectSlots = thaumcraftInfusionAspectSlots((rawRecipe.aspects ?? []).length);
     (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
   } else if (type === "crucible") {
-    addInput(rawRecipe.catalyst ?? rawRecipe.centralInput, { x: 51, y: 30 }, 0);
+    addInput(rawRecipe.catalyst ?? rawRecipe.centralInput, { x: 60, y: 34 }, 0);
     const aspectSlots = thaumcraftCrucibleAspectSlots((rawRecipe.aspects ?? []).length);
     (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
   } else if (type === "arcane") {
@@ -471,8 +471,8 @@ function thaumcraftInfusionAspectSlots(count) {
 function thaumcraftCrucibleAspectSlots(count) {
   const rows = Math.floor((count - 1) / 3);
   const centerOffset = (3 - (count % 3)) * 10;
-  const baseX = 51;
-  const baseY = 79 - 10 * rows;
+  const baseX = 60;
+  const baseY = 78 - 10 * rows;
   return Array.from({ length: count }, (_, index) => {
     const wrap = Math.floor(index / 3) >= rows && (rows > 1 || count < 3) ? 1 : 0;
     return {
@@ -1711,6 +1711,34 @@ function thaumcraftMachineType(type) {
   if (type === "crucible") return "Thaumcraft Crucible";
   if (type === "arcane") return "Thaumcraft Arcane Crafting";
   return "Thaumcraft";
+}
+
+function thaumcraftRecipeMapIcon(type) {
+  if (type === "infusion") {
+    return {
+      kind: "item",
+      id: "Thaumcraft:blockStoneDevice@2",
+      displayName: "Infusion Matrix",
+      modId: "Thaumcraft",
+    };
+  }
+  if (type === "crucible") {
+    return {
+      kind: "item",
+      id: "Thaumcraft:blockMetalDevice@0",
+      displayName: "Crucible",
+      modId: "Thaumcraft",
+    };
+  }
+  if (type === "arcane") {
+    return {
+      kind: "item",
+      id: "Thaumcraft:blockTable@0",
+      displayName: "Arcane Worktable",
+      modId: "Thaumcraft",
+    };
+  }
+  return undefined;
 }
 
 function thaumcraftDuration(type) {

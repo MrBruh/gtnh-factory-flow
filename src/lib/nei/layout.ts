@@ -195,7 +195,7 @@ const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-crucible",
   chrome: "native",
   title: "Thaumcraft Crucible",
-  canvas: { width: 170, height: 140 },
+  canvas: { width: 170, height: 132 },
   maxItemInputs: 1,
   maxItemOutputs: 1,
   maxFluidInputs: 0,
@@ -203,9 +203,8 @@ const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
   progressBars: [],
   unframedSlotKinds: ["aspect"],
   decorations: [
-    thaumcraftOverlayDecoration(30, 3, 0, 3, 56, 17, 1.75),
-    thaumcraftOverlayDecoration(30, 48.5, 0, 20, 56, 48, 1.75),
-    thaumcraftOverlayDecoration(66.75, 34.5, 100, 84, 11, 13, 1.75),
+    thaumcraftOverlayDecoration(36, 44, 0, 20, 56, 48, 1.75),
+    thaumcraftOverlayDecoration(74, 32, 100, 84, 11, 13, 1.75),
   ],
 };
 const THAUMCRAFT_ARCANE_LAYOUT: RecipeMapLayoutDefinition = {
@@ -635,7 +634,12 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
 }
 
 function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLayoutDefinition {
+  const machineExact = findRecipeMapLayout(recipe.machineType);
+  if (machineExact?.chrome === "native") return machineExact;
+
   const exact = findRecipeMapLayout(recipeMap);
+  if (exact?.chrome === "native") return exact;
+
   const thaumcraft = inferThaumcraftLayoutDefinition(recipeMap, recipe);
   if (thaumcraft) return thaumcraft;
   if (exact && recipeMapMatches(recipeMap, "Blast Furnace")) return exact;
@@ -716,29 +720,16 @@ function inferThaumcraftLayoutDefinition(
   recipeMap: string,
   recipe: Pick<Recipe, "machineType" | "name" | "inputs" | "outputs" | "eut">,
 ): RecipeMapLayoutDefinition | undefined {
-  const label = normalizeRecipeMapName(
-    [recipeMap, recipe.machineType, recipe.name].filter(Boolean).join(" "),
-  );
-  if (!label.includes("thaumcraft") && !label.includes("arcane")) {
+  const labels = [recipe.machineType, recipeMap, recipe.name].filter(Boolean);
+  if (!labels.some(isThaumcraftLabel)) {
     return undefined;
   }
 
-  if (label.includes("infusion")) {
-    return THAUMCRAFT_INFUSION_LAYOUT;
-  }
-
-  if (label.includes("crucible")) {
-    return THAUMCRAFT_CRUCIBLE_LAYOUT;
-  }
-
-  if (label.includes("crafting") || label.includes("arcane")) {
-    return label.includes("shapeless")
-      ? {
-          ...THAUMCRAFT_ARCANE_LAYOUT,
-          id: "thaumcraft-shapeless-arcane",
-          title: "Shapeless Arcane Crafting",
-        }
-      : THAUMCRAFT_ARCANE_LAYOUT;
+  for (const label of labels) {
+    const inferred = inferThaumcraftLayoutFromLabel(label);
+    if (inferred) {
+      return inferred;
+    }
   }
 
   const aspectInputs = countKind(recipe.inputs ?? [], "aspect");
@@ -747,6 +738,49 @@ function inferThaumcraftLayoutDefinition(
   }
 
   return undefined;
+}
+
+function inferThaumcraftLayoutFromLabel(label: string): RecipeMapLayoutDefinition | undefined {
+  const normalized = normalizeRecipeMapName(label);
+
+  if (normalized.includes("shaped") && normalized.includes("arcane")) {
+    return THAUMCRAFT_ARCANE_LAYOUT;
+  }
+
+  if (normalized.includes("shapeless") && normalized.includes("arcane")) {
+    return {
+      ...THAUMCRAFT_ARCANE_LAYOUT,
+      id: "thaumcraft-shapeless-arcane",
+      title: "Shapeless Arcane Crafting",
+    };
+  }
+
+  if (normalized.includes("crafting") && normalized.includes("arcane")) {
+    return THAUMCRAFT_ARCANE_LAYOUT;
+  }
+
+  if (normalized === "arcane infusion" || normalized.endsWith(" arcane infusion")) {
+    return THAUMCRAFT_INFUSION_LAYOUT;
+  }
+
+  if (normalized === "thaumcraft infusion" || normalized.endsWith(" thaumcraft infusion")) {
+    return THAUMCRAFT_INFUSION_LAYOUT;
+  }
+
+  if (normalized.includes("infusion")) {
+    return THAUMCRAFT_INFUSION_LAYOUT;
+  }
+
+  if (normalized.includes("crucible")) {
+    return THAUMCRAFT_CRUCIBLE_LAYOUT;
+  }
+
+  return undefined;
+}
+
+function isThaumcraftLabel(label: string): boolean {
+  const normalized = normalizeRecipeMapName(label);
+  return normalized.includes("thaumcraft") || normalized.includes("arcane");
 }
 
 function isPlainFurnaceRecipeMap(recipeMap: string): boolean {

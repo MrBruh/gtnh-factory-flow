@@ -1789,7 +1789,9 @@ function buildRecipeMapIconMap(
   return new Map(
     recipeMaps.map((recipeMap) => [
       recipeMap,
-      getExplicitRecipeMapIcon(catalog, recipeMap) ?? findRecipeMapIcon(recipeMap, candidates),
+      getKnownRecipeMapIcon(catalog, recipeMap) ??
+        getExplicitRecipeMapIcon(catalog, recipeMap) ??
+        findRecipeMapIcon(recipeMap, candidates),
     ]),
   );
 }
@@ -1805,11 +1807,62 @@ function getRecipeMapIcon(
 
   catalog.recipeMapIconCandidates ??= getRecipeMapIconCandidates(catalog.resourceIndex);
   const icon =
+    getKnownRecipeMapIcon(catalog, recipeMap) ??
     getExplicitRecipeMapIcon(catalog, recipeMap) ??
     findRecipeMapIcon(recipeMap, catalog.recipeMapIconCandidates);
   catalog.recipeMapIconCache.set(recipeMap, icon);
   return icon;
 }
+
+function getKnownRecipeMapIcon(
+  catalog: LoadedRecipeIndex,
+  recipeMap: string,
+): DatasetResourceIndexEntry | undefined {
+  const normalizedMap = normalizeText(recipeMap);
+  const known = KNOWN_RECIPE_MAP_ICONS.find((entry) =>
+    entry.recipeMaps.some((candidate) => normalizeText(candidate) === normalizedMap),
+  );
+  const icon = known
+    ? hydrateRecipeMapIconResource(known.resource, getCatalogResourcesByKey(catalog))
+    : undefined;
+  return icon?.iconPath || icon?.iconAtlas ? icon : undefined;
+}
+
+type KnownRecipeMapIcon = RecipeMapIconEntry & { recipeMaps: string[] };
+
+const KNOWN_RECIPE_MAP_ICONS: KnownRecipeMapIcon[] = [
+  {
+    recipeMap: "Thaumcraft Infusion",
+    recipeMaps: ["Thaumcraft Infusion", "Arcane Infusion"],
+    resource: {
+      kind: "item",
+      id: "Thaumcraft:blockStoneDevice@2",
+      displayName: "Infusion Matrix",
+    },
+  },
+  {
+    recipeMap: "Thaumcraft Crucible",
+    recipeMaps: ["Thaumcraft Crucible", "Crucible"],
+    resource: {
+      kind: "item",
+      id: "Thaumcraft:blockMetalDevice@0",
+      displayName: "Crucible",
+    },
+  },
+  {
+    recipeMap: "Thaumcraft Arcane Crafting",
+    recipeMaps: [
+      "Thaumcraft Arcane Crafting",
+      "Shaped Arcane Crafting",
+      "Shapeless Arcane Crafting",
+    ],
+    resource: {
+      kind: "item",
+      id: "Thaumcraft:blockTable@0",
+      displayName: "Arcane Worktable",
+    },
+  },
+];
 
 function getExplicitRecipeMapIcon(
   catalog: LoadedRecipeIndex,
@@ -1855,6 +1908,24 @@ function hydrateRecipeMapIconResource(
     oreDictionary: indexed?.oreDictionary,
     alternatives: indexed?.alternatives,
   };
+}
+
+function findResourceByKindAndId(
+  resourcesByKey: Map<string, DatasetResource | DatasetResourceIndexEntry>,
+  kind: ResourceAmount["kind"],
+  id: string,
+): DatasetResource | DatasetResourceIndexEntry | undefined {
+  const exact = resourcesByKey.get(`${kind}:${id}`);
+  if (exact) {
+    return exact;
+  }
+  const normalizedKey = normalizeText(`${kind}:${id}`);
+  for (const [key, resource] of resourcesByKey) {
+    if (normalizeText(key) === normalizedKey) {
+      return resource;
+    }
+  }
+  return undefined;
 }
 
 interface RecipeMapIconCandidate {

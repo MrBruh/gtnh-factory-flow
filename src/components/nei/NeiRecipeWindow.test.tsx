@@ -42,9 +42,10 @@ describe("NeiRecipeWindow", () => {
     );
 
     expect(screen.queryByText(/Total:/)).toBeNull();
-    expect(screen.getByText("Arcane Infusion")).toBeTruthy();
-    expect(screen.getByText("Research")).toBeTruthy();
-    expect(screen.getByText("See All")).toBeTruthy();
+    expect(screen.queryByText("Arcane Infusion")).toBeNull();
+    expect(screen.queryByText("Page 1/1")).toBeNull();
+    expect(screen.queryByText("Research")).toBeNull();
+    expect(screen.queryByText("See All")).toBeNull();
     const aspectIcon = screen.getByRole("img", { name: "Ordo" });
     const colorLayer = aspectIcon.querySelector("span:last-child") as HTMLElement;
     expect(colorLayer.style.maskImage).toContain("/nei/thaumcraft/aspects/ordo.png");
