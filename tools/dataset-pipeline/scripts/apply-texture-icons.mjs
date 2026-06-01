@@ -89,6 +89,19 @@ let preservedRendered = 0;
 
 for (const [key, resource] of resourcesByKey) {
   clearMissingBundledAspectIcon(resource, bundledAspectIcons);
+  const hintedTexture = findIconPathTextureHint(resource, textureIndex);
+  if (hintedTexture) {
+    const iconPath = await extractTexture(
+      resource,
+      hintedTexture,
+      textureOutDir,
+      publicTextureBase,
+    );
+    iconsByKey.set(key, iconPath);
+    matched += 1;
+    continue;
+  }
+  clearUnresolvedIconPathTextureHint(resource);
   if (resource.iconPath) {
     preservedRendered += 1;
     continue;
@@ -212,6 +225,31 @@ function findTexture(resource, textureIndex) {
   }
 
   return undefined;
+}
+
+function findIconPathTextureHint(resource, textureIndex) {
+  if (typeof resource.iconPath !== "string" || !resource.iconPath.startsWith("asset:")) {
+    return undefined;
+  }
+
+  const hint = resource.iconPath.slice("asset:".length);
+  const separatorIndex = hint.indexOf(":");
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  const namespace = hint.slice(0, separatorIndex).toLowerCase();
+  const resourcePath = hint
+    .slice(separatorIndex + 1)
+    .replace(/^\/+/, "")
+    .toLowerCase();
+  return textureIndex.byPath.get(`assets/${namespace}/${resourcePath}`);
+}
+
+function clearUnresolvedIconPathTextureHint(resource) {
+  if (typeof resource.iconPath === "string" && resource.iconPath.startsWith("asset:")) {
+    delete resource.iconPath;
+  }
 }
 
 function requiresRenderedStackIcon(resource) {

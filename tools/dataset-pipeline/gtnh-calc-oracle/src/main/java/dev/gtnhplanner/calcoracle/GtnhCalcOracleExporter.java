@@ -2081,6 +2081,9 @@ public final class GtnhCalcOracleExporter {
         if ("thaumcraft".equals(domain) && resourcePath.startsWith("textures/aspects/")) {
             return "/nei/thaumcraft/aspects/" + resourcePath.substring("textures/aspects/".length());
         }
+        if (separator > 0 && resourcePath.startsWith("textures/")) {
+            return "asset:" + domain + ":" + resourcePath;
+        }
         if ("thaumcraft".equals(domain) && tag != null && tag.length() > 0) {
             return "/nei/thaumcraft/aspects/" + tag.toLowerCase(Locale.ROOT) + ".png";
         }
