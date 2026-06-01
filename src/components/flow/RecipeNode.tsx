@@ -46,6 +46,7 @@ import {
 import { NeiRecipeWindow } from "@/components/nei/NeiRecipeWindow";
 import { MinecraftTooltip } from "@/components/nei/MinecraftTooltip";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
+import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import type { NeiPositionedSlot } from "@/lib/nei/layout";
 import { makeResourceHandleId } from "./resource-handles";
 import { useFactoryStore } from "@/store/factory-store";
@@ -149,6 +150,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
     ...overclockedStats,
   };
   const tierColor = tierControl ? GT_TIER_COLORS[tierControl.current] : undefined;
+  const usesNativeNeiRecipe = usesNativeNeiChrome(overclockedRecipe);
   const exceedsMaxTier =
     tierControl !== undefined &&
     maxTierFilter !== "all" &&
@@ -505,31 +507,33 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
           />
-          {machineConfigPanel}
-          {passiveProductionPanel}
+          {!usesNativeNeiRecipe ? machineConfigPanel : null}
+          {!usesNativeNeiRecipe ? passiveProductionPanel : null}
         </div>
 
-        <div
-          className={[
-            "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
-            isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
-            nodeColor ? "recipe-node-stat-grid" : "",
-          ].join(" ")}
-          style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
-        >
-          <MachineCountStat
-            label={isCropProductionNode ? "Seeds" : "Machines"}
-            machineCount={projectNode.machineCount}
-            suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
-            onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
-            onOptimize={() => optimizeMachineCount(projectNode.id)}
-          />
-          <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
-          <Stat
-            label={isCropProductionNode ? "Power" : "EU/t"}
-            value={isCropProductionNode ? "Passive" : formatRate(result?.euT ?? 0, 0)}
-          />
-        </div>
+        {!usesNativeNeiRecipe ? (
+          <div
+            className={[
+              "mt-1 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)] gap-1 text-[12px] leading-4 text-black",
+              isCropProductionNode ? CROP_CONFIG_PANEL_WIDTH_CLASS : "",
+              nodeColor ? "recipe-node-stat-grid" : "",
+            ].join(" ")}
+            style={nodeColor ? { backgroundColor: nodeColor.panel } : undefined}
+          >
+            <MachineCountStat
+              label={isCropProductionNode ? "Seeds" : "Machines"}
+              machineCount={projectNode.machineCount}
+              suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
+              onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
+              onOptimize={() => optimizeMachineCount(projectNode.id)}
+            />
+            <Stat label="Usage" value={`${formatRate(utilizationPercent, 1)}%`} />
+            <Stat
+              label={isCropProductionNode ? "Power" : "EU/t"}
+              value={isCropProductionNode ? "Passive" : formatRate(result?.euT ?? 0, 0)}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

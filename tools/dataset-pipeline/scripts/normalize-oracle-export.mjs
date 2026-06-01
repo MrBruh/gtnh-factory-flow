@@ -546,7 +546,6 @@ function normalizeExportedNeiLayout(rawLayout) {
       source: text(rawLayout.source, "gtnh-nei-handler"),
       handlerClass: text(rawLayout.handlerClass, undefined),
       canvas,
-      backgroundImage: text(rawLayout.backgroundImage, undefined),
       slots,
       progressBars: [],
     },
@@ -585,8 +584,8 @@ function thaumcraftInfusionAspectSlots(count) {
 function thaumcraftCrucibleAspectSlots(count) {
   const rows = Math.floor((count - 1) / 3);
   const centerOffset = (3 - (count % 3)) * 10;
-  const baseX = 60;
-  const baseY = 78 - 10 * rows;
+  const baseX = 51;
+  const baseY = 79 - 10 * rows;
   return Array.from({ length: count }, (_, index) => {
     const wrap = Math.floor(index / 3) >= rows && (rows > 1 || count < 3) ? 1 : 0;
     return {

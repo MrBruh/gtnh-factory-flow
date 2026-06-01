@@ -2073,8 +2073,14 @@ public final class GtnhCalcOracleExporter {
     }
 
     private String aspectIconPath(Object aspect, String tag) {
-        Object image = invokeBest(aspect, "getImage", new Object[0]);
+        Object image = readField(aspect, "image");
+        if (image == null) {
+            image = invokeBest(aspect, "getImage", new Object[0]);
+        }
         String location = safeString(image);
+        if (location.toLowerCase(Locale.ROOT).contains("_unknown")) {
+            location = "";
+        }
         int separator = location.indexOf(':');
         String domain = separator > 0 ? location.substring(0, separator) : "thaumcraft";
         String resourcePath = separator > 0 ? location.substring(separator + 1) : location;
@@ -2084,10 +2090,31 @@ public final class GtnhCalcOracleExporter {
         if (separator > 0 && resourcePath.startsWith("textures/")) {
             return "asset:" + domain + ":" + resourcePath;
         }
+        if (isBundledThaumcraftAspect(tag)) {
+            return "/nei/thaumcraft/aspects/" + tag.toLowerCase(Locale.ROOT) + ".png";
+        }
+        if (tag != null && tag.length() > 0) {
+            return "asset:gregtech:textures/aspects/" + tag.toUpperCase(Locale.ROOT) + ".png";
+        }
         if ("thaumcraft".equals(domain) && tag != null && tag.length() > 0) {
             return "/nei/thaumcraft/aspects/" + tag.toLowerCase(Locale.ROOT) + ".png";
         }
         return null;
+    }
+
+    private boolean isBundledThaumcraftAspect(String tag) {
+        if (tag == null) {
+            return false;
+        }
+        return Arrays.asList(
+            "aer", "alienis", "aqua", "arbor", "auram", "bestia", "cognitio", "corpus",
+            "exanimis", "fabrico", "fames", "gelum", "herba", "humanus", "ignis", "instrumentum",
+            "iter", "limus", "lucrum", "lux", "machina", "messis", "metallum", "meto",
+            "mortuus", "motus", "ordo", "pannus", "perditio", "perfodio", "permutatio",
+            "potentia", "praecantatio", "sano", "sensus", "spiritus", "telum", "tempestas",
+            "tenebrae", "terra", "tutamen", "vacuos", "venenum", "victus", "vinculum",
+            "vitium", "vitreus", "volatus"
+        ).contains(tag.toLowerCase(Locale.ROOT));
     }
 
     private String aspectColor(Object aspect) {
