@@ -285,7 +285,9 @@ describe("NEI layout", () => {
       ["item", "output", 106, 17],
       ["item", "output", 124, 17],
     ]);
-    expect(layout.frames.filter((frame) => frame.side === "output").map((frame) => [frame.x, frame.y])).toEqual([
+    expect(
+      layout.frames.filter((frame) => frame.side === "output").map((frame) => [frame.x, frame.y]),
+    ).toEqual([
       [106, 17],
       [124, 17],
       [142, 17],
@@ -372,6 +374,43 @@ describe("NEI layout", () => {
     );
 
     expect(layout.progressBars[0]).toMatchObject({ x: 78, y: 35, texture: "arrow" });
+  });
+
+  it("uses exported Thaumcraft infusion slots instead of a generic machine row", () => {
+    const layout = getNeiRecipeLayout(
+      recipe({
+        machineType: "Thaumcraft Infusion",
+        sourceRecipeMap: "Thaumcraft Infusion",
+        inputs: [
+          { kind: "item", id: "central", amount: 1, neiSlot: { x: 52, y: 26 } },
+          { kind: "item", id: "component-a", amount: 1, neiSlot: { x: 16, y: 8 } },
+          { kind: "item", id: "component-b", amount: 1, neiSlot: { x: 88, y: 44 } },
+          { kind: "aspect", id: "thaumcraft:aspect:ordo", amount: 8, neiSlot: { x: 8, y: 62 } },
+        ],
+        outputs: [{ kind: "item", id: "infused", amount: 1, neiSlot: { x: 124, y: 26 } }],
+        nei: {
+          slots: [
+            { side: "input", kind: "item", slotIndex: 0, x: 52, y: 26 },
+            { side: "input", kind: "item", slotIndex: 1, x: 16, y: 8 },
+            { side: "input", kind: "item", slotIndex: 2, x: 88, y: 44 },
+            { side: "input", kind: "aspect", slotIndex: 0, x: 8, y: 62 },
+            { side: "output", kind: "item", slotIndex: 0, x: 124, y: 26 },
+          ],
+          progressBars: [{ x: 88, y: 26, width: 24, height: 17, direction: "right" }],
+        },
+      }),
+    );
+
+    expect(
+      layout.slots.map((slot) => [slot.kind, slot.side, slot.resource.id, slot.x, slot.y]),
+    ).toEqual([
+      ["item", "input", "central", 52, 26],
+      ["item", "input", "component-a", 16, 8],
+      ["item", "input", "component-b", 88, 44],
+      ["aspect", "input", "thaumcraft:aspect:ordo", 8, 62],
+      ["item", "output", "infused", 124, 26],
+    ]);
+    expect(layout.progressBars[0]).toMatchObject({ x: 88, y: 26, texture: "arrow" });
   });
 
   it("keeps empty centrifuge output slots when only some outputs are used", () => {

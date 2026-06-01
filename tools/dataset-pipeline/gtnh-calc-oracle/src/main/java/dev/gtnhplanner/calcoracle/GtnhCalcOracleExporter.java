@@ -15,6 +15,8 @@ import net.minecraft.item.crafting.FurnaceRecipes;
 import net.minecraft.item.crafting.IRecipe;
 import net.minecraft.item.crafting.ShapedRecipes;
 import net.minecraft.item.crafting.ShapelessRecipes;
+import net.minecraft.nbt.NBTTagCompound;
+import net.minecraft.util.ChunkCoordinates;
 import net.minecraft.util.StatCollector;
 import net.minecraftforge.fluids.FluidStack;
 import net.minecraftforge.oredict.OreDictionary;
@@ -25,8 +27,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.lang.reflect.Array;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.lang.reflect.Proxy;
 import java.security.MessageDigest;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -438,10 +442,32 @@ public final class GtnhCalcOracleExporter {
         putIfPresent(species, "uid", invokeString(allele, "getUID"));
         putIfPresent(species, "name", invokeString(allele, "getName"));
         species.put("className", allele.getClass().getName());
-        putIfPresent(species, "products", beeProducts(invokeBest(allele, "getProducts", new Object[0])));
-        putIfPresent(species, "specialty", beeProducts(invokeBest(allele, "getSpecialty", new Object[0])));
+        putIfPresent(species, "input", beeMemberStack(allele));
+        putIfPresent(species, "products", beeProducts(firstObject(allele, "getProductChances", "getProducts")));
+        putIfPresent(species, "specialty", beeProducts(firstObject(allele, "getSpecialtyChances", "getSpecialty")));
         species.put("cycleTicks", Integer.valueOf(Integer.getInteger("gtnh.oracle.beeCycleTicks", 550)));
         return species;
+    }
+
+    private Map<String, Object> beeMemberStack(Object allele) {
+        String uid = invokeString(allele, "getUID");
+        if (uid == null || uid.length() == 0) {
+            return null;
+        }
+
+        try {
+            Object root = invokeBest(allele, "getRoot", new Object[0]);
+            Object template = invokeBest(root, "getTemplate", new Object[] { uid });
+            Object individual = invokeBest(root, "templateAsIndividual", new Object[] { template });
+            Object beeType = Enum.valueOf(
+                (Class<Enum>) Class.forName("forestry.api.apiculture.EnumBeeType").asSubclass(Enum.class),
+                "PRINCESS"
+            );
+            Object stack = invokeBest(root, "getMemberStack", new Object[] { individual, Integer.valueOf(((Enum<?>) beeType).ordinal()) });
+            return itemStack(stack instanceof ItemStack ? (ItemStack) stack : null);
+        } catch (Throwable ignored) {
+            return null;
+        }
     }
 
     private List<Map<String, Object>> beeProducts(Object rawProducts) {
@@ -475,11 +501,277 @@ public final class GtnhCalcOracleExporter {
         putIfPresent(exported, "owner", firstString(crop, "owner", "getOwner"));
         putIfPresent(exported, "tier", firstNumber(crop, "tier", "getTier"));
         putIfPresent(exported, "attributes", resourcesFromUnknown(firstObject(crop, "attributes", "getAttributes")));
+        Object displayItem = firstObject(crop, "getDisplayItem", "getBaseSeed");
+        if (displayItem == null) {
+            displayItem = invokeBest(crop, "getDisplayItem", new Object[] { crop });
+        }
+        putIfPresent(exported, "displayItem", resourceFromUnknown(displayItem));
+        List<Map<String, Object>> variants = cropVariants(crop);
+        putIfPresent(exported, "variants", variants);
+        if (!variants.isEmpty()) {
+            putIfPresent(exported, "seed", variants.get(0).get("seed"));
+            putIfPresent(exported, "drops", variants.get(0).get("drops"));
+            putIfPresent(exported, "durationTicks", variants.get(0).get("durationTicks"));
+        }
         exported.put(
             "notes",
-            "Crop-card metadata exported from the live IC2 API. Drop simulation needs a crop-tile environment adapter before it is oracle-eligible."
+            "Crop-card drops exported from the live IC2/CropsNH API using a simulated server crop tile."
         );
         return exported;
+    }
+
+    private List<Map<String, Object>> cropVariants(Object crop) {
+        List<Map<String, Object>> variants = new ArrayList<Map<String, Object>>();
+        addCropVariant(variants, crop, "23-31-0", "GTNH crop manager baseline 23/31/0", 23, 31, 0);
+        addCropVariant(variants, crop, "31-31-31", "Perfect stats 31/31/31", 31, 31, 31);
+        addCropVariant(variants, crop, "1-1-1", "Low stats 1/1/1", 1, 1, 1);
+        return variants;
+    }
+
+    private void addCropVariant(
+        List<Map<String, Object>> variants,
+        Object crop,
+        String key,
+        String label,
+        int growth,
+        int gain,
+        int resistance
+    ) {
+        Object tile = cropTileProxy(crop, growth, gain, resistance, cropMaxSize(crop));
+        List<Map<String, Object>> drops = cropDrops(crop, tile, gain);
+        if (drops.isEmpty()) {
+            return;
+        }
+
+        Map<String, Object> variant = map();
+        variant.put("id", key);
+        variant.put("label", label);
+        variant.put("growth", Integer.valueOf(growth));
+        variant.put("gain", Integer.valueOf(gain));
+        variant.put("resistance", Integer.valueOf(resistance));
+        putIfPresent(variant, "seed", itemStack(generateCropSeed(crop, growth, gain, resistance, 4)));
+        variant.put("drops", drops);
+        variant.put("durationTicks", Integer.valueOf(cropDurationTicks(crop, tile)));
+        variants.add(variant);
+    }
+
+    private List<Map<String, Object>> cropDrops(Object crop, Object tile, int gain) {
+        int samples = Math.max(1, Integer.getInteger("gtnh.oracle.cropDropSamples", 256).intValue());
+        Map<String, Map<String, Object>> resourcesByKey = new LinkedHashMap<String, Map<String, Object>>();
+        Map<String, Double> amountsByKey = new LinkedHashMap<String, Double>();
+        int maxSize = cropMaxSize(crop);
+
+        for (int index = 0; index < samples; index++) {
+            invokeBest(tile, "setSize", new Object[] { Byte.valueOf((byte) maxSize) });
+            Object rawDrop = invokeBest(crop, "getGain", new Object[] { tile });
+            if (!(rawDrop instanceof ItemStack)) {
+                continue;
+            }
+            ItemStack drop = ((ItemStack) rawDrop).copy();
+            if (drop.getItem() == null || drop.stackSize <= 0) {
+                continue;
+            }
+            String key = stackKey(drop);
+            if (key.length() == 0) {
+                continue;
+            }
+            if (!resourcesByKey.containsKey(key)) {
+                Map<String, Object> resource = itemStack(drop);
+                if (resource != null) {
+                    resourcesByKey.put(key, resource);
+                }
+            }
+            Double current = amountsByKey.get(key);
+            amountsByKey.put(key, Double.valueOf((current == null ? 0.0D : current.doubleValue()) + drop.stackSize));
+        }
+
+        double dropRounds = cropAverageDropRounds(crop, gain);
+        double stackIncrease = (gain + 1) / 100.0D;
+        List<Map<String, Object>> drops = new ArrayList<Map<String, Object>>();
+        for (Map.Entry<String, Double> entry : amountsByKey.entrySet()) {
+            Map<String, Object> resource = resourcesByKey.get(entry.getKey());
+            if (resource == null) {
+                continue;
+            }
+            double amount = ((entry.getValue().doubleValue() / samples) + stackIncrease) * dropRounds;
+            if (!(amount > 0.0D)) {
+                continue;
+            }
+            resource.put("amount", Double.valueOf(round(amount, 6)));
+            Map<String, Object> drop = map();
+            drop.put("resource", resource);
+            drops.add(drop);
+        }
+        return drops;
+    }
+
+    private double cropAverageDropRounds(Object crop, int gain) {
+        Number rawChance = asNumber(invokeBest(crop, "dropGainChance", new Object[0]));
+        double chance = rawChance == null ? 1.0D : rawChance.doubleValue();
+        chance *= Math.pow(1.03D, gain);
+
+        double min = -10.0D;
+        double max = 10.0D;
+        int steps = 10000;
+        double stepSize = (max - min) / steps;
+        double sum = 0.0D;
+        for (int k = 1; k <= steps - 1; k++) {
+            sum += weightedDropChance(min + k * stepSize, chance);
+        }
+        return stepSize * ((weightedDropChance(min, chance) + weightedDropChance(max, chance)) / 2.0D + sum);
+    }
+
+    private double weightedDropChance(double x, double chance) {
+        return Math.max(0L, Math.round(x * chance * 0.6827D + chance)) * stdNormDistr(x);
+    }
+
+    private double stdNormDistr(double x) {
+        return Math.exp(-0.5D * x * x) / Math.sqrt(2.0D * Math.PI);
+    }
+
+    private int cropDurationTicks(Object crop, Object tile) {
+        int maxSize = cropMaxSize(crop);
+        int startSize = Math.max(1, Math.min(maxSize - 1, cropSizeAfterHarvest(crop, tile)));
+        int tickRate = readStaticInt("ic2.core.crop.TileEntityCrop", "tickRate", 256);
+        int growthRate = Math.max(1, cropGrowthRate(crop, tile));
+        int totalTicks = 0;
+        for (int size = startSize; size < maxSize; size++) {
+            invokeBest(tile, "setSize", new Object[] { Byte.valueOf((byte) size) });
+            Number duration = asNumber(invokeBest(crop, "growthDuration", new Object[] { tile }));
+            int growthDuration = duration == null ? 200 : Math.max(1, duration.intValue());
+            totalTicks += Math.max(1, (int) Math.ceil(growthDuration / (double) growthRate)) * tickRate;
+        }
+        return Math.max(1, totalTicks);
+    }
+
+    private int cropGrowthRate(Object crop, Object tile) {
+        Number weight = asNumber(invokeBest(crop, "weightInfluences", new Object[] { tile, Float.valueOf(1.0F), Float.valueOf(1.0F), Float.valueOf(1.0F) }));
+        if (weight != null && weight.intValue() > 0) {
+            return weight.intValue();
+        }
+        Number growth = asNumber(invokeBest(tile, "getGrowth", new Object[0]));
+        return growth == null ? 1 : Math.max(1, growth.intValue());
+    }
+
+    private int cropSizeAfterHarvest(Object crop, Object tile) {
+        Number size = asNumber(invokeBest(crop, "getSizeAfterHarvest", new Object[] { tile }));
+        return size == null ? Math.max(1, cropMaxSize(crop) - 1) : Math.max(1, size.intValue());
+    }
+
+    private int cropMaxSize(Object crop) {
+        Number maxSize = firstNumber(crop, "maxSize", "getMaxSize");
+        return maxSize == null ? 1 : Math.max(1, maxSize.intValue());
+    }
+
+    private Object cropTileProxy(final Object crop, int growth, int gain, int resistance, int size) {
+        try {
+            Class<?> cropTileClass = Class.forName("ic2.api.crops.ICropTile");
+            final byte[] cropSize = new byte[] { (byte) Math.max(1, size) };
+            final byte[] cropGrowth = new byte[] { (byte) Math.max(0, growth) };
+            final byte[] cropGain = new byte[] { (byte) Math.max(0, gain) };
+            final byte[] cropResistance = new byte[] { (byte) Math.max(0, resistance) };
+            final NBTTagCompound customData = new NBTTagCompound();
+            InvocationHandler handler = new InvocationHandler() {
+                @Override
+                public Object invoke(Object proxy, Method method, Object[] args) {
+                    String name = method.getName();
+                    if ("getCrop".equals(name)) return crop;
+                    if ("setCrop".equals(name)) return null;
+                    if ("getID".equals(name)) return Short.valueOf((short) cropId(crop));
+                    if ("setID".equals(name)) return null;
+                    if ("getSize".equals(name)) return Byte.valueOf(cropSize[0]);
+                    if ("setSize".equals(name)) {
+                        cropSize[0] = args != null && args.length > 0 && args[0] instanceof Number
+                            ? ((Number) args[0]).byteValue()
+                            : cropSize[0];
+                        return null;
+                    }
+                    if ("getGrowth".equals(name)) return Byte.valueOf(cropGrowth[0]);
+                    if ("setGrowth".equals(name)) {
+                        cropGrowth[0] = args != null && args.length > 0 && args[0] instanceof Number
+                            ? ((Number) args[0]).byteValue()
+                            : cropGrowth[0];
+                        return null;
+                    }
+                    if ("getGain".equals(name)) return Byte.valueOf(cropGain[0]);
+                    if ("setGain".equals(name)) {
+                        cropGain[0] = args != null && args.length > 0 && args[0] instanceof Number
+                            ? ((Number) args[0]).byteValue()
+                            : cropGain[0];
+                        return null;
+                    }
+                    if ("getResistance".equals(name)) return Byte.valueOf(cropResistance[0]);
+                    if ("setResistance".equals(name)) {
+                        cropResistance[0] = args != null && args.length > 0 && args[0] instanceof Number
+                            ? ((Number) args[0]).byteValue()
+                            : cropResistance[0];
+                        return null;
+                    }
+                    if ("getScanLevel".equals(name)) return Byte.valueOf((byte) 4);
+                    if ("setScanLevel".equals(name)) return null;
+                    if ("getCustomData".equals(name)) return customData;
+                    if ("getNutrientStorage".equals(name) || "getHydrationStorage".equals(name) || "getWeedExStorage".equals(name)) {
+                        return Integer.valueOf(100);
+                    }
+                    if ("setNutrientStorage".equals(name) || "setHydrationStorage".equals(name) || "setWeedExStorage".equals(name)) {
+                        return null;
+                    }
+                    if ("getHumidity".equals(name) || "getNutrients".equals(name) || "getAirQuality".equals(name)) {
+                        return Byte.valueOf((byte) 10);
+                    }
+                    if ("getWorld".equals(name)) return null;
+                    if ("getLocation".equals(name)) return new ChunkCoordinates(0, 64, 0);
+                    if ("getLightLevel".equals(name)) return Integer.valueOf(15);
+                    if ("pick".equals(name) || "harvest".equals(name)) return Boolean.FALSE;
+                    if ("harvest_automated".equals(name)) return new ItemStack[0];
+                    if ("reset".equals(name) || "updateState".equals(name)) return null;
+                    if ("isBlockBelow".equals(name)) return Boolean.FALSE;
+                    if ("generateSeeds".equals(name)) {
+                        Object seedCrop = args != null && args.length > 0 ? args[0] : crop;
+                        int seedGrowth = args != null && args.length > 1 && args[1] instanceof Number ? ((Number) args[1]).intValue() : cropGrowth[0];
+                        int seedGain = args != null && args.length > 2 && args[2] instanceof Number ? ((Number) args[2]).intValue() : cropGain[0];
+                        int seedResistance = args != null && args.length > 3 && args[3] instanceof Number ? ((Number) args[3]).intValue() : cropResistance[0];
+                        int seedScan = args != null && args.length > 4 && args[4] instanceof Number ? ((Number) args[4]).intValue() : 4;
+                        return generateCropSeed(seedCrop, seedGrowth, seedGain, seedResistance, seedScan);
+                    }
+                    return defaultReturnValue(method.getReturnType());
+                }
+            };
+            return Proxy.newProxyInstance(cropTileClass.getClassLoader(), new Class<?>[] { cropTileClass }, handler);
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private ItemStack generateCropSeed(Object crop, int growth, int gain, int resistance, int scan) {
+        try {
+            Object tile = Class.forName("ic2.core.crop.TileEntityCrop").newInstance();
+            invokeBest(tile, "setCrop", new Object[] { crop });
+            Object stack = invokeBest(
+                tile,
+                "generateSeeds",
+                new Object[] {
+                    crop,
+                    Byte.valueOf((byte) growth),
+                    Byte.valueOf((byte) gain),
+                    Byte.valueOf((byte) resistance),
+                    Byte.valueOf((byte) scan)
+                }
+            );
+            return stack instanceof ItemStack ? (ItemStack) stack : null;
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private int cropId(Object crop) {
+        try {
+            Object cropsApi = readStaticField(Class.forName("ic2.api.crops.Crops"), "instance");
+            Number id = asNumber(invokeBest(cropsApi, "getIdFor", new Object[] { crop }));
+            return id == null ? 0 : id.intValue();
+        } catch (Throwable ignored) {
+            return 0;
+        }
     }
 
     private Map<String, Object> buildGtRuntimeCalculation(String recipeMapId, String recipeMapName, GTRecipe recipe) {
@@ -1280,8 +1572,34 @@ public final class GtnhCalcOracleExporter {
         return field.get(null);
     }
 
+    private int readStaticInt(String className, String fieldName, int fallback) {
+        try {
+            Object value = readStaticField(Class.forName(className), fieldName);
+            return value instanceof Number ? ((Number) value).intValue() : fallback;
+        } catch (Throwable ignored) {
+            return fallback;
+        }
+    }
+
+    private Object defaultReturnValue(Class<?> type) {
+        if (type == Boolean.TYPE) return Boolean.FALSE;
+        if (type == Byte.TYPE) return Byte.valueOf((byte) 0);
+        if (type == Short.TYPE) return Short.valueOf((short) 0);
+        if (type == Integer.TYPE) return Integer.valueOf(0);
+        if (type == Long.TYPE) return Long.valueOf(0L);
+        if (type == Float.TYPE) return Float.valueOf(0.0F);
+        if (type == Double.TYPE) return Double.valueOf(0.0D);
+        if (type == Character.TYPE) return Character.valueOf('\0');
+        return null;
+    }
+
     private Number asNumber(Object value) {
         return value instanceof Number ? (Number) value : null;
+    }
+
+    private double round(double value, int decimals) {
+        double factor = Math.pow(10.0D, Math.max(0, decimals));
+        return Math.round(value * factor) / factor;
     }
 
     private Iterable<?> iterable(Object value) {

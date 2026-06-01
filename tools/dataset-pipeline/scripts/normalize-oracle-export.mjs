@@ -135,6 +135,7 @@ normalizeCrafting(findDomain("crafting"));
 normalizeSmelting(findDomain("smelting"));
 normalizeThaumcraft(findDomain("thaumcraft"));
 normalizeForestryBees(findDomain("forestryBees"));
+normalizeIc2Crops(findDomain("ic2Crops"));
 
 const dataset = {
   schemaVersion: 1,
@@ -308,19 +309,16 @@ function normalizeSmelting(domain) {
 
 function normalizeThaumcraft(domain) {
   for (const rawRecipe of domain?.recipes ?? []) {
-    const output = resourceAmount(rawRecipe.output);
+    const normalizedRecipe = normalizeThaumcraftRecipe(rawRecipe);
+    const output = normalizedRecipe.output;
     if (!output) {
       continue;
     }
     const machineType = thaumcraftMachineType(rawRecipe.type);
-    const inputs = [
-      resourceAmount(rawRecipe.centralInput),
-      resourceAmount(rawRecipe.catalyst),
-      ...(rawRecipe.components ?? []).map((entry) => resourceAmount(entry)),
-      ...(rawRecipe.aspects ?? []).map((entry) => resourceAmount(entry)),
-    ].filter(Boolean);
+    const inputs = normalizedRecipe.inputs;
 
     recipeMaps.add(machineType);
+    setRecipeMapIcon(machineType, rawRecipe.output);
     addRecipe({
       id: recipeId("thaumcraft", rawRecipe.type, rawRecipe.id),
       name: `${machineType}: ${resourceLabel(output)}`,
@@ -361,8 +359,136 @@ function normalizeThaumcraft(domain) {
         exporter: "gtnh-oracle",
         rawRecipeId: rawRecipe.id,
       },
+      nei: normalizedRecipe.nei,
     });
   }
+}
+
+function normalizeThaumcraftRecipe(rawRecipe) {
+  const type = text(rawRecipe.type, "thaumcraft");
+  const inputs = [];
+  const slots = [];
+  const progressBars = [];
+  const addSlot = (side, kind, slotIndex, slot) => {
+    if (!slot) return;
+    slots.push({ side, kind, slotIndex, x: slot.x, y: slot.y });
+  };
+  const addInput = (rawResource, slot, slotIndex) => {
+    const resource = resourceAmount(rawResource, { neiSlot: slot });
+    if (!resource) return;
+    inputs.push(resource);
+    addSlot("input", resource.kind, slotIndex, slot);
+  };
+
+  const outputSlot = type === "arcane" ? { x: 124, y: 26 } : { x: 124, y: 26 };
+  const output = resourceAmount(rawRecipe.output, { neiSlot: outputSlot });
+  if (output) {
+    addSlot("output", output.kind, 0, outputSlot);
+  }
+
+  if (type === "infusion") {
+    addInput(rawRecipe.centralInput ?? rawRecipe.catalyst, { x: 52, y: 26 }, 0);
+    const componentSlots = thaumcraftInfusionComponentSlots((rawRecipe.components ?? []).length);
+    (rawRecipe.components ?? []).forEach((entry, index) =>
+      addInput(entry, componentSlots[index], index + 1),
+    );
+    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 8, 62);
+    (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
+    progressBars.push({
+      x: 88,
+      y: 26,
+      width: 24,
+      height: 17,
+      direction: "right",
+      texture: "arrow",
+    });
+  } else if (type === "crucible") {
+    addInput(rawRecipe.catalyst ?? rawRecipe.centralInput, { x: 52, y: 26 }, 0);
+    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 16, 8);
+    (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
+    progressBars.push({
+      x: 84,
+      y: 26,
+      width: 24,
+      height: 17,
+      direction: "right",
+      texture: "arrow",
+    });
+  } else if (type === "arcane") {
+    const componentSlots = craftingNeiSlots({ type: "shaped" }, 9)
+      .filter((slot) => slot.side === "input" && slot.kind === "item")
+      .map(({ x, y }) => ({ x, y }));
+    const rawInputs = [
+      rawRecipe.centralInput,
+      rawRecipe.catalyst,
+      ...(rawRecipe.components ?? []),
+    ].filter(Boolean);
+    rawInputs.forEach((entry, index) => addInput(entry, componentSlots[index], index));
+    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 7, 62);
+    (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
+    progressBars.push({
+      x: 84,
+      y: 26,
+      width: 24,
+      height: 17,
+      direction: "right",
+      texture: "arrow",
+    });
+  } else {
+    [rawRecipe.centralInput, rawRecipe.catalyst, ...(rawRecipe.components ?? [])].forEach(
+      (entry, index) => addInput(entry, compactCraftingInputPositions(6)[index], index),
+    );
+    (rawRecipe.aspects ?? []).forEach((entry, index) =>
+      addInput(
+        entry,
+        thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 16, 62)[index],
+        index,
+      ),
+    );
+  }
+
+  return {
+    output,
+    inputs,
+    nei:
+      slots.length > 0
+        ? {
+            slots,
+            progressBars,
+          }
+        : undefined,
+  };
+}
+
+function thaumcraftInfusionComponentSlots(count) {
+  const fixed = [
+    { x: 16, y: 8 },
+    { x: 34, y: 8 },
+    { x: 70, y: 8 },
+    { x: 88, y: 8 },
+    { x: 16, y: 44 },
+    { x: 34, y: 44 },
+    { x: 70, y: 44 },
+    { x: 88, y: 44 },
+  ];
+  if (count <= fixed.length) {
+    return fixed.slice(0, count);
+  }
+  return Array.from(
+    { length: count },
+    (_, index) =>
+      fixed[index] ?? {
+        x: 16 + ((index - fixed.length) % 5) * 18,
+        y: 80 + Math.floor((index - fixed.length) / 5) * 18,
+      },
+  );
+}
+
+function thaumcraftAspectSlots(count, x, y) {
+  return Array.from({ length: count }, (_, index) => ({
+    x: x + (index % 6) * 18,
+    y: y + Math.floor(index / 6) * 18,
+  }));
 }
 
 function normalizeForestryBees(domain) {
@@ -375,8 +501,13 @@ function normalizeForestryBees(domain) {
     if (outputs.length === 0) {
       continue;
     }
+    const input = beeSpeciesInput(species);
     const durationTicks = positiveInt(species.cycleTicks, 550);
     recipeMaps.add(machineType);
+    setRecipeMapIcon(
+      machineType,
+      species.input ?? species.products?.[0]?.resource ?? species.specialty?.[0]?.resource,
+    );
     addRecipe({
       id: recipeId("forestry-bee", species.uid ?? species.name ?? hashRecipe(species)),
       name: `${text(species.name, species.uid ?? "Bee")} Produce`,
@@ -384,7 +515,7 @@ function normalizeForestryBees(domain) {
       minimumTier: "NONE",
       durationTicks,
       eut: 0,
-      inputs: [],
+      inputs: input ? [input] : [],
       outputs,
       runtimeCalculation: {
         sourceKind: "passive-bee",
@@ -422,6 +553,160 @@ function normalizeForestryBees(domain) {
       },
     });
   }
+}
+
+function normalizeIc2Crops(domain) {
+  const machineType = "IC2 Crop";
+  for (const crop of domain?.crops ?? []) {
+    const baseVariant =
+      (crop.variants ?? []).find((variant) => variant.id === "23-31-0") ??
+      (crop.variants ?? []).find((variant) => variant.id === "31-31-31") ??
+      (crop.variants ?? [])[0] ??
+      crop;
+    const outputs = cropOutputs(baseVariant.drops ?? crop.drops);
+    if (outputs.length === 0) {
+      continue;
+    }
+    const input = cropSeedInput(crop);
+    const durationTicks = positiveInt(baseVariant.durationTicks ?? crop.durationTicks, 200);
+
+    recipeMaps.add(machineType);
+    setRecipeMapIcon(
+      machineType,
+      crop.seed ?? crop.displayItem ?? baseVariant.drops?.[0]?.resource,
+    );
+    addRecipe({
+      id: recipeId("ic2-crop", crop.owner, crop.id ?? crop.name ?? hashRecipe(crop)),
+      name: `${machineType}: ${text(crop.name, crop.id ?? "Crop")}`,
+      machineType,
+      minimumTier: "NONE",
+      durationTicks,
+      eut: 0,
+      inputs: input ? [input] : [],
+      outputs,
+      runtimeCalculation: {
+        sourceKind: "passive-crop",
+        sourceClass: crop.className,
+        recipeMap: machineType,
+        status: "computed",
+        oracleEligible: true,
+        strict: true,
+        generatedAt,
+        variants: cropRuntimeVariants(crop, outputs, durationTicks),
+        warnings: [
+          "Crop drops are calculated by live IC2/CropsNH crop-card methods with a simulated server crop tile. Environment-specific support blocks are represented by separate controls when the crop exposes enough data.",
+        ],
+      },
+      notes: [
+        "Exported by the GTNH calculation oracle from IC2/CropsNH crop-card APIs.",
+        crop.owner ? `Owner: ${crop.owner}` : undefined,
+        crop.tier !== undefined ? `Tier: ${crop.tier}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" "),
+      source: {
+        datasetVersionId,
+        recipeMap: machineType,
+        exporter: "gtnh-oracle",
+        rawRecipeId: `${crop.owner ?? "unknown"}:${crop.id ?? crop.name ?? hashRecipe(crop)}`,
+      },
+      nei: {
+        slots: [
+          { side: "input", kind: "item", slotIndex: 0, x: 34, y: 35 },
+          ...outputs.map((output, index) => ({
+            side: "output",
+            kind: output.kind,
+            slotIndex: index,
+            x: 124 + index * 18,
+            y: 35,
+          })),
+        ],
+        progressBars: [
+          { x: 78, y: 35, width: 24, height: 17, direction: "right", texture: "arrow" },
+        ],
+      },
+    });
+  }
+}
+
+function beeSpeciesInput(species) {
+  const icon = resourceAmount(species.input, { consumed: false, defaultAmount: 1 });
+  const uid = text(species.uid, species.name ?? hashRecipe(species));
+  return removeUndefined({
+    kind: "item",
+    id: `factoryflow:bee_species:${slug(uid)}`,
+    amount: 1,
+    displayName: `${text(species.name, uid)} Bee`,
+    iconPath: icon?.iconPath,
+    dominantColor: icon?.dominantColor,
+    modId: icon?.modId ?? "Forestry",
+    tooltip: ["Bee species", uid, species.className].filter(Boolean),
+    consumed: false,
+    neiSlot: { x: 48, y: 35 },
+  });
+}
+
+function cropSeedInput(crop) {
+  const icon = resourceAmount(crop.seed ?? crop.displayItem, { consumed: false, defaultAmount: 1 });
+  const owner = text(crop.owner, "unknown");
+  const name = text(crop.name, crop.id ?? hashRecipe(crop));
+  return removeUndefined({
+    kind: "item",
+    id: `factoryflow:ic2_crop_seed:${slug(owner)}-${slug(crop.id ?? name)}`,
+    amount: 1,
+    displayName: `${name} Seed`,
+    iconPath: icon?.iconPath,
+    dominantColor: icon?.dominantColor,
+    modId: icon?.modId ?? "IC2",
+    tooltip: ["IC2 crop seed", `Owner: ${owner}`, `Crop: ${name}`, crop.className].filter(Boolean),
+    consumed: false,
+    neiSlot: { x: 34, y: 35 },
+  });
+}
+
+function cropOutputs(rawDrops) {
+  return (rawDrops ?? [])
+    .map((entry, index) =>
+      resourceAmount(entry.resource, {
+        chance: normalizeChance(entry.chance),
+        neiSlot: { x: 124 + index * 18, y: 35 },
+      }),
+    )
+    .filter(Boolean);
+}
+
+function cropRuntimeVariants(crop, fallbackOutputs, fallbackDurationTicks) {
+  const variants = (crop.variants ?? [])
+    .map((variant) => {
+      const outputs = cropOutputs(variant.drops);
+      if (outputs.length === 0) {
+        return undefined;
+      }
+      return {
+        id: text(variant.id, "base"),
+        label: text(variant.label, variant.id ?? "Crop stats"),
+        machineConfigTiers: {
+          cropStats: text(variant.id, "23-31-0"),
+        },
+        durationTicks: positiveInt(variant.durationTicks, fallbackDurationTicks),
+        eut: 0,
+        outputs: runtimeResources(outputs),
+      };
+    })
+    .filter(Boolean);
+
+  if (variants.length > 0) {
+    return variants;
+  }
+  return [
+    {
+      id: "base",
+      label: "Base crop-card output",
+      durationTicks: fallbackDurationTicks,
+      eut: 0,
+      outputs: runtimeResources(fallbackOutputs),
+    },
+  ];
 }
 
 function beeProductOutput(entry, specialty = false) {

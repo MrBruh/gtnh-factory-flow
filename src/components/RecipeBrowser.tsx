@@ -13,15 +13,10 @@ import {
 } from "@/lib/datasets/browser-loader";
 import type { DatasetResourceIndexEntry, RecipeSummary } from "@/lib/datasets/types";
 import {
-  applyMachineHandlerToRecipe,
   GT_VOLTAGE_TIERS,
-  getRecipeCoilTierControl,
-  getRecipeMachineConfigTierControls,
-  getRecipeMachineHandlers,
   isVirtualChoiceResource,
   resourceLabel,
   resourceMatchesInput,
-  type MachineConfigTierControl,
 } from "@/lib/model";
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
@@ -1322,10 +1317,6 @@ const RecipeResultCard = memo(function RecipeResultCard({
     () => contextualizePreviewRecipe(summaryToPreviewRecipe(recipe), contextResource),
     [contextResource, recipe],
   );
-  const machineConfigControls = useMemo(
-    () => getPreviewMachineConfigControls(previewRecipe),
-    [previewRecipe],
-  );
   return (
     <article
       onClick={() => onSelectRecipe(recipe.id)}
@@ -1362,102 +1353,10 @@ const RecipeResultCard = memo(function RecipeResultCard({
           className="mx-auto"
           onSlotClick={onSlotBrowse ? (slot, mode) => onSlotBrowse(slot.resource, mode) : undefined}
         />
-        <MachineConfigPreviewStrip controls={machineConfigControls} />
       </div>
     </article>
   );
 });
-
-function MachineConfigPreviewStrip({ controls }: { controls: MachineConfigTierControl[] }) {
-  if (controls.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className="mx-auto mt-1 flex max-w-[360px] flex-wrap justify-center gap-1">
-      {controls.map((control) => (
-        <MinecraftTooltip key={control.id} label={machineConfigTooltip(control)}>
-          <span className="inline-flex h-7 max-w-[168px] items-center gap-1 border border-[#555] bg-[#b6b6b6] px-1 text-[9px] font-bold leading-none text-black shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
-            <span className="grid h-5 w-5 shrink-0 place-items-center overflow-hidden border border-[#373737] bg-[#8d8d8d] shadow-[inset_1px_1px_0_#cfcfcf,inset_-1px_-1px_0_#4d4d4d]">
-              {control.resource.iconPath ? (
-                <ResourceIcon
-                  resource={control.resource}
-                  bare
-                  tooltip={false}
-                  showAmount={false}
-                  showConsumedState={false}
-                  iconPixelSize={26}
-                  className="h-5 w-5"
-                />
-              ) : (
-                <span className="max-w-full truncate px-0.5 text-[8px] font-black text-white [text-shadow:1px_1px_0_#000]">
-                  {shortMachineConfigLabel(control)}
-                </span>
-              )}
-            </span>
-            <span className="min-w-0 truncate">
-              {control.label}: {control.current.label}
-            </span>
-          </span>
-        </MinecraftTooltip>
-      ))}
-    </div>
-  );
-}
-
-function getPreviewMachineConfigControls(recipe: Recipe): MachineConfigTierControl[] {
-  const controlsById = new Map<string, MachineConfigTierControl>();
-  const addControls = (candidate: Recipe) => {
-    const coilControl = getRecipeCoilTierControl(candidate, {});
-    if (coilControl) {
-      controlsById.set(coilControl.id, coilControl);
-    }
-
-    for (const control of getRecipeMachineConfigTierControls(candidate, {
-      machineConfigTiers: {},
-    })) {
-      controlsById.set(control.id, control);
-    }
-  };
-
-  addControls(recipe);
-  for (const handler of getRecipeMachineHandlers(recipe)) {
-    addControls(applyMachineHandlerToRecipe(recipe, { machineHandlerId: handler.id }));
-  }
-
-  return [...controlsById.values()];
-}
-
-function machineConfigTooltip(control: MachineConfigTierControl) {
-  return [
-    `${control.label}: ${control.current.label}`,
-    resourceLabel(control.resource),
-    ...(control.resource.tooltip ?? []),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
-function shortMachineConfigLabel(control: MachineConfigTierControl) {
-  if (control.current.parallelMultiplier && control.current.parallelMultiplier > 1) {
-    return `x${formatShortMultiplier(control.current.parallelMultiplier)}`;
-  }
-
-  const label = control.current.label || control.resource.displayName || control.resource.id;
-  return label
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 4)
-    .toUpperCase();
-}
-
-function formatShortMultiplier(value: number) {
-  return Number.isInteger(value)
-    ? String(value)
-    : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-}
 
 function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
   return {

@@ -50,46 +50,6 @@ const browserLoaderMock = vi.hoisted(() => {
       },
     ],
     outputs: [{ kind: "item", id: "minecraft:coal@1", amount: 20, displayName: "Charcoal" }],
-    machineConfigControls: [
-      {
-        id: "heatingCoil",
-        label: "Heating Coil",
-        minimumKey: "kanthal",
-        defaultKey: "kanthal",
-        tiers: [
-          {
-            key: "kanthal",
-            label: "Kanthal",
-            resource: {
-              kind: "item",
-              id: "gregtech:gt.blockcasings5@1",
-              amount: 1,
-              displayName: "Kanthal Coil Block",
-              iconPath: "/items/kanthal-coil.png",
-            },
-          },
-        ],
-      },
-      {
-        id: "cokeOvenCasing",
-        label: "Coke Oven Casing",
-        minimumKey: "heat_resistant",
-        defaultKey: "heat_resistant",
-        tiers: [
-          {
-            key: "heat_resistant",
-            label: "Heat Resistant",
-            parallelMultiplier: 16,
-            resource: {
-              kind: "item",
-              id: "factoryflow:machine_config/heat_resistant_coke_oven_casing",
-              amount: 1,
-              displayName: "Heat Resistant Coke Oven Casing",
-            },
-          },
-        ],
-      },
-    ],
   };
 
   return {
@@ -204,13 +164,6 @@ describe("RecipeBrowser", () => {
         id: "oredict:logWood",
       }),
     );
-  });
-
-  it("shows machine configuration controls in recipe previews", async () => {
-    render(<RecipeBrowser />);
-
-    expect(await screen.findByText("Heating Coil: Kanthal")).toBeTruthy();
-    expect(await screen.findByText("Coke Oven Casing: Heat Resistant")).toBeTruthy();
   });
 
   it("keeps filled-cell recipe slots renderable when browsing by equivalent fluid", () => {

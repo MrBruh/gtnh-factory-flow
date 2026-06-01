@@ -17,6 +17,7 @@ export GTNH_ATLAS_ICON_SIZE="${GTNH_ATLAS_ICON_SIZE:-256}"
 export GTNH_ICON_CACHE_DIR="${GTNH_ICON_CACHE_DIR:-$HOME/.cache/gtnh-factory-flow/icons/$GTNH_ATLAS_ICON_SIZE}"
 export GTNH_EXPORT_DISABLE_CLIENT_UI_MODS="${GTNH_EXPORT_DISABLE_CLIENT_UI_MODS:-false}"
 export GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS="${GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS:-true}"
+export GTNH_EXPORT_MAX_RUNTIME_RESTARTS="${GTNH_EXPORT_MAX_RUNTIME_RESTARTS:-2}"
 export GTNH_PACK_CACHE_DIR="${GTNH_PACK_CACHE_DIR:-}"
 export GTNH_ORACLE_BUILD_CACHE_DIR="${GTNH_ORACLE_BUILD_CACHE_DIR:-}"
 export GTNH_CLIENT_RUNTIME_CACHE_DIR="${GTNH_CLIENT_RUNTIME_CACHE_DIR:-}"
@@ -50,6 +51,7 @@ echo "Atlas icon size: $GTNH_ATLAS_ICON_SIZE"
 echo "Shared icon cache: $GTNH_ICON_CACHE_DIR"
 echo "Disable client UI-only mods: $GTNH_EXPORT_DISABLE_CLIENT_UI_MODS"
 echo "Fail fast on fatal runtime logs: $GTNH_EXPORT_FAIL_FAST_ON_FATAL_LOGS"
+echo "Runtime auto restarts: $GTNH_EXPORT_MAX_RUNTIME_RESTARTS"
 echo "Pack cache: ${GTNH_PACK_CACHE_DIR:-disabled}"
 echo "Oracle build cache: ${GTNH_ORACLE_BUILD_CACHE_DIR:-disabled}"
 echo "Client runtime cache: ${GTNH_CLIENT_RUNTIME_CACHE_DIR:-disabled}"
@@ -187,16 +189,56 @@ else
   runtime_command="bash '$start_script'"
 fi
 
-setsid bash -lc "cd '$instance_root' && $runtime_command" >"$runtime_log" 2>&1 &
-runtime_pid=$!
-tail -n +1 -f "$runtime_log" &
-tail_pid=$!
+runtime_pid=""
+tail_pid=""
+runtime_attempt=0
+
+start_runtime() {
+  runtime_attempt=$((runtime_attempt + 1))
+  echo "Starting GTNH runtime attempt $runtime_attempt at $(date -u --iso-8601=seconds)"
+  {
+    echo ""
+    echo "=== GTNH runtime attempt $runtime_attempt started at $(date -u --iso-8601=seconds) ==="
+  } >>"$runtime_log"
+  setsid bash -lc "cd '$instance_root' && $runtime_command" >>"$runtime_log" 2>&1 &
+  runtime_pid=$!
+  if (( runtime_attempt == 1 )); then
+    tail -n +1 -f "$runtime_log" &
+  else
+    tail -n 0 -f "$runtime_log" &
+  fi
+  tail_pid=$!
+}
 
 stop_runtime() {
-  kill "$tail_pid" 2>/dev/null || true
-  kill -TERM "-$runtime_pid" 2>/dev/null || true
+  if [[ -n "${tail_pid:-}" ]]; then
+    kill "$tail_pid" 2>/dev/null || true
+  fi
+  if [[ -n "${runtime_pid:-}" ]]; then
+    kill -TERM "-$runtime_pid" 2>/dev/null || true
+  fi
   sleep 5
-  kill -KILL "-$runtime_pid" 2>/dev/null || true
+  if [[ -n "${runtime_pid:-}" ]]; then
+    kill -KILL "-$runtime_pid" 2>/dev/null || true
+  fi
+}
+
+restart_runtime_after_failure() {
+  local runtime_exit="$1"
+  if (( runtime_attempt > GTNH_EXPORT_MAX_RUNTIME_RESTARTS )); then
+    return 1
+  fi
+
+  if [[ "$runtime_exit" == "137" || "$runtime_exit" == "134" ]] || grep -Eiq 'OutOfMemoryError|Java heap space|GC overhead limit exceeded|unable to create new native thread|Killed process|Killed$' "$runtime_log"; then
+    echo "GTNH runtime exited with code $runtime_exit and appears memory-related; restarting runtime ($runtime_attempt/${GTNH_EXPORT_MAX_RUNTIME_RESTARTS} restarts used)."
+    stop_runtime
+    find "$oracle_output_dir" -type f -name '*.json' -delete 2>/dev/null || true
+    raw_oracle_json=""
+    start_runtime
+    return 0
+  fi
+
+  return 1
 }
 
 fail_from_runtime_log() {
@@ -219,6 +261,7 @@ detect_fatal_runtime_log() {
 
 raw_oracle_json=""
 deadline=$((SECONDS + GTNH_EXPORT_TIMEOUT_SECONDS))
+start_runtime
 
 while (( SECONDS < deadline )); do
   if detect_fatal_runtime_log; then
@@ -253,6 +296,10 @@ while (( SECONDS < deadline )); do
       break
     fi
     echo "GTNH runtime process exited with code $runtime_exit before producing an oracle export." >&2
+    if restart_runtime_after_failure "$runtime_exit"; then
+      sleep 5
+      continue
+    fi
     exit "$runtime_exit"
   fi
 

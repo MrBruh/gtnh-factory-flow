@@ -18,7 +18,6 @@ import {
 import {
   formatRate,
   applyMachineHandlerToRecipe,
-  getAdjacentMachineConfigTier,
   GT_VOLTAGE_TIERS,
   getRecipeMachineHandlers,
   getRecipeMachineConfigTierControls,
@@ -163,15 +162,8 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       updateNode(projectNode.id, { overclockTier: nextTier });
     }
   };
-  const updateCoilTier = (direction: -1 | 1) => {
-    if (!coilControl) {
-      return;
-    }
-
-    const nextTier = getAdjacentMachineConfigTier(coilControl, direction);
-    if (nextTier !== coilControl.current.key) {
-      updateNode(projectNode.id, { coilTier: nextTier });
-    }
+  const updateCoilTier = (nextTier: string) => {
+    updateNode(projectNode.id, { coilTier: nextTier });
   };
   const updateMachineConfigTier = (controlId: string, nextTier: string) => {
     const nextMachineConfigTiers = {
@@ -186,6 +178,23 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
       machineConfigTiers: nextMachineConfigTiers,
     });
   };
+  const visibleMachineConfigControls = [
+    ...(coilControl && coilResource ? [{ ...coilControl, resource: coilResource }] : []),
+    ...statsMachineConfigControls,
+  ];
+  const machineConfigPanel =
+    visibleMachineConfigControls.length > 0 ? (
+      <MachineConfigControlPanel
+        controls={visibleMachineConfigControls}
+        onSelect={(controlId, nextTier) => {
+          if (controlId === "heatingCoil") {
+            updateCoilTier(nextTier);
+            return;
+          }
+          updateMachineConfigTier(controlId, nextTier);
+        }}
+      />
+    ) : undefined;
   const passiveProductionPanel =
     cropProductionControls.length > 0 ? (
       <PassiveProductionConfigPanel
@@ -356,49 +365,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             className={nodeColor ? "recipe-node-nei-tint" : undefined}
             canvasClassName={nodeColor ? "recipe-node-canvas-tint" : undefined}
             statsAction={
-              coilControl && coilResource ? (
-                <div className="flex gap-1">
-                  <MachineConfigButton
-                    resource={coilResource}
-                    title={`${coilResource.displayName ?? coilControl.current.label}. Left click up, right click down.`}
-                    ariaLabel={`Coil ${coilResource.displayName ?? coilControl.current.label}`}
-                    onStep={updateCoilTier}
-                  />
-                  {statsMachineConfigControls.map((control) => (
-                    <MachineConfigButton
-                      key={control.id}
-                      resource={control.resource}
-                      title={`${control.resource.displayName ?? control.current.label}. Left click up, right click down.`}
-                      ariaLabel={`${control.label} ${control.resource.displayName ?? control.current.label}`}
-                      onStep={(direction) =>
-                        updateMachineConfigTier(
-                          control.id,
-                          getAdjacentMachineConfigTier(control, direction),
-                        )
-                      }
-                    />
-                  ))}
-                  <MachineParallelIndicator multiplier={machineParallelMultiplier} />
-                </div>
-              ) : statsMachineConfigControls.length > 0 ? (
-                <div className="flex gap-1">
-                  {statsMachineConfigControls.map((control) => (
-                    <MachineConfigButton
-                      key={control.id}
-                      resource={control.resource}
-                      title={`${control.resource.displayName ?? control.current.label}. Left click up, right click down.`}
-                      ariaLabel={`${control.label} ${control.resource.displayName ?? control.current.label}`}
-                      onStep={(direction) =>
-                        updateMachineConfigTier(
-                          control.id,
-                          getAdjacentMachineConfigTier(control, direction),
-                        )
-                      }
-                    />
-                  ))}
-                  <MachineParallelIndicator multiplier={machineParallelMultiplier} />
-                </div>
-              ) : machineParallelMultiplier > 1 ? (
+              machineParallelMultiplier > 1 ? (
                 <div className="flex gap-1">
                   <MachineParallelIndicator multiplier={machineParallelMultiplier} />
                 </div>
@@ -535,6 +502,7 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               );
             }}
           />
+          {machineConfigPanel}
           {passiveProductionPanel}
         </div>
 
@@ -999,6 +967,67 @@ function isCropSeedSlot(
   return slot.resourceIndex === firstItemInputIndex;
 }
 
+function MachineConfigControlPanel({
+  controls,
+  onSelect,
+}: {
+  controls: MachineConfigTierControl[];
+  onSelect: (controlId: string, nextTier: string) => void;
+}) {
+  if (controls.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="nodrag mt-1 border-2 border-[#777] bg-[#b6b6b6] p-1 shadow-[inset_1px_1px_0_#eeeeee,inset_-1px_-1px_0_#777]">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(128px,1fr))] gap-1">
+        {controls.map((control) => (
+          <label key={control.id} className="min-w-0">
+            <span className="mb-0.5 block truncate text-[8px] font-bold uppercase leading-3 text-[#4a4a4a]">
+              {control.label}
+            </span>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center border border-[#555] bg-[#8d8d8d] shadow-[inset_1px_1px_0_#d8d8d8,inset_-1px_-1px_0_#404040]">
+                {control.resource.iconPath ? (
+                  <ResourceIcon
+                    resource={control.resource}
+                    bare
+                    tooltip={false}
+                    showAmount={false}
+                    showConsumedState={false}
+                    iconPixelSize={30}
+                    className="h-6 w-6 !overflow-visible"
+                  />
+                ) : (
+                  <span className="max-w-full truncate px-0.5 text-center text-[8px] font-black leading-3 text-white [text-shadow:1px_1px_0_#000]">
+                    {shortConfigLabel(control.resource)}
+                  </span>
+                )}
+              </span>
+              <select
+                value={control.current.key}
+                onChange={(event) => onSelect(control.id, event.target.value)}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                disabled={control.tiers.length <= 1}
+                className="h-6 min-w-0 flex-1 border border-[#555] bg-[#d8d8d8] px-1 text-[10px] font-bold leading-4 text-black shadow-[inset_1px_1px_0_#ffffff,inset_-1px_-1px_0_#8a8a8a] outline-none focus:border-cyan-700 focus:bg-white disabled:cursor-not-allowed disabled:text-[#555]"
+                title={`${control.label}: ${control.current.label}`}
+                aria-label={control.label}
+              >
+                {control.tiers.map((tier) => (
+                  <option key={tier.key} value={tier.key}>
+                    {tier.label}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PassiveProductionConfigPanel({
   className = "",
   controls,
@@ -1045,52 +1074,6 @@ function PassiveProductionConfigPanel({
         ))}
       </div>
     </div>
-  );
-}
-
-function MachineConfigButton({
-  resource,
-  title,
-  ariaLabel,
-  onStep,
-}: {
-  resource: ResourceAmount;
-  title: string;
-  ariaLabel: string;
-  onStep: (direction: -1 | 1) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onStep(1);
-      }}
-      onContextMenu={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onStep(-1);
-      }}
-      className="nodrag flex h-10 w-10 items-center justify-center border-2 border-[#252525] bg-[#8d8d8d] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:brightness-110"
-      title={title}
-      aria-label={ariaLabel}
-    >
-      {resource.iconPath ? (
-        <ResourceIcon
-          resource={resource}
-          bare
-          tooltip={false}
-          showAmount={false}
-          showConsumedState={false}
-          iconPixelSize={46}
-          className="h-10 w-10 !overflow-visible"
-        />
-      ) : (
-        <span className="max-w-full truncate px-0.5 text-center text-[9px] font-black leading-3 text-white [text-shadow:1px_1px_0_#000]">
-          {shortConfigLabel(resource)}
-        </span>
-      )}
-    </button>
   );
 }
 
