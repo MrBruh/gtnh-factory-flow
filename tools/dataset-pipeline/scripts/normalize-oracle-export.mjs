@@ -319,12 +319,13 @@ function normalizeThaumcraft(domain) {
 
     recipeMaps.add(machineType);
     setRecipeMapIcon(machineType, rawRecipe.output);
+    const durationTicks = positiveInt(rawRecipe.durationTicks, thaumcraftDuration(rawRecipe.type));
     addRecipe({
       id: recipeId("thaumcraft", rawRecipe.type, rawRecipe.id),
       name: `${machineType}: ${resourceLabel(output)}`,
       machineType,
       minimumTier: "NONE",
-      durationTicks: thaumcraftDuration(rawRecipe.type),
+      durationTicks,
       eut: 0,
       inputs,
       outputs: [output],
@@ -340,9 +341,12 @@ function normalizeThaumcraft(domain) {
           {
             id: "base",
             label: text(rawRecipe.type, "Thaumcraft"),
-            durationTicks: thaumcraftDuration(rawRecipe.type),
+            durationTicks,
             eut: 0,
             outputs: runtimeResources([output]),
+            notes: rawRecipe.durationSource
+              ? `Duration exported from ${rawRecipe.durationSource}.`
+              : undefined,
           },
         ],
       },
@@ -380,60 +384,35 @@ function normalizeThaumcraftRecipe(rawRecipe) {
     addSlot("input", resource.kind, slotIndex, slot);
   };
 
-  const outputSlot = type === "arcane" ? { x: 124, y: 26 } : { x: 124, y: 26 };
+  const outputSlot =
+    type === "infusion" ? { x: 75, y: 1 } : type === "crucible" ? { x: 71, y: 8 } : { x: 74, y: 2 };
   const output = resourceAmount(rawRecipe.output, { neiSlot: outputSlot });
   if (output) {
     addSlot("output", output.kind, 0, outputSlot);
   }
 
   if (type === "infusion") {
-    addInput(rawRecipe.centralInput ?? rawRecipe.catalyst, { x: 52, y: 26 }, 0);
+    addInput(rawRecipe.centralInput ?? rawRecipe.catalyst, { x: 75, y: 58 }, 0);
     const componentSlots = thaumcraftInfusionComponentSlots((rawRecipe.components ?? []).length);
     (rawRecipe.components ?? []).forEach((entry, index) =>
       addInput(entry, componentSlots[index], index + 1),
     );
-    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 8, 62);
+    const aspectSlots = thaumcraftInfusionAspectSlots((rawRecipe.aspects ?? []).length);
     (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
-    progressBars.push({
-      x: 88,
-      y: 26,
-      width: 24,
-      height: 17,
-      direction: "right",
-      texture: "arrow",
-    });
   } else if (type === "crucible") {
-    addInput(rawRecipe.catalyst ?? rawRecipe.centralInput, { x: 52, y: 26 }, 0);
-    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 16, 8);
+    addInput(rawRecipe.catalyst ?? rawRecipe.centralInput, { x: 51, y: 30 }, 0);
+    const aspectSlots = thaumcraftCrucibleAspectSlots((rawRecipe.aspects ?? []).length);
     (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
-    progressBars.push({
-      x: 84,
-      y: 26,
-      width: 24,
-      height: 17,
-      direction: "right",
-      texture: "arrow",
-    });
   } else if (type === "arcane") {
-    const componentSlots = craftingNeiSlots({ type: "shaped" }, 9)
-      .filter((slot) => slot.side === "input" && slot.kind === "item")
-      .map(({ x, y }) => ({ x, y }));
+    const componentSlots = thaumcraftArcaneComponentSlots();
     const rawInputs = [
       rawRecipe.centralInput,
       rawRecipe.catalyst,
       ...(rawRecipe.components ?? []),
     ].filter(Boolean);
     rawInputs.forEach((entry, index) => addInput(entry, componentSlots[index], index));
-    const aspectSlots = thaumcraftAspectSlots((rawRecipe.aspects ?? []).length, 7, 62);
+    const aspectSlots = thaumcraftArcaneAspectSlots((rawRecipe.aspects ?? []).length);
     (rawRecipe.aspects ?? []).forEach((entry, index) => addInput(entry, aspectSlots[index], index));
-    progressBars.push({
-      x: 84,
-      y: 26,
-      width: 24,
-      height: 17,
-      direction: "right",
-      texture: "arrow",
-    });
   } else {
     [rawRecipe.centralInput, rawRecipe.catalyst, ...(rawRecipe.components ?? [])].forEach(
       (entry, index) => addInput(entry, compactCraftingInputPositions(6)[index], index),
@@ -461,27 +440,67 @@ function normalizeThaumcraftRecipe(rawRecipe) {
 }
 
 function thaumcraftInfusionComponentSlots(count) {
-  const fixed = [
-    { x: 16, y: 8 },
-    { x: 34, y: 8 },
-    { x: 70, y: 8 },
-    { x: 88, y: 8 },
-    { x: 16, y: 44 },
-    { x: 34, y: 44 },
-    { x: 70, y: 44 },
-    { x: 88, y: 44 },
-  ];
-  if (count <= fixed.length) {
-    return fixed.slice(0, count);
+  if (count <= 0) {
+    return [];
   }
-  return Array.from(
-    { length: count },
-    (_, index) =>
-      fixed[index] ?? {
-        x: 16 + ((index - fixed.length) % 5) * 18,
-        y: 80 + Math.floor((index - fixed.length) / 5) * 18,
-      },
-  );
+  const step = 360 / count;
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (-90 + step * index) * (Math.PI / 180);
+    return {
+      x: 75 + Math.trunc(Math.cos(angle) * 40),
+      y: 59 + Math.trunc(Math.sin(angle) * 40),
+    };
+  });
+}
+
+function thaumcraftInfusionAspectSlots(count) {
+  const perRow = 9;
+  const rows = Math.floor(count / perRow);
+  const centerOffset = (5 - (count % perRow)) * 10;
+  const baseX = 35;
+  const baseY = 114 - 10 * rows;
+  return Array.from({ length: count }, (_, index) => {
+    const wrap = Math.floor(index / perRow) >= rows && (rows > 1 || count < perRow) ? 1 : 0;
+    return {
+      x: baseX + (index % perRow) * 20 + centerOffset * wrap,
+      y: baseY + Math.floor(index / perRow) * 20,
+    };
+  });
+}
+
+function thaumcraftCrucibleAspectSlots(count) {
+  const rows = Math.floor((count - 1) / 3);
+  const centerOffset = (3 - (count % 3)) * 10;
+  const baseX = 51;
+  const baseY = 79 - 10 * rows;
+  return Array.from({ length: count }, (_, index) => {
+    const wrap = Math.floor(index / 3) >= rows && (rows > 1 || count < 3) ? 1 : 0;
+    return {
+      x: baseX + (index % 3) * 20 + centerOffset * wrap,
+      y: baseY + Math.floor(index / 3) * 20,
+    };
+  });
+}
+
+function thaumcraftArcaneComponentSlots() {
+  return [
+    { x: 48, y: 33 },
+    { x: 75, y: 33 },
+    { x: 103, y: 33 },
+    { x: 49, y: 60 },
+    { x: 76, y: 60 },
+    { x: 103, y: 60 },
+    { x: 49, y: 87 },
+    { x: 76, y: 87 },
+    { x: 103, y: 87 },
+  ];
+}
+
+function thaumcraftArcaneAspectSlots(count) {
+  return Array.from({ length: count }, (_, index) => ({
+    x: 42 + 18 * index + (5 - count) * 8,
+    y: 115,
+  }));
 }
 
 function thaumcraftAspectSlots(count, x, y) {
@@ -1057,12 +1076,12 @@ function resourceAmount(rawResource, options = {}) {
   }
 
   const amount = positiveNumber(rawResource.amount, options.defaultAmount ?? 1);
-  const id = text(rawResource.id, "");
+  const id = canonicalResourceId(rawResource.kind, text(rawResource.id, ""));
   if (!id || !(amount > 0)) {
     return undefined;
   }
 
-  const iconPath = renderedIconPath(rawResource.icon);
+  const iconPath = renderedIconPath(rawResource.icon) ?? text(rawResource.iconPath, undefined);
   const tooltip = [
     ...(normalizeStringArray(rawResource.tooltip) ?? []),
     rawResource.nbt ? `NBT: ${rawResource.nbt}` : undefined,
@@ -1073,7 +1092,8 @@ function resourceAmount(rawResource, options = {}) {
     amount,
     displayName: text(rawResource.displayName, id),
     iconPath,
-    dominantColor: renderedIconColor(rawResource.icon),
+    dominantColor:
+      renderedIconColor(rawResource.icon) ?? text(rawResource.dominantColor, undefined),
     modId: rawResource.modId,
     tooltip: tooltip.length > 0 ? tooltip : undefined,
     consumed: options.consumed === false || rawResource.consumed === false ? false : undefined,
@@ -1765,6 +1785,22 @@ function slug(value) {
 function text(value, defaultText) {
   const normalized = String(value ?? "").trim();
   return normalized.length > 0 ? normalized : defaultText;
+}
+
+function canonicalResourceId(kind, id) {
+  if (kind !== "item") {
+    return id;
+  }
+  const separator = id.lastIndexOf("@");
+  const baseId = separator >= 0 ? id.slice(0, separator) : id;
+  const suffix = separator >= 0 ? id.slice(separator) : "";
+  const namespaceSeparator = baseId.indexOf(":");
+  if (namespaceSeparator < 0) {
+    return `${baseId.toLowerCase()}${suffix}`;
+  }
+  return `${baseId.slice(0, namespaceSeparator).toLowerCase()}:${baseId
+    .slice(namespaceSeparator + 1)
+    .toLowerCase()}${suffix}`;
 }
 
 function normalizeLabel(value) {

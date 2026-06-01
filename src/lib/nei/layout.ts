@@ -55,13 +55,32 @@ export interface NeiProgressBar {
   frame?: number;
 }
 
-export interface NeiDecoration {
+export interface NeiRectDecoration {
+  kind?: "rect";
   x: number;
   y: number;
   width: number;
   height: number;
   color: string;
 }
+
+export interface NeiTextureDecoration {
+  kind: "texture";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  imagePath: string;
+  textureWidth: number;
+  textureHeight: number;
+  sourceX: number;
+  sourceY: number;
+  sourceWidth: number;
+  sourceHeight: number;
+  opacity?: number;
+}
+
+export type NeiDecoration = NeiRectDecoration | NeiTextureDecoration;
 
 export interface NeiRecipeLayout {
   id: string;
@@ -102,6 +121,8 @@ type RequiredRecipeMapLayoutDefinition = Required<
 
 const SLOT_SIZE = 18;
 const DEFAULT_CANVAS: NeiSize = { width: 170, height: 82 };
+const THAUMCRAFT_OVERLAY_PATH = "/nei/thaumcraft/gui/gui_researchbook_overlay.png";
+const THAUMCRAFT_OVERLAY_SIZE = 256;
 const DEFAULT_PROGRESS_BARS: NeiProgressBar[] = [
   { x: 78, y: 24, width: 20, height: 18, direction: "right", texture: "arrow" },
 ];
@@ -144,6 +165,47 @@ const COMPONENT_ASSEMBLY_LINE_LAYOUT: RecipeMapLayoutDefinition = {
     { x: 141, y: 25, width: 1, height: 18, color: "#030303" },
     { x: 142, y: 26, width: 1, height: 18, color: "#373737" },
     { x: 143, y: 27, width: 1, height: 18, color: "#8B8B8B" },
+  ],
+};
+const THAUMCRAFT_INFUSION_LAYOUT: RecipeMapLayoutDefinition = {
+  id: "thaumcraft-infusion",
+  canvas: { width: 214, height: 140 },
+  maxItemInputs: 1,
+  maxItemOutputs: 1,
+  maxFluidInputs: 0,
+  maxFluidOutputs: 0,
+  progressBars: [],
+  decorations: [
+    thaumcraftOverlayDecoration(34, -5, 0, 3, 56, 17, 1.75),
+    thaumcraftOverlayDecoration(34, 28.25, 200, 77, 60, 44, 1.75),
+  ],
+};
+const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
+  id: "thaumcraft-crucible",
+  canvas: { width: 170, height: 140 },
+  maxItemInputs: 1,
+  maxItemOutputs: 1,
+  maxFluidInputs: 0,
+  maxFluidOutputs: 0,
+  progressBars: [],
+  decorations: [
+    thaumcraftOverlayDecoration(30, 3, 0, 3, 56, 17, 1.75),
+    thaumcraftOverlayDecoration(30, 48.5, 0, 20, 56, 48, 1.75),
+    thaumcraftOverlayDecoration(66.75, 34.5, 100, 84, 11, 13, 1.75),
+  ],
+};
+const THAUMCRAFT_ARCANE_LAYOUT: RecipeMapLayoutDefinition = {
+  id: "thaumcraft-arcane",
+  canvas: { width: 170, height: 174 },
+  maxItemInputs: 9,
+  maxItemOutputs: 1,
+  maxFluidInputs: 0,
+  maxFluidOutputs: 0,
+  progressBars: [],
+  decorations: [
+    thaumcraftOverlayDecoration(37.4, 24.1, 112, 15, 52, 52, 1.7),
+    thaumcraftOverlayDecoration(68, -3.1, 20, 3, 16, 16, 1.7),
+    thaumcraftOverlayDecoration(34, 149, 68, 76, 12, 12, 2, 0.4),
   ],
 };
 
@@ -271,6 +333,9 @@ const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
     itemInputPositions: (count) => gridPositions(count, 24, 44, 1),
     itemOutputPositions: (count) => gridPositions(count, 78, 8, 5, 5),
   },
+  "Thaumcraft Infusion": THAUMCRAFT_INFUSION_LAYOUT,
+  "Thaumcraft Crucible": THAUMCRAFT_CRUCIBLE_LAYOUT,
+  "Thaumcraft Arcane Crafting": THAUMCRAFT_ARCANE_LAYOUT,
 };
 
 export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
@@ -354,7 +419,7 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   ];
   const slots = frames.filter((frame): frame is NeiPositionedSlot => Boolean(frame.resource));
 
-  const canvas = growCanvas(definition.canvas ?? DEFAULT_CANVAS, frames);
+  const canvas = growCanvas(definition.canvas ?? DEFAULT_CANVAS, frames, definition.decorations);
 
   return {
     id: definition.id,
@@ -902,7 +967,8 @@ function aspectPositions(
   if (totalCount <= 0) {
     return [];
   }
-  const y = 8 + Math.ceil(Math.max(definition.maxItemInputs, definition.maxItemOutputs, 1) / 3) * SLOT_SIZE;
+  const y =
+    8 + Math.ceil(Math.max(definition.maxItemInputs, definition.maxItemOutputs, 1) / 3) * SLOT_SIZE;
   const x = side === "input" ? 8 : 98;
   return gridPositions(totalCount, x, y, 4, 3);
 }
@@ -1034,11 +1100,51 @@ function overflowGroup(
   return { side, kind, capacity, resourceCount };
 }
 
-function growCanvas(canvas: NeiSize, frames: NeiSlotFrame[]): NeiSize {
+function growCanvas(
+  canvas: NeiSize,
+  frames: NeiSlotFrame[],
+  decorations: NeiDecoration[] = [],
+): NeiSize {
+  const maxSlotRight = Math.max(0, ...frames.map((frame) => frame.x + SLOT_SIZE + 1));
   const maxSlotBottom = Math.max(0, ...frames.map((frame) => frame.y + SLOT_SIZE + 2));
+  const maxDecorationRight = Math.max(
+    0,
+    ...decorations.map((decoration) => decoration.x + decoration.width),
+  );
+  const maxDecorationBottom = Math.max(
+    0,
+    ...decorations.map((decoration) => decoration.y + decoration.height),
+  );
   return {
-    width: Math.max(canvas.width, 170),
-    height: Math.max(canvas.height, maxSlotBottom + 2),
+    width: Math.max(canvas.width, 170, maxSlotRight, maxDecorationRight),
+    height: Math.max(canvas.height, maxSlotBottom + 2, maxDecorationBottom),
+  };
+}
+
+function thaumcraftOverlayDecoration(
+  x: number,
+  y: number,
+  sourceX: number,
+  sourceY: number,
+  sourceWidth: number,
+  sourceHeight: number,
+  scale: number,
+  opacity?: number,
+): NeiTextureDecoration {
+  return {
+    kind: "texture",
+    x,
+    y,
+    width: sourceWidth * scale,
+    height: sourceHeight * scale,
+    imagePath: THAUMCRAFT_OVERLAY_PATH,
+    textureWidth: THAUMCRAFT_OVERLAY_SIZE,
+    textureHeight: THAUMCRAFT_OVERLAY_SIZE,
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+    opacity,
   };
 }
 

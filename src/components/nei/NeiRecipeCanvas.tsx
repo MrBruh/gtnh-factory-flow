@@ -4,6 +4,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import {
   getNeiRecipeLayout,
+  type NeiDecoration,
   type NeiOverflowGroup,
   type NeiPositionedSlot,
   type NeiProgressTexture,
@@ -69,7 +70,8 @@ export function NeiRecipeCanvas({
   );
   const renderScale = slotPixelSize ? slotPixelSize / layout.slotSize : scale;
   const width = layout.canvas.width * renderScale;
-  const height = getCanvasHeight(renderLayout.frames, renderLayout.logoY) * renderScale;
+  const height =
+    getCanvasHeight(renderLayout.frames, renderLayout.logoY, layout.canvas.height) * renderScale;
   const slotSize = layout.slotSize * renderScale;
   const renderedIconPixelSize = iconPixelSize ?? slotSize;
   return (
@@ -90,16 +92,10 @@ export function NeiRecipeCanvas({
       ))}
 
       {layout.decorations.map((decoration, index) => (
-        <div
+        <DecorationView
           key={`${decoration.x}-${decoration.y}-${decoration.width}-${decoration.height}-${index}`}
-          className="pointer-events-none absolute"
-          style={{
-            left: decoration.x * renderScale,
-            top: decoration.y * renderScale,
-            width: decoration.width * renderScale,
-            height: decoration.height * renderScale,
-            backgroundColor: decoration.color,
-          }}
+          decoration={decoration}
+          scale={renderScale}
         />
       ))}
 
@@ -348,9 +344,9 @@ function applyVerticalShifts(y: number, shifts: VerticalShift[]) {
   }, y);
 }
 
-function getCanvasHeight(frames: RenderFrame[], logoY: number) {
+function getCanvasHeight(frames: RenderFrame[], logoY: number, canvasHeight: number) {
   const maxSlotBottom = Math.max(0, ...frames.map((frame) => frame.y + SLOT_SIZE + 2));
-  return Math.max(82, logoY + 19, maxSlotBottom + 2);
+  return Math.max(canvasHeight, 82, logoY + 19, maxSlotBottom + 2);
 }
 
 function getGroupKey(group: Pick<NeiSlotFrame, "side" | "kind">) {
@@ -492,6 +488,43 @@ function ProgressTexture({
         backgroundImage: `url('/nei/gregtech/gui/progressbar/${bar.texture}.png')`,
         backgroundPosition: frameOffset === undefined ? "top left" : `0 -${frameOffset}px`,
         backgroundSize: frameOffset === undefined ? "100% 200%" : "100% auto",
+      }}
+    />
+  );
+}
+
+function DecorationView({ decoration, scale }: { decoration: NeiDecoration; scale: number }) {
+  if (decoration.kind === "texture") {
+    const scaleX = (decoration.width * scale) / decoration.sourceWidth;
+    const scaleY = (decoration.height * scale) / decoration.sourceHeight;
+    return (
+      <div
+        className="pointer-events-none absolute bg-no-repeat"
+        style={{
+          left: decoration.x * scale,
+          top: decoration.y * scale,
+          width: decoration.width * scale,
+          height: decoration.height * scale,
+          opacity: decoration.opacity,
+          backgroundImage: `url('${decoration.imagePath}')`,
+          backgroundSize: `${decoration.textureWidth * scaleX}px ${
+            decoration.textureHeight * scaleY
+          }px`,
+          backgroundPosition: `-${decoration.sourceX * scaleX}px -${decoration.sourceY * scaleY}px`,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      className="pointer-events-none absolute"
+      style={{
+        left: decoration.x * scale,
+        top: decoration.y * scale,
+        width: decoration.width * scale,
+        height: decoration.height * scale,
+        backgroundColor: decoration.color,
       }}
     />
   );

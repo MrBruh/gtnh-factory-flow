@@ -305,6 +305,7 @@ public final class GtnhCalcOracleExporter {
         }
 
         try {
+            unlockThaumcraftKnowledgeForOracle();
             Class<?> api = Class.forName("thaumcraft.api.ThaumcraftApi");
             for (Field field : api.getDeclaredFields()) {
                 if (!Modifier.isStatic(field.getModifiers()) || !Collection.class.isAssignableFrom(field.getType())) {
@@ -427,8 +428,14 @@ public final class GtnhCalcOracleExporter {
         putIfPresent(recipe, "output", resourceFromUnknown(firstObject(rawRecipe, "getRecipeOutput", "recipeOutput", "output")));
         putIfPresent(recipe, "centralInput", resourceFromUnknown(firstObject(rawRecipe, "getRecipeInput", "recipeInput", "input")));
         putIfPresent(recipe, "catalyst", resourceFromUnknown(firstObject(rawRecipe, "getCatalyst", "catalyst")));
-        putIfPresent(recipe, "components", resourcesFromUnknown(firstObject(rawRecipe, "getComponents", "components", "recipeItems")));
-        putIfPresent(recipe, "aspects", aspectResources(firstObject(rawRecipe, "getAspects", "aspects")));
+        List<Map<String, Object>> components = resourcesFromUnknown(firstObject(rawRecipe, "getComponents", "components", "recipeItems"));
+        List<Map<String, Object>> aspects = aspectResources(firstObject(rawRecipe, "getAspects", "aspects"));
+        putIfPresent(recipe, "components", components);
+        putIfPresent(recipe, "aspects", aspects);
+        putIfPresent(recipe, "durationTicks", thaumcraftDurationTicks(type, components, aspects));
+        if ("infusion".equals(type)) {
+            recipe.put("durationSource", "thaumcraft.common.tiles.TileInfusionMatrix.craftCycle");
+        }
         putIfPresent(recipe, "instability", firstNumber(rawRecipe, "getInstability", "instability"));
         return recipe;
     }
@@ -1172,7 +1179,7 @@ public final class GtnhCalcOracleExporter {
         Map<String, Object> item = map();
         int meta = stack.getItemDamage();
         item.put("kind", "item");
-        item.put("id", meta == 0 ? registryId : registryId + "@" + meta);
+        item.put("id", itemResourceId(registryId, meta));
         item.put("registryId", registryId);
         item.put("meta", Integer.valueOf(meta));
         item.put("amount", Integer.valueOf(stack.stackSize));
@@ -1373,13 +1380,138 @@ public final class GtnhCalcOracleExporter {
         return keys.isEmpty() ? "" : keys.toString();
     }
 
+    private void unlockThaumcraftKnowledgeForOracle() {
+        try {
+            String username = thaumcraftOracleUsername();
+            int aspectCount = unlockThaumcraftAspects(username);
+            int researchCount = unlockThaumcraftResearch(username);
+            GtnhCalcOracleMod.LOG.info(
+                "GTNH calculation oracle unlocked {} Thaumcraft aspect(s) and {} research entry/entries for {}.",
+                Integer.valueOf(aspectCount),
+                Integer.valueOf(researchCount),
+                username
+            );
+        } catch (Throwable t) {
+            GtnhCalcOracleMod.LOG.warn("Could not pre-unlock Thaumcraft knowledge for oracle export.", t);
+        }
+    }
+
+    private String thaumcraftOracleUsername() {
+        String configured = System.getProperty("gtnh.oracle.thaumcraftPlayer");
+        if (configured != null && configured.trim().length() > 0) {
+            return configured.trim();
+        }
+
+        try {
+            Class<?> minecraftClass = Class.forName("net.minecraft.client.Minecraft");
+            Object minecraft = minecraftClass.getMethod("getMinecraft").invoke(null);
+            Object player = readField(minecraft, "thePlayer");
+            String playerName = invokeString(player, "getCommandSenderName");
+            if (playerName != null && playerName.trim().length() > 0) {
+                return playerName.trim();
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return "GTNHPlannerOracle";
+    }
+
+    private int unlockThaumcraftAspects(String username) throws Exception {
+        Class<?> aspectClass = Class.forName("thaumcraft.api.aspects.Aspect");
+        Class<?> researchManager = Class.forName("thaumcraft.common.lib.research.ResearchManager");
+        Method completeAspect = researchManager.getMethod(
+            "completeAspectUnsaved",
+            String.class,
+            aspectClass,
+            Short.TYPE
+        );
+        Object rawAspects = readStaticField(aspectClass, "aspects");
+        int count = 0;
+        for (Object aspect : mapValuesOrIterable(rawAspects)) {
+            if (aspect == null) {
+                continue;
+            }
+            completeAspect.invoke(null, username, aspect, Short.valueOf(Short.MAX_VALUE));
+            count++;
+        }
+
+        try {
+            Object proxy = readStaticField(Class.forName("thaumcraft.common.Thaumcraft"), "proxy");
+            Object knowledge = readField(proxy, "playerKnowledge");
+            invokeBest(knowledge, "addDiscoveredPrimalAspects", new Object[] { username });
+            for (Object aspect : mapValuesOrIterable(rawAspects)) {
+                invokeBest(knowledge, "addDiscoveredAspect", new Object[] { username, aspect });
+            }
+        } catch (Throwable ignored) {
+        }
+
+        return count;
+    }
+
+    private int unlockThaumcraftResearch(String username) throws Exception {
+        Class<?> categoriesClass = Class.forName("thaumcraft.api.research.ResearchCategories");
+        Class<?> researchManager = Class.forName("thaumcraft.common.lib.research.ResearchManager");
+        Method completeResearch = researchManager.getMethod("completeResearchUnsaved", String.class, String.class);
+        Object rawCategories = readStaticField(categoriesClass, "researchCategories");
+        int count = 0;
+        for (Object category : mapValuesOrIterable(rawCategories)) {
+            Object rawResearch = readField(category, "research");
+            if (!(rawResearch instanceof Map)) {
+                continue;
+            }
+            for (Object key : ((Map<?, ?>) rawResearch).keySet()) {
+                if (key == null) {
+                    continue;
+                }
+                completeResearch.invoke(null, username, String.valueOf(key));
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private Iterable<?> mapValuesOrIterable(Object value) {
+        if (value instanceof Map) {
+            return ((Map<?, ?>) value).values();
+        }
+        return iterable(value);
+    }
+
+    private Integer thaumcraftDurationTicks(
+        String type,
+        List<Map<String, Object>> components,
+        List<Map<String, Object>> aspects
+    ) {
+        if ("infusion".equals(type)) {
+            int essentia = 0;
+            for (Map<String, Object> aspect : aspects) {
+                Number amount = asNumber(aspect.get("amount"));
+                if (amount != null && amount.intValue() > 0) {
+                    essentia += amount.intValue();
+                }
+            }
+            int componentCount = components == null ? 0 : components.size();
+            return Integer.valueOf(10 * (essentia + componentCount * 6 + 1));
+        }
+        if ("crucible".equals(type)) {
+            return Integer.valueOf(20);
+        }
+        if ("arcane".equals(type)) {
+            return Integer.valueOf(1);
+        }
+        return null;
+    }
+
     private List<Map<String, Object>> aspectResources(Object aspectList) {
         List<Map<String, Object>> aspects = new ArrayList<Map<String, Object>>();
         if (aspectList == null) {
             return aspects;
         }
 
-        Object rawAspects = invokeBest(aspectList, "getAspects", new Object[0]);
+        Object rawAspects = invokeBest(aspectList, "getAspectsSortedAmount", new Object[0]);
+        if (rawAspects == null) {
+            rawAspects = invokeBest(aspectList, "getAspects", new Object[0]);
+        }
         for (Object aspect : iterable(rawAspects)) {
             Number amount = asNumber(invokeBest(aspectList, "getAmount", new Object[] { aspect }));
             if (amount == null || amount.doubleValue() <= 0.0D) {
@@ -1396,9 +1528,34 @@ public final class GtnhCalcOracleExporter {
             resource.put("tag", tag);
             resource.put("amount", amount);
             resource.put("displayName", name == null ? tag : name);
+            putIfPresent(resource, "iconPath", aspectIconPath(aspect, tag));
+            putIfPresent(resource, "dominantColor", aspectColor(aspect));
             aspects.add(resource);
         }
         return aspects;
+    }
+
+    private String aspectIconPath(Object aspect, String tag) {
+        Object image = invokeBest(aspect, "getImage", new Object[0]);
+        String location = safeString(image);
+        int separator = location.indexOf(':');
+        String domain = separator > 0 ? location.substring(0, separator) : "thaumcraft";
+        String resourcePath = separator > 0 ? location.substring(separator + 1) : location;
+        if ("thaumcraft".equals(domain) && resourcePath.startsWith("textures/aspects/")) {
+            return "/nei/thaumcraft/aspects/" + resourcePath.substring("textures/aspects/".length());
+        }
+        if ("thaumcraft".equals(domain) && tag != null && tag.length() > 0) {
+            return "/nei/thaumcraft/aspects/" + tag.toLowerCase(Locale.ROOT) + ".png";
+        }
+        return null;
+    }
+
+    private String aspectColor(Object aspect) {
+        Number color = asNumber(invokeBest(aspect, "getColor", new Object[0]));
+        if (color == null) {
+            return null;
+        }
+        return String.format("#%06x", Integer.valueOf(color.intValue() & 0xFFFFFF));
     }
 
     private Map<String, Object> compactItemStack(ItemStack stack) {
@@ -1414,7 +1571,7 @@ public final class GtnhCalcOracleExporter {
         Map<String, Object> item = map();
         int meta = stack.getItemDamage();
         item.put("kind", "item");
-        item.put("id", meta == 0 ? registryId : registryId + "@" + meta);
+        item.put("id", itemResourceId(registryId, meta));
         item.put("amount", Integer.valueOf(stack.stackSize));
         item.put("displayName", displayName(stack));
         String modId = modId(registryId);
@@ -1725,6 +1882,22 @@ public final class GtnhCalcOracleExporter {
     private String modId(String registryId) {
         int separator = registryId.indexOf(':');
         return separator > 0 ? registryId.substring(0, separator) : null;
+    }
+
+    private String itemResourceId(String registryId, int meta) {
+        String id = canonicalRegistryId(registryId);
+        return meta == 0 ? id : id + "@" + meta;
+    }
+
+    private String canonicalRegistryId(String registryId) {
+        String normalized = safeString(registryId).trim();
+        int separator = normalized.indexOf(':');
+        if (separator < 0) {
+            return normalized.toLowerCase(Locale.ROOT);
+        }
+        String domain = normalized.substring(0, separator).toLowerCase(Locale.ROOT);
+        String path = normalized.substring(separator + 1).toLowerCase(Locale.ROOT);
+        return domain + ":" + path;
     }
 
     private String sha1(String value) {
