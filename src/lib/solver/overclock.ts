@@ -1,4 +1,9 @@
-import { getRecipePowerTier, getVoltageTierIndex, GT_VOLTAGE_TIERS } from "@/lib/model/tiers";
+import {
+  getHighestFiniteVoltageTier,
+  getRecipePowerTier,
+  getVoltageTierIndex,
+  GT_OVERCLOCK_TIERS,
+} from "@/lib/model/tiers";
 import {
   applyMachineHandlerToRecipe,
   getRecipeCoilTierControl,
@@ -194,5 +199,14 @@ function normalizeRecipeMapName(recipeMap: string): string {
 }
 
 function resolveVoltageTier(value: string, defaultTier: VoltageTier): VoltageTier {
-  return GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier ?? defaultTier;
+  const tier = GT_OVERCLOCK_TIERS.find((entry) => entry.tier === value)?.tier;
+  if (tier) {
+    return tier;
+  }
+
+  if (value === "MAX") {
+    return getHighestFiniteVoltageTier();
+  }
+
+  return defaultTier === "MAX" ? getHighestFiniteVoltageTier() : defaultTier;
 }
