@@ -119,6 +119,10 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
     return undefined;
   }
 
+  if (isBeeSpeciesResource(resource)) {
+    return resourceLabel(resource);
+  }
+
   const baseLines = resource.tooltip?.length
     ? [
         resourceLabel(resource),
@@ -149,6 +153,10 @@ function buildTooltipLabel(resource: ResourceIconProps["resource"]) {
     : undefined;
 
   return [...baseLines, alternativesLine, chanceLine, consumedLine].filter(Boolean).join("\n");
+}
+
+function isBeeSpeciesResource(resource: Pick<ResourceAmount, "id">) {
+  return resource.id.startsWith("factoryflow:bee_species:");
 }
 
 function isNotConsumedTooltipLine(line: string) {

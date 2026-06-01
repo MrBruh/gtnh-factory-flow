@@ -18,6 +18,12 @@ export const GT_VOLTAGE_TIERS: Array<{ tier: Exclude<MachineTier, "DEMO">; maxEu
   { tier: "MAX", maxEuT: Number.POSITIVE_INFINITY },
 ];
 
+export const GT_OVERCLOCK_TIERS = GT_VOLTAGE_TIERS.filter((entry) => Number.isFinite(entry.maxEuT));
+
+export function getHighestFiniteVoltageTier(): Exclude<MachineTier, "DEMO"> {
+  return GT_OVERCLOCK_TIERS[GT_OVERCLOCK_TIERS.length - 1]?.tier ?? "OpV";
+}
+
 export function getVoltageTierForEuT(euT: number): Exclude<MachineTier, "DEMO"> {
   if (!Number.isFinite(euT) || euT <= 0) {
     return "ULV";

@@ -659,7 +659,6 @@ function beeSpeciesInput(species) {
     iconPath: icon?.iconPath,
     dominantColor: icon?.dominantColor,
     modId: icon?.modId ?? "Forestry",
-    tooltip: ["Bee species", uid, species.className].filter(Boolean),
     consumed: false,
     neiSlot: { x: 48, y: 35 },
   });

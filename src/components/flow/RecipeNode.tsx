@@ -18,7 +18,8 @@ import {
 import {
   formatRate,
   applyMachineHandlerToRecipe,
-  GT_VOLTAGE_TIERS,
+  GT_OVERCLOCK_TIERS,
+  getHighestFiniteVoltageTier,
   getRecipeMachineHandlers,
   getRecipeMachineConfigTierControls,
   getRecipeCoilTierControl,
@@ -570,7 +571,7 @@ function getNodeTierControl(recipe: Recipe, node: FactoryNode) {
     return undefined;
   }
 
-  const hasVoltageTier = GT_VOLTAGE_TIERS.some((entry) => entry.tier === recipe.minimumTier);
+  const hasVoltageTier = GT_OVERCLOCK_TIERS.some((entry) => entry.tier === recipe.minimumTier);
   if (
     recipe.durationTicks <= 0 ||
     (recipe.eut === 0 && !hasVoltageTier && !isTierDrivenOutputRecipe(recipe))
@@ -592,10 +593,10 @@ function getAdjacentTier(current: VoltageTier, minimum: VoltageTier, direction: 
   const currentIndex = getVoltageTierIndex(current);
   const minimumIndex = getVoltageTierIndex(minimum);
   const nextIndex = Math.min(
-    GT_VOLTAGE_TIERS.length - 1,
+    GT_OVERCLOCK_TIERS.length - 1,
     Math.max(minimumIndex, currentIndex + direction),
   );
-  return GT_VOLTAGE_TIERS[nextIndex]?.tier ?? current;
+  return GT_OVERCLOCK_TIERS[nextIndex]?.tier ?? current;
 }
 
 function clampTier(tier: VoltageTier, minimum: VoltageTier) {
@@ -603,7 +604,15 @@ function clampTier(tier: VoltageTier, minimum: VoltageTier) {
 }
 
 function resolveVoltageTier(value: string, defaultTier: VoltageTier): VoltageTier {
-  const tier = GT_VOLTAGE_TIERS.find((entry) => entry.tier === value)?.tier;
+  const tier = GT_OVERCLOCK_TIERS.find((entry) => entry.tier === value)?.tier;
+  if (tier) {
+    return tier;
+  }
+
+  if (value === "MAX") {
+    return getHighestFiniteVoltageTier();
+  }
+
   return tier ?? defaultTier;
 }
 
