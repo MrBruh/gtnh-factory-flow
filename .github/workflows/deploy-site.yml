@@ -94,7 +94,7 @@ jobs:
             --memory=3g \
             --memory-swap=4g \
             --cpus=2 \
-            -p "127.0.0.1:$port:$port" \
+            -p "$port:$port" \
             -e HOME=/tmp \
             -e NODE_ENV=production \
             -e PORT="$port" \

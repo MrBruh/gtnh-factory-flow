@@ -383,7 +383,7 @@ jobs:
             --memory=3g \
             --memory-swap=4g \
             --cpus=2 \
-            -p "127.0.0.1:8580:8580" \
+            -p "8580:8580" \
             -e HOME=/tmp \
             -e NODE_ENV=production \
             -e PORT=8580 \
