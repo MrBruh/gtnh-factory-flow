@@ -58,27 +58,36 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
     return (
       <div
         className={[
-          "relative inline-block bg-[#c6c6c6] font-mono text-[#111]",
+          "relative inline-block border-2 border-[#f7f7f7] bg-[#c6c6c6] p-1 font-mono text-[#111] shadow-[inset_-2px_-2px_0_#6f6f6f]",
           compact ? "text-[10px]" : "text-[14px]",
           className,
         ].join(" ")}
       >
-        <NeiRecipeCanvas
-          recipe={recipe}
-          layout={layout}
-          scale={scale}
-          iconPixelSize={16 * scale}
-          className={canvasClassName}
-          renderHandle={renderHandle}
-          getSlotConnectionAttributes={getSlotConnectionAttributes}
-          onSlotClick={onSlotClick}
-          suppressSlotHover={suppressSlotHover}
-          suppressConsumedState={suppressConsumedState}
-          getSlotZIndex={getSlotZIndex}
-          slotTooltip={slotTooltip}
-          hideCollapseControls={preserveNativeSlots}
-          contextResource={contextResource}
-        />
+        <NeiTitleBar label={layout.title ?? recipeMap} compact={compact} />
+        <NeiPageBar label={layout.pageLabel ?? "Page 1/1"} compact={compact} />
+        <div className={compact ? "px-1 pb-1 pt-1" : "p-2"}>
+          <div className="relative">
+            {layout.id.startsWith("thaumcraft") ? (
+              <ThaumcraftResearchHeader scale={scale} compact={compact} />
+            ) : null}
+            <NeiRecipeCanvas
+              recipe={recipe}
+              layout={layout}
+              scale={scale}
+              iconPixelSize={14 * scale}
+              className={canvasClassName}
+              renderHandle={renderHandle}
+              getSlotConnectionAttributes={getSlotConnectionAttributes}
+              onSlotClick={onSlotClick}
+              suppressSlotHover={suppressSlotHover}
+              suppressConsumedState={suppressConsumedState}
+              getSlotZIndex={getSlotZIndex}
+              slotTooltip={slotTooltip}
+              hideCollapseControls={preserveNativeSlots}
+              contextResource={contextResource}
+            />
+          </div>
+        </div>
       </div>
     );
   }
@@ -154,7 +163,7 @@ function NeiTitleBar({ label, compact }: { label: string; compact: boolean }) {
   );
 }
 
-function NeiPageBar({ compact }: { compact: boolean }) {
+function NeiPageBar({ compact, label = "Page 1/1" }: { compact: boolean; label?: string }) {
   return (
     <div
       className={[
@@ -164,10 +173,31 @@ function NeiPageBar({ compact }: { compact: boolean }) {
     >
       <NeiArrowButton label="<" />
       <div className="truncate border-b-2 border-[#555] bg-[#a9a9a9] px-2 leading-[1.3] shadow-[inset_2px_0_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]">
-        Page 1/1
+        {label}
       </div>
       <NeiArrowButton label=">" />
     </div>
+  );
+}
+
+function ThaumcraftResearchHeader({ scale, compact }: { scale: number; compact: boolean }) {
+  const fontSize = compact ? 8 * scale : 10 * scale;
+  const top = compact ? 3 * scale : 5 * scale;
+  return (
+    <>
+      <span
+        className="pointer-events-none absolute left-0 z-20 font-mono font-bold text-[#555] [text-shadow:1px_1px_0_#eee]"
+        style={{ top, fontSize, lineHeight: `${fontSize}px` }}
+      >
+        Research
+      </span>
+      <span
+        className="pointer-events-none absolute right-0 z-20 font-mono font-bold text-[#555] [text-shadow:1px_1px_0_#eee]"
+        style={{ top, fontSize, lineHeight: `${fontSize}px` }}
+      >
+        See All
+      </span>
+    </>
   );
 }
 

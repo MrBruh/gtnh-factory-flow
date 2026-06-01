@@ -85,6 +85,8 @@ export type NeiDecoration = NeiRectDecoration | NeiTextureDecoration;
 export interface NeiRecipeLayout {
   id: string;
   chrome: "gregtech" | "native";
+  title?: string;
+  pageLabel?: string;
   canvas: NeiSize;
   slotSize: number;
   frames: NeiSlotFrame[];
@@ -98,6 +100,8 @@ export interface NeiRecipeLayout {
 
 interface RecipeMapLayoutDefinition {
   id: string;
+  title?: string;
+  pageLabel?: string;
   canvas?: NeiSize;
   maxItemInputs?: number;
   maxItemOutputs?: number;
@@ -174,6 +178,7 @@ const COMPONENT_ASSEMBLY_LINE_LAYOUT: RecipeMapLayoutDefinition = {
 const THAUMCRAFT_INFUSION_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-infusion",
   chrome: "native",
+  title: "Arcane Infusion",
   canvas: { width: 214, height: 140 },
   maxItemInputs: 1,
   maxItemOutputs: 1,
@@ -189,6 +194,7 @@ const THAUMCRAFT_INFUSION_LAYOUT: RecipeMapLayoutDefinition = {
 const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-crucible",
   chrome: "native",
+  title: "Thaumcraft Crucible",
   canvas: { width: 170, height: 140 },
   maxItemInputs: 1,
   maxItemOutputs: 1,
@@ -205,6 +211,7 @@ const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
 const THAUMCRAFT_ARCANE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-arcane",
   chrome: "native",
+  title: "Shaped Arcane Crafting",
   canvas: { width: 170, height: 174 },
   maxItemInputs: 9,
   maxItemOutputs: 1,
@@ -344,8 +351,15 @@ const RECIPE_MAP_LAYOUTS: Record<string, RecipeMapLayoutDefinition> = {
     itemOutputPositions: (count) => gridPositions(count, 78, 8, 5, 5),
   },
   "Thaumcraft Infusion": THAUMCRAFT_INFUSION_LAYOUT,
+  "Arcane Infusion": THAUMCRAFT_INFUSION_LAYOUT,
   "Thaumcraft Crucible": THAUMCRAFT_CRUCIBLE_LAYOUT,
   "Thaumcraft Arcane Crafting": THAUMCRAFT_ARCANE_LAYOUT,
+  "Shaped Arcane Crafting": THAUMCRAFT_ARCANE_LAYOUT,
+  "Shapeless Arcane Crafting": {
+    ...THAUMCRAFT_ARCANE_LAYOUT,
+    id: "thaumcraft-shapeless-arcane",
+    title: "Shapeless Arcane Crafting",
+  },
 };
 
 export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
@@ -434,6 +448,8 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
   return {
     id: definition.id,
     chrome: definition.chrome ?? "gregtech",
+    title: definition.title,
+    pageLabel: definition.pageLabel,
     canvas,
     slotSize: SLOT_SIZE,
     frames,
@@ -462,7 +478,11 @@ export function usesNativeNeiChrome(
   recipe: Pick<Recipe, "machineType" | "source"> & { recipeMap?: string },
 ): boolean {
   const recipeMap = recipe.source?.recipeMap ?? recipe.recipeMap ?? recipe.machineType;
-  return findRecipeMapLayout(recipeMap)?.chrome === "native";
+  const inferredRecipe = { machineType: recipe.machineType, source: recipe.source } as Recipe;
+  return (
+    findRecipeMapLayout(recipeMap)?.chrome === "native" ||
+    inferThaumcraftLayoutDefinition(recipeMap, inferredRecipe)?.chrome === "native"
+  );
 }
 
 function getExplicitSlotFrames(
@@ -616,6 +636,8 @@ function getProgressTextureForRecipeMap(recipeMap: string): NeiProgressTexture {
 
 function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLayoutDefinition {
   const exact = findRecipeMapLayout(recipeMap);
+  const thaumcraft = inferThaumcraftLayoutDefinition(recipeMap, recipe);
+  if (thaumcraft) return thaumcraft;
   if (exact && recipeMapMatches(recipeMap, "Blast Furnace")) return exact;
 
   if (recipeMapMatches(recipeMap, "Component Assembly Line")) {
@@ -688,6 +710,43 @@ function resolveLayoutDefinition(recipeMap: string, recipe: Recipe): RecipeMapLa
   return {
     id: "default",
   };
+}
+
+function inferThaumcraftLayoutDefinition(
+  recipeMap: string,
+  recipe: Pick<Recipe, "machineType" | "name" | "inputs" | "outputs" | "eut">,
+): RecipeMapLayoutDefinition | undefined {
+  const label = normalizeRecipeMapName(
+    [recipeMap, recipe.machineType, recipe.name].filter(Boolean).join(" "),
+  );
+  if (!label.includes("thaumcraft") && !label.includes("arcane")) {
+    return undefined;
+  }
+
+  if (label.includes("infusion")) {
+    return THAUMCRAFT_INFUSION_LAYOUT;
+  }
+
+  if (label.includes("crucible")) {
+    return THAUMCRAFT_CRUCIBLE_LAYOUT;
+  }
+
+  if (label.includes("crafting") || label.includes("arcane")) {
+    return label.includes("shapeless")
+      ? {
+          ...THAUMCRAFT_ARCANE_LAYOUT,
+          id: "thaumcraft-shapeless-arcane",
+          title: "Shapeless Arcane Crafting",
+        }
+      : THAUMCRAFT_ARCANE_LAYOUT;
+  }
+
+  const aspectInputs = countKind(recipe.inputs ?? [], "aspect");
+  if (aspectInputs > 0 && (recipe.eut ?? 0) === 0 && (recipe.outputs ?? []).length > 0) {
+    return THAUMCRAFT_INFUSION_LAYOUT;
+  }
+
+  return undefined;
 }
 
 function isPlainFurnaceRecipeMap(recipeMap: string): boolean {

@@ -403,6 +403,7 @@ describe("NEI layout", () => {
 
     expect(layout.id).toBe("thaumcraft-infusion");
     expect(layout.chrome).toBe("native");
+    expect(layout.title).toBe("Arcane Infusion");
     expect(layout.unframedSlotKinds).toEqual(["aspect"]);
     expect(layout.canvas).toMatchObject({ width: 214, height: 140 });
     expect(layout.decorations[0]).toMatchObject({
@@ -421,6 +422,32 @@ describe("NEI layout", () => {
       ["item", "output", "infused", 75, 1],
     ]);
     expect(layout.progressBars).toEqual([]);
+  });
+
+  it("recognizes GTNH Thaumcraft NEI handler names as native layouts", () => {
+    expect(
+      getNeiRecipeLayout(
+        recipe({
+          machineType: "Arcane Infusion",
+          inputs: [{ kind: "aspect", id: "thaumcraft:aspect:aqua", amount: 8 }],
+          outputs: [{ kind: "item", id: "result", amount: 1 }],
+        }),
+      ),
+    ).toMatchObject({ id: "thaumcraft-infusion", chrome: "native", title: "Arcane Infusion" });
+
+    expect(
+      getNeiRecipeLayout(
+        recipe({
+          machineType: "Shaped Arcane Crafting",
+          inputs: [{ kind: "aspect", id: "thaumcraft:aspect:ignis", amount: 8 }],
+          outputs: [{ kind: "item", id: "result", amount: 1 }],
+        }),
+      ),
+    ).toMatchObject({
+      id: "thaumcraft-arcane",
+      chrome: "native",
+      title: "Shaped Arcane Crafting",
+    });
   });
 
   it("uses Thaumcraft crucible NEI plugin positions for aspects and catalyst", () => {
