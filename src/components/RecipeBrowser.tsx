@@ -21,6 +21,7 @@ import {
 import { useFactoryStore } from "@/store/factory-store";
 import type { TierFilter } from "@/store/factory-store";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
+import { usesNativeNeiChrome } from "@/lib/nei/layout";
 import { MinecraftTooltip } from "./nei/MinecraftTooltip";
 import { NeiRecipeWindow } from "./nei/NeiRecipeWindow";
 import { ResourceIcon } from "./nei/ResourceIcon";
@@ -1204,7 +1205,7 @@ function VirtualRecipeResultList({
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const [viewport, setViewport] = useState({ scrollTop: 0, height: 360 });
-  const rowHeight = 246;
+  const rowHeight = recipes.some(usesNativeNeiChrome) ? 322 : 246;
   const columnCount = 2;
   const overscan = 1;
   const rowCount = Math.ceil(recipes.length / columnCount);
@@ -1371,7 +1372,7 @@ function summaryToPreviewRecipe(summary: RecipeSummary): Recipe {
     programmedCircuit: summary.programmedCircuit,
     machineHandlers: summary.machineHandlers,
     machineConfigControls: summary.machineConfigControls,
-    source: summary.source,
+    source: summary.source ?? (summary.recipeMap ? { recipeMap: summary.recipeMap } : undefined),
     nei: summary.nei,
   };
 }

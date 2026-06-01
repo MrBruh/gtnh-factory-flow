@@ -177,7 +177,7 @@ function IconImage({
   resource,
   iconPixelSize,
 }: {
-  resource?: Pick<ResourceAmount, "id" | "displayName" | "iconPath" | "iconAtlas">;
+  resource?: Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas">;
   iconPixelSize?: number;
 }) {
   if (!resource) {
@@ -189,14 +189,15 @@ function IconImage({
     return <AtlasIconImage resource={resource} atlas={atlas} iconPixelSize={iconPixelSize} />;
   }
 
-  if (!resource.iconPath) {
+  const iconPath = resource.iconPath ?? getFallbackIconPath(resource);
+  if (!iconPath) {
     return null;
   }
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={resource.iconPath}
+      src={iconPath}
       alt={resourceLabel(resource)}
       className={
         iconPixelSize
@@ -208,6 +209,19 @@ function IconImage({
       }}
     />
   );
+}
+
+function getFallbackIconPath(resource: Pick<ResourceAmount, "kind" | "id">): string | undefined {
+  if (resource.kind !== "aspect") {
+    return undefined;
+  }
+
+  const prefix = "thaumcraft:aspect:";
+  if (!resource.id.startsWith(prefix)) {
+    return "/nei/thaumcraft/aspects/_unknown.png";
+  }
+
+  return `/nei/thaumcraft/aspects/${resource.id.slice(prefix.length).toLowerCase()}.png`;
 }
 
 function AtlasIconImage({

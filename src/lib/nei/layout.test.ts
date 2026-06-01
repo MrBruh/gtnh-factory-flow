@@ -402,6 +402,8 @@ describe("NEI layout", () => {
     );
 
     expect(layout.id).toBe("thaumcraft-infusion");
+    expect(layout.chrome).toBe("native");
+    expect(layout.unframedSlotKinds).toEqual(["aspect"]);
     expect(layout.canvas).toMatchObject({ width: 214, height: 140 });
     expect(layout.decorations[0]).toMatchObject({
       kind: "texture",
@@ -445,6 +447,7 @@ describe("NEI layout", () => {
     );
 
     expect(layout.id).toBe("thaumcraft-crucible");
+    expect(layout.chrome).toBe("native");
     expect(layout.canvas).toMatchObject({ width: 170, height: 140 });
     expect(
       layout.slots.map((slot) => [slot.kind, slot.side, slot.resource.id, slot.x, slot.y]),
@@ -481,6 +484,7 @@ describe("NEI layout", () => {
     );
 
     expect(layout.id).toBe("thaumcraft-arcane");
+    expect(layout.chrome).toBe("native");
     expect(layout.canvas).toMatchObject({ width: 170, height: 174 });
     expect(layout.decorations).toHaveLength(3);
     expect(

@@ -84,6 +84,7 @@ export type NeiDecoration = NeiRectDecoration | NeiTextureDecoration;
 
 export interface NeiRecipeLayout {
   id: string;
+  chrome: "gregtech" | "native";
   canvas: NeiSize;
   slotSize: number;
   frames: NeiSlotFrame[];
@@ -91,6 +92,7 @@ export interface NeiRecipeLayout {
   overflowGroups: NeiOverflowGroup[];
   progressBars: NeiProgressBar[];
   decorations: NeiDecoration[];
+  unframedSlotKinds: ResourceKind[];
   logo: NeiPoint;
 }
 
@@ -108,6 +110,8 @@ interface RecipeMapLayoutDefinition {
   fluidOutputPositions?: PositionGetter;
   progressBars?: NeiProgressBar[];
   decorations?: NeiDecoration[];
+  chrome?: "gregtech" | "native";
+  unframedSlotKinds?: ResourceKind[];
 }
 
 type PositionGetter = (count: number, definition: RequiredRecipeMapLayoutDefinition) => NeiPoint[];
@@ -169,12 +173,14 @@ const COMPONENT_ASSEMBLY_LINE_LAYOUT: RecipeMapLayoutDefinition = {
 };
 const THAUMCRAFT_INFUSION_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-infusion",
+  chrome: "native",
   canvas: { width: 214, height: 140 },
   maxItemInputs: 1,
   maxItemOutputs: 1,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
   progressBars: [],
+  unframedSlotKinds: ["aspect"],
   decorations: [
     thaumcraftOverlayDecoration(34, -5, 0, 3, 56, 17, 1.75),
     thaumcraftOverlayDecoration(34, 28.25, 200, 77, 60, 44, 1.75),
@@ -182,12 +188,14 @@ const THAUMCRAFT_INFUSION_LAYOUT: RecipeMapLayoutDefinition = {
 };
 const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-crucible",
+  chrome: "native",
   canvas: { width: 170, height: 140 },
   maxItemInputs: 1,
   maxItemOutputs: 1,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
   progressBars: [],
+  unframedSlotKinds: ["aspect"],
   decorations: [
     thaumcraftOverlayDecoration(30, 3, 0, 3, 56, 17, 1.75),
     thaumcraftOverlayDecoration(30, 48.5, 0, 20, 56, 48, 1.75),
@@ -196,12 +204,14 @@ const THAUMCRAFT_CRUCIBLE_LAYOUT: RecipeMapLayoutDefinition = {
 };
 const THAUMCRAFT_ARCANE_LAYOUT: RecipeMapLayoutDefinition = {
   id: "thaumcraft-arcane",
+  chrome: "native",
   canvas: { width: 170, height: 174 },
   maxItemInputs: 9,
   maxItemOutputs: 1,
   maxFluidInputs: 0,
   maxFluidOutputs: 0,
   progressBars: [],
+  unframedSlotKinds: ["aspect"],
   decorations: [
     thaumcraftOverlayDecoration(37.4, 24.1, 112, 15, 52, 52, 1.7),
     thaumcraftOverlayDecoration(68, -3.1, 20, 3, 16, 16, 1.7),
@@ -423,6 +433,7 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
 
   return {
     id: definition.id,
+    chrome: definition.chrome ?? "gregtech",
     canvas,
     slotSize: SLOT_SIZE,
     frames,
@@ -442,8 +453,16 @@ export function getNeiRecipeLayout(recipe: Recipe): NeiRecipeLayout {
       explicitProgressBars ?? definition.progressBars,
     ),
     decorations: definition.decorations ?? [],
+    unframedSlotKinds: definition.unframedSlotKinds ?? [],
     logo: definition.logo ?? { x: 152, y: 63 },
   };
+}
+
+export function usesNativeNeiChrome(
+  recipe: Pick<Recipe, "machineType" | "source"> & { recipeMap?: string },
+): boolean {
+  const recipeMap = recipe.source?.recipeMap ?? recipe.recipeMap ?? recipe.machineType;
+  return findRecipeMapLayout(recipeMap)?.chrome === "native";
 }
 
 function getExplicitSlotFrames(

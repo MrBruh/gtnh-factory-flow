@@ -8,6 +8,7 @@ import {
   type NeiOverflowGroup,
   type NeiPositionedSlot,
   type NeiProgressTexture,
+  type NeiRecipeLayout,
   type NeiSlotFrame,
 } from "@/lib/nei/layout";
 import { ResourceIcon } from "./ResourceIcon";
@@ -21,6 +22,7 @@ interface NeiRecipeCanvasProps {
   iconPixelSize?: number;
   className?: string;
   hideCollapseControls?: boolean;
+  layout?: NeiRecipeLayout;
   contextResource?: Pick<ResourceAmount, "kind" | "id">;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
@@ -38,6 +40,7 @@ export function NeiRecipeCanvas({
   iconPixelSize,
   className = "",
   hideCollapseControls = false,
+  layout: providedLayout,
   contextResource,
   renderHandle,
   getSlotConnectionAttributes,
@@ -48,7 +51,10 @@ export function NeiRecipeCanvas({
   slotTooltip = true,
 }: NeiRecipeCanvasProps) {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
-  const layout = useMemo(() => getNeiRecipeLayout(recipe), [recipe]);
+  const layout = useMemo(
+    () => providedLayout ?? getNeiRecipeLayout(recipe),
+    [providedLayout, recipe],
+  );
   const renderLayout = useMemo(
     () =>
       getRenderLayout(
@@ -74,6 +80,7 @@ export function NeiRecipeCanvas({
     getCanvasHeight(renderLayout.frames, renderLayout.logoY, layout.canvas.height) * renderScale;
   const slotSize = layout.slotSize * renderScale;
   const renderedIconPixelSize = iconPixelSize ?? slotSize;
+  const usesNativeChrome = layout.chrome === "native";
   return (
     <div
       className={[
@@ -83,8 +90,11 @@ export function NeiRecipeCanvas({
       style={{
         width,
         height,
-        backgroundImage: "url('/nei/gregtech/gui/background/nei_single_recipe.png')",
-        backgroundSize: "100% 100%",
+        backgroundColor: usesNativeChrome ? "#c6c6c6" : undefined,
+        backgroundImage: usesNativeChrome
+          ? undefined
+          : "url('/nei/gregtech/gui/background/nei_single_recipe.png')",
+        backgroundSize: usesNativeChrome ? undefined : "100% 100%",
       }}
     >
       {layout.progressBars.map((bar, index) => (
@@ -101,6 +111,7 @@ export function NeiRecipeCanvas({
 
       {renderLayout.frames.map((frame) => {
         const slot = frame.resource ? (frame as NeiPositionedSlot) : undefined;
+        const unframed = layout.unframedSlotKinds.includes(frame.kind);
         return (
           <div
             key={`${frame.side}-${frame.kind}-${frame.slotIndex}-${frame.x}-${frame.y}-${frame.action ?? "slot"}`}
@@ -116,6 +127,7 @@ export function NeiRecipeCanvas({
             <NeiSlotFrameView
               frame={frame}
               iconPixelSize={renderedIconPixelSize}
+              unframed={unframed}
               renderHandle={renderHandle}
               getSlotConnectionAttributes={getSlotConnectionAttributes}
               onSlotClick={onSlotClick}
@@ -356,6 +368,7 @@ function getGroupKey(group: Pick<NeiSlotFrame, "side" | "kind">) {
 function NeiSlotFrameView({
   frame,
   iconPixelSize,
+  unframed,
   renderHandle,
   getSlotConnectionAttributes,
   onSlotClick,
@@ -367,6 +380,7 @@ function NeiSlotFrameView({
 }: {
   frame: RenderFrame;
   iconPixelSize: number;
+  unframed: boolean;
   renderHandle?: (slot: NeiPositionedSlot) => ReactNode;
   getSlotConnectionAttributes?: (slot: NeiPositionedSlot) => Record<string, string> | undefined;
   onSlotClick?: (slot: NeiPositionedSlot, mode: "recipes" | "uses") => void;
@@ -383,8 +397,8 @@ function NeiSlotFrameView({
   const shouldSuppressConsumedState = slot ? suppressConsumedState?.(slot) : false;
   const connectionAttributes = slot ? getSlotConnectionAttributes?.(slot) : undefined;
   const backgroundStyle = {
-    backgroundImage: `url('${getSlotTexture(frame)}')`,
-    backgroundSize: "100% 100%",
+    backgroundImage: unframed ? undefined : `url('${getSlotTexture(frame)}')`,
+    backgroundSize: unframed ? undefined : "100% 100%",
   };
 
   if (!slot && !isOverflow && !isCollapse) {

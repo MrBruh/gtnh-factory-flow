@@ -3,7 +3,7 @@
 import { memo, useMemo, type ReactNode } from "react";
 import type { Recipe, ResourceAmount } from "@/lib/model/types";
 import { formatRate, getRecipePowerTier } from "@/lib/model";
-import type { NeiPositionedSlot } from "@/lib/nei/layout";
+import { getNeiRecipeLayout, type NeiPositionedSlot } from "@/lib/nei/layout";
 import { NeiRecipeCanvas } from "./NeiRecipeCanvas";
 
 const QUICK_SLOT_PIXEL_SIZE = 40;
@@ -47,10 +47,41 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
   statsAction,
 }: NeiRecipeWindowProps) {
   const recipeMap = recipe.source?.recipeMap ?? recipe.machineType;
+  const layout = useMemo(() => getNeiRecipeLayout(recipe), [recipe]);
+  const usesNativeChrome = layout.chrome === "native";
   const totalEu = recipe.eut * recipe.durationTicks;
   const seconds = recipe.durationTicks / 20;
   const powerTier = useMemo(() => getRecipePowerTier(recipe), [recipe]);
   const preserveNativeSlots = compact || hideCollapseControls;
+
+  if (usesNativeChrome) {
+    return (
+      <div
+        className={[
+          "relative inline-block bg-[#c6c6c6] font-mono text-[#111]",
+          compact ? "text-[10px]" : "text-[14px]",
+          className,
+        ].join(" ")}
+      >
+        <NeiRecipeCanvas
+          recipe={recipe}
+          layout={layout}
+          scale={scale}
+          iconPixelSize={16 * scale}
+          className={canvasClassName}
+          renderHandle={renderHandle}
+          getSlotConnectionAttributes={getSlotConnectionAttributes}
+          onSlotClick={onSlotClick}
+          suppressSlotHover={suppressSlotHover}
+          suppressConsumedState={suppressConsumedState}
+          getSlotZIndex={getSlotZIndex}
+          slotTooltip={slotTooltip}
+          hideCollapseControls={preserveNativeSlots}
+          contextResource={contextResource}
+        />
+      </div>
+    );
+  }
 
   return (
     <div
@@ -70,6 +101,7 @@ export const NeiRecipeWindow = memo(function NeiRecipeWindow({
         <div className={compact ? "p-1" : "p-2"}>
           <NeiRecipeCanvas
             recipe={recipe}
+            layout={layout}
             scale={scale}
             slotPixelSize={compact ? compactSlotPixelSize : undefined}
             iconPixelSize={compact ? QUICK_SLOT_ICON_PIXEL_SIZE : undefined}
