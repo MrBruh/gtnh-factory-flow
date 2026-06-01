@@ -310,15 +310,23 @@ function normalizeSmelting(domain) {
 function normalizeThaumcraft(domain) {
   for (const rawRecipe of domain?.recipes ?? []) {
     const normalizedRecipe = normalizeThaumcraftRecipe(rawRecipe);
-    const output = normalizedRecipe.output;
-    if (!output) {
+    const outputs = normalizedRecipe.outputs?.length
+      ? normalizedRecipe.outputs
+      : normalizedRecipe.output
+        ? [normalizedRecipe.output]
+        : [];
+    const output = outputs[0];
+    if (!output || outputs.length === 0) {
       continue;
     }
     const machineType = thaumcraftMachineType(rawRecipe.type);
     const inputs = normalizedRecipe.inputs;
 
     recipeMaps.add(machineType);
-    setRecipeMapIcon(machineType, rawRecipe.neiLayout?.category?.icon ?? thaumcraftRecipeMapIcon(rawRecipe.type));
+    setRecipeMapIcon(
+      machineType,
+      rawRecipe.neiLayout?.category?.icon ?? thaumcraftRecipeMapIcon(rawRecipe.type),
+    );
     const durationTicks = positiveInt(rawRecipe.durationTicks, thaumcraftDuration(rawRecipe.type));
     addRecipe({
       id: recipeId("thaumcraft", rawRecipe.type, rawRecipe.id),
@@ -328,7 +336,7 @@ function normalizeThaumcraft(domain) {
       durationTicks,
       eut: 0,
       inputs,
-      outputs: [output],
+      outputs,
       runtimeCalculation: {
         sourceKind: "thaumcraft-runtime",
         sourceClass: rawRecipe.className,
@@ -343,17 +351,29 @@ function normalizeThaumcraft(domain) {
             label: text(rawRecipe.type, "Thaumcraft"),
             durationTicks,
             eut: 0,
-            outputs: runtimeResources([output]),
+            outputs: runtimeResources(outputs),
             notes: rawRecipe.durationSource
               ? `Duration exported from ${rawRecipe.durationSource}.`
               : undefined,
           },
+          ...(rawRecipe.variants ?? []).map((variant) => ({
+            id: text(variant.id, "variant"),
+            label: text(variant.label, "Variant"),
+            durationTicks: positiveInt(variant.durationTicks, durationTicks),
+            eut: 0,
+            outputs: runtimeResources(outputs),
+            notes:
+              variant.bellows !== undefined
+                ? `Alchemical Furnace bellows: ${variant.bellows}.`
+                : undefined,
+          })),
         ],
       },
       notes: [
         `Exported by the GTNH calculation oracle from ${rawRecipe.className}.`,
         rawRecipe.research ? `Research: ${rawRecipe.research}` : undefined,
         rawRecipe.instability !== undefined ? `Instability: ${rawRecipe.instability}` : undefined,
+        rawRecipe.notes,
       ]
         .filter(Boolean)
         .join(" "),
@@ -390,13 +410,45 @@ function normalizeThaumcraftRecipe(rawRecipe) {
   };
 
   const outputSlot =
-    type === "infusion" ? { x: 75, y: 1 } : type === "crucible" ? { x: 76, y: 8 } : { x: 74, y: 2 };
+    type === "infusion"
+      ? { x: 75, y: 1 }
+      : type === "crucible"
+        ? { x: 76, y: 8 }
+        : type === "essentiaSmelting"
+          ? undefined
+          : { x: 74, y: 2 };
   const output = resourceAmount(rawRecipe.output, { neiSlot: outputSlot });
   if (output) {
     addSlot("output", output.kind, 0, outputSlot);
   }
 
-  if (type === "infusion") {
+  if (type === "essentiaSmelting") {
+    addInput(rawRecipe.input, { x: 42, y: 34 }, 0);
+    const aspectSlots = thaumcraftAspectSlots(
+      (rawRecipe.outputs ?? rawRecipe.aspects ?? []).length,
+      112,
+      34,
+    );
+    const outputs = (rawRecipe.outputs ?? rawRecipe.aspects ?? [])
+      .map((entry, index) => resourceAmount(entry, { neiSlot: aspectSlots[index] }))
+      .filter(Boolean);
+    outputs.forEach((resource, index) =>
+      slots.push({
+        side: "output",
+        kind: resource.kind,
+        slotIndex: index,
+        x: aspectSlots[index].x,
+        y: aspectSlots[index].y,
+      }),
+    );
+    progressBars.push({ x: 72, y: 35, width: 24, height: 17, direction: "right" });
+    return {
+      output: outputs[0],
+      outputs,
+      inputs,
+      nei: { slots, progressBars },
+    };
+  } else if (type === "infusion") {
     addInput(rawRecipe.centralInput ?? rawRecipe.catalyst, { x: 75, y: 58 }, 0);
     const componentSlots = thaumcraftInfusionComponentSlots((rawRecipe.components ?? []).length);
     (rawRecipe.components ?? []).forEach((entry, index) =>
@@ -433,6 +485,7 @@ function normalizeThaumcraftRecipe(rawRecipe) {
 
   return {
     output,
+    outputs: output ? [output] : [],
     inputs,
     nei:
       slots.length > 0
@@ -462,7 +515,10 @@ function normalizeExportedNeiLayout(rawLayout) {
     if (!resource) {
       continue;
     }
-    const slotIndex = positiveInt(rawSlot?.slotIndex, side === "output" ? outputs.length : inputs.length);
+    const slotIndex = positiveInt(
+      rawSlot?.slotIndex,
+      side === "output" ? outputs.length : inputs.length,
+    );
     slots.push({ side, kind: resource.kind, slotIndex, x: slot.x, y: slot.y });
     if (side === "output") {
       outputs.push(resource);
@@ -475,12 +531,13 @@ function normalizeExportedNeiLayout(rawLayout) {
     return undefined;
   }
 
-  const canvas = rawLayout.canvas && typeof rawLayout.canvas === "object"
-    ? {
-        width: positiveInt(rawLayout.canvas.width, 170),
-        height: positiveInt(rawLayout.canvas.height, 82),
-      }
-    : undefined;
+  const canvas =
+    rawLayout.canvas && typeof rawLayout.canvas === "object"
+      ? {
+          width: positiveInt(rawLayout.canvas.width, 170),
+          height: positiveInt(rawLayout.canvas.height, 82),
+        }
+      : undefined;
 
   return {
     output: outputs[0],
@@ -1767,6 +1824,7 @@ function thaumcraftMachineType(type) {
   if (type === "infusion") return "Thaumcraft Infusion";
   if (type === "crucible") return "Thaumcraft Crucible";
   if (type === "arcane") return "Thaumcraft Arcane Crafting";
+  if (type === "essentiaSmelting") return "Thaumcraft Essentia Smelting";
   return "Thaumcraft";
 }
 
@@ -1795,12 +1853,21 @@ function thaumcraftRecipeMapIcon(type) {
       modId: "Thaumcraft",
     };
   }
+  if (type === "essentiaSmelting") {
+    return {
+      kind: "item",
+      id: "Thaumcraft:blockStoneDevice@0",
+      displayName: "Alchemical Furnace",
+      modId: "Thaumcraft",
+    };
+  }
   return undefined;
 }
 
 function thaumcraftDuration(type) {
   if (type === "infusion") return 200;
   if (type === "crucible") return 20;
+  if (type === "essentiaSmelting") return 10;
   return 1;
 }
 

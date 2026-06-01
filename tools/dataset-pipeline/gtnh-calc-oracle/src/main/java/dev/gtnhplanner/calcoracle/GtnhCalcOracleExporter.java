@@ -337,14 +337,139 @@ public final class GtnhCalcOracleExporter {
                     index++;
                 }
             }
+            int essentiaSmeltingCount = addThaumcraftEssentiaSmeltingRecipes(recipes);
             domain.put("recipes", recipes);
             adapters.add(adapter("thaumcraft-crafting", "computed", true, 1, recipes.size(), started, null));
+            adapters.add(
+                adapter(
+                    "thaumcraft-essentia-smelting",
+                    essentiaSmeltingCount > 0 ? "computed" : "partial",
+                    true,
+                    1,
+                    essentiaSmeltingCount,
+                    started,
+                    essentiaSmeltingCount > 0 ? null : "No Thaumcraft object aspect tags were exportable."
+                )
+            );
         } catch (Throwable t) {
             adapters.add(adapter("thaumcraft-crafting", "partial", true, 0, recipes.size(), started, t.toString()));
             domain.put("recipes", recipes);
         }
 
         return domain;
+    }
+
+    private int addThaumcraftEssentiaSmeltingRecipes(List<Map<String, Object>> recipes) throws Exception {
+        Class<?> api = Class.forName("thaumcraft.api.ThaumcraftApi");
+        Class<?> aspectListClass = Class.forName("thaumcraft.api.aspects.AspectList");
+        Class<?> craftingManager = Class.forName("thaumcraft.common.lib.crafting.ThaumcraftCraftingManager");
+        Method getObjectTags = craftingManager.getMethod("getObjectTags", ItemStack.class);
+        Method getBonusTags = craftingManager.getMethod("getBonusTags", ItemStack.class, aspectListClass);
+        Field objectTagsField = api.getField("objectTags");
+        Object rawObjectTags = objectTagsField.get(null);
+        if (!(rawObjectTags instanceof Map)) {
+            return 0;
+        }
+
+        Map<String, Boolean> seen = new LinkedHashMap<String, Boolean>();
+        List<ItemStack> stacks = new ArrayList<ItemStack>();
+        for (Object key : ((Map<?, ?>) rawObjectTags).keySet()) {
+            ItemStack stack = thaumcraftObjectTagStack(key);
+            if (stack == null) {
+                continue;
+            }
+            String stackKey = stackKey(stack);
+            if (seen.containsKey(stackKey)) {
+                continue;
+            }
+            seen.put(stackKey, Boolean.TRUE);
+            stacks.add(stack);
+        }
+        Collections.sort(stacks, new java.util.Comparator<ItemStack>() {
+            @Override
+            public int compare(ItemStack left, ItemStack right) {
+                return stackKey(left).compareTo(stackKey(right));
+            }
+        });
+
+        int exported = 0;
+        for (ItemStack stack : stacks) {
+            Object aspects = getObjectTags.invoke(null, stack);
+            aspects = getBonusTags.invoke(null, stack, aspects);
+            List<Map<String, Object>> outputs = aspectResources(aspects);
+            if (outputs.isEmpty()) {
+                continue;
+            }
+
+            Map<String, Object> input = itemStack(stack);
+            if (input == null) {
+                continue;
+            }
+
+            int durationTicks = thaumcraftAlchemyFurnaceDurationTicks(outputs, 0);
+            Map<String, Object> recipe = map();
+            recipe.put("id", sha1("thaumcraft:essentia-smelting:" + stackKey(stack)).substring(0, 16));
+            recipe.put("sourceList", "objectTags");
+            recipe.put("type", "essentiaSmelting");
+            recipe.put("className", "thaumcraft.common.tiles.TileAlchemyFurnace");
+            recipe.put("input", input);
+            recipe.put("output", outputs.get(0));
+            recipe.put("outputs", outputs);
+            recipe.put("aspects", outputs);
+            recipe.put("durationTicks", Integer.valueOf(durationTicks));
+            recipe.put("durationSource", "thaumcraft.common.tiles.TileAlchemyFurnace.canSmelt");
+            recipe.put("durationFormula", "visSize(aspects) * 10 * (1 - 0.125 * bellows)");
+            recipe.put("durationBellows", Integer.valueOf(0));
+            recipe.put("variants", thaumcraftAlchemyFurnaceVariants(outputs));
+            recipe.put(
+                "notes",
+                "Essentia result exported through ThaumcraftCraftingManager.getObjectTags/getBonusTags. The Alchemical Furnace burns the item; Alembics only store and transport the resulting essentia."
+            );
+            recipes.add(recipe);
+            exported++;
+        }
+        return exported;
+    }
+
+    private ItemStack thaumcraftObjectTagStack(Object key) {
+        if (!(key instanceof List)) {
+            return null;
+        }
+        List<?> parts = (List<?>) key;
+        if (parts.size() < 2 || !(parts.get(0) instanceof Item) || !(parts.get(1) instanceof Number)) {
+            return null;
+        }
+        Item item = (Item) parts.get(0);
+        int meta = ((Number) parts.get(1)).intValue();
+        if (meta == OreDictionary.WILDCARD_VALUE) {
+            meta = 0;
+        }
+        return new ItemStack(item, 1, meta);
+    }
+
+    private int thaumcraftAlchemyFurnaceDurationTicks(List<Map<String, Object>> aspects, int bellows) {
+        int visSize = 0;
+        for (Map<String, Object> aspect : aspects) {
+            Number amount = asNumber(aspect.get("amount"));
+            if (amount != null && amount.intValue() > 0) {
+                visSize += amount.intValue();
+            }
+        }
+        double bellowsMultiplier = 1.0D - (0.125D * Math.max(0, bellows));
+        return Math.max(1, (int) (visSize * 10.0D * bellowsMultiplier));
+    }
+
+    private List<Map<String, Object>> thaumcraftAlchemyFurnaceVariants(List<Map<String, Object>> aspects) {
+        List<Map<String, Object>> variants = new ArrayList<Map<String, Object>>();
+        for (int bellows = 0; bellows <= 6; bellows++) {
+            Map<String, Object> variant = map();
+            variant.put("id", "bellows-" + bellows);
+            variant.put("label", bellows == 0 ? "No bellows" : bellows + " bellows");
+            variant.put("bellows", Integer.valueOf(bellows));
+            variant.put("durationTicks", Integer.valueOf(thaumcraftAlchemyFurnaceDurationTicks(aspects, bellows)));
+            variants.add(variant);
+        }
+        return variants;
     }
 
     private Map<String, Map<String, Object>> exportThaumcraftNeiLayoutsBySignature(List<Map<String, Object>> adapters) {
@@ -2400,4 +2525,3 @@ public final class GtnhCalcOracleExporter {
         }
     }
 }
-import java.nio.ByteBuffer;
