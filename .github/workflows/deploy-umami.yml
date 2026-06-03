@@ -122,8 +122,8 @@ jobs:
 
           mkdir -p "$(dirname "$prod_analytics_env")"
           {
-            printf 'NEXT_PUBLIC_UMAMI_SCRIPT_URL=/_umami/gtnh-stats.js\n'
-            printf 'NEXT_PUBLIC_UMAMI_HOST_URL=/_umami\n'
+            printf 'NEXT_PUBLIC_UMAMI_SCRIPT_URL=/umami/gtnh-stats.js\n'
+            printf 'NEXT_PUBLIC_UMAMI_HOST_URL=/umami\n'
             printf 'NEXT_PUBLIC_UMAMI_WEBSITE_ID=%s\n' "$website_id"
           } > "$prod_analytics_env"
 

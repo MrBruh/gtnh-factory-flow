@@ -80,8 +80,8 @@ The site includes the Umami script only when these build-time variables exist in
 `$HOME/apps/<deploy-name>/analytics.env` on the runner:
 
 ```bash
-NEXT_PUBLIC_UMAMI_SCRIPT_URL=/_umami/gtnh-stats.js
-NEXT_PUBLIC_UMAMI_HOST_URL=/_umami
+NEXT_PUBLIC_UMAMI_SCRIPT_URL=/umami/gtnh-stats.js
+NEXT_PUBLIC_UMAMI_HOST_URL=/umami
 NEXT_PUBLIC_UMAMI_WEBSITE_ID=<website-id-from-umami>
 ```
 
