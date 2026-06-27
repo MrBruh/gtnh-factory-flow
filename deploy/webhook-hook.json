@@ -1,0 +1,24 @@
+{
+  "_comment": "Append this object to the existing /etc/webhook/hooks.json ARRAY on your server (the same daemon that runs the portfolio hook). Replace the secret, then `sudo systemctl restart webhook`. Reachable at https://webhook.denissov.tech/hooks/deploy-gtnh-factory-flow (reuses the portfolio's webhook tunnel route). Remove this _comment line before use.",
+  "id": "deploy-gtnh-factory-flow",
+  "execute-command": "/srv/gtnh-factory-flow/deploy.sh",
+  "command-working-directory": "/srv/gtnh-factory-flow",
+  "trigger-rule": {
+    "and": [
+      {
+        "match": {
+          "type": "payload-hmac-sha256",
+          "secret": "REPLACE_WITH_WEBHOOK_SECRET",
+          "parameter": { "source": "header", "name": "X-Hub-Signature-256" }
+        }
+      },
+      {
+        "match": {
+          "type": "value",
+          "value": "refs/heads/main",
+          "parameter": { "source": "payload", "name": "ref" }
+        }
+      }
+    ]
+  }
+}

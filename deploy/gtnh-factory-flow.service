@@ -1,0 +1,21 @@
+[Unit]
+Description=GTNH Factory Flow (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+# Dedicated unprivileged runtime user (see docs/SELFHOST.md). Not the admin user.
+User=gtnhflow
+WorkingDirectory=/srv/gtnh-factory-flow/.next/standalone
+# Optional: leading '-' means "don't fail if the file is absent".
+EnvironmentFile=-/etc/gtnh-factory-flow.env
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3001
+Environment=NODE_OPTIONS=--max-old-space-size=2048
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

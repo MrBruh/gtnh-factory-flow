@@ -58,6 +58,10 @@ npm run build
 
 ## Deployment Branches
 
+> **Fork note:** the original GitHub Actions deploy/dataset workflows were removed in this
+> fork. For self-hosting this fork behind Cloudflare Tunnel + systemd, see
+> [`docs/SELFHOST.md`](docs/SELFHOST.md). The section below documents the upstream setup.
+
 The site workflow deploys two isolated app instances from two branches:
 
 - `main` deploys the production app to port `8580` with systemd service
