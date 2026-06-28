@@ -88,7 +88,10 @@ function rewriteDatasetPath(value, previousVersionId, currentVersionId) {
   if (typeof value !== "string" || !value.includes(`/datasets/gtnh/${previousVersionId}/`)) {
     return undefined;
   }
-  return value.replace(`/datasets/gtnh/${previousVersionId}/`, `/datasets/gtnh/${currentVersionId}/`);
+  return value.replace(
+    `/datasets/gtnh/${previousVersionId}/`,
+    `/datasets/gtnh/${currentVersionId}/`,
+  );
 }
 
 async function copyTextureDir(name) {

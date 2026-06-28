@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { formatRate } from "@/lib/model";
-import type {
-  FactoryProject,
-  ResourceAmount,
-  ResourceBalance,
-} from "@/lib/model/types";
+import type { FactoryProject, ResourceAmount, ResourceBalance } from "@/lib/model/types";
 import { useFactoryStore } from "@/store/factory-store";
 import { ResourceIcon } from "./nei/ResourceIcon";
 
@@ -232,7 +228,9 @@ function FlowIOSection({
     <div className="mt-3 flex min-h-0 flex-1 flex-col">
       <div className="mb-1 flex items-center justify-between text-[11px] font-semibold uppercase tracking-wide text-neutral-500">
         <span>{title}</span>
-        <span>{items.length === totalCount ? items.length : `${items.length} / ${totalCount}`}</span>
+        <span>
+          {items.length === totalCount ? items.length : `${items.length} / ${totalCount}`}
+        </span>
       </div>
       {items.length === 0 ? (
         <p className="rounded border border-neutral-200 bg-white px-2 py-2 text-xs text-neutral-500">
@@ -307,11 +305,7 @@ function filterFlowItems(items: ResourceBalance[], filter: string) {
   }
 
   return items.filter((balance) =>
-    [
-      balance.key,
-      balance.resourceId,
-      balance.displayName,
-    ]
+    [balance.key, balance.resourceId, balance.displayName]
       .filter(Boolean)
       .join(" ")
       .toLowerCase()
@@ -413,4 +407,3 @@ function Metric({
     </button>
   );
 }
-

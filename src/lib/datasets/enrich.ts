@@ -117,7 +117,9 @@ function addAlternative(
   amount: number | undefined,
 ): void {
   const alternatives = resource.alternatives ?? [];
-  if (alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)) {
+  if (
+    alternatives.some((entry) => entry.kind === alternative.kind && entry.id === alternative.id)
+  ) {
     return;
   }
 
@@ -136,7 +138,10 @@ function addAlternative(
   ];
 }
 
-function getAlternativeUnitAmount(resource: ResourceAmount, alternative: ResourceAmount): number | undefined {
+function getAlternativeUnitAmount(
+  resource: ResourceAmount,
+  alternative: ResourceAmount,
+): number | undefined {
   if (resource.amount <= 0 || alternative.amount <= 0) {
     return undefined;
   }

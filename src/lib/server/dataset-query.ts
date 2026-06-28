@@ -482,7 +482,7 @@ async function queryDatasetRecipesFromLookup(
   return {
     recipes,
     total: matchingRecipeIndexes.length,
-      recipeMaps: sortedRecipeMaps,
+    recipeMaps: sortedRecipeMaps,
     recipeMapIcons: Object.fromEntries(
       sortedRecipeMaps
         .map((recipeMap) => [recipeMap, getRecipeMapIcon(catalog, recipeMap)] as const)

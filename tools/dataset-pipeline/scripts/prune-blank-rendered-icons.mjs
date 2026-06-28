@@ -7,7 +7,9 @@ const datasetPath = process.argv[2];
 const renderedDir = process.argv[3];
 
 if (!datasetPath || !renderedDir) {
-  throw new Error("Usage: prune-blank-rendered-icons.mjs <recipes.json|recipes.json.gz> <rendered-dir>");
+  throw new Error(
+    "Usage: prune-blank-rendered-icons.mjs <recipes.json|recipes.json.gz> <rendered-dir>",
+  );
 }
 
 const datasetBuffer = await fs.readFile(datasetPath);

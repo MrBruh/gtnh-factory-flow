@@ -232,7 +232,9 @@ async function gzipBytes(bytes: Uint8Array): Promise<Uint8Array | undefined> {
     return undefined;
   }
 
-  const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(new CompressionStream("gzip"));
+  const stream = new Blob([toArrayBuffer(bytes)])
+    .stream()
+    .pipeThrough(new CompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
@@ -241,9 +243,9 @@ async function gunzipBytes(bytes: Uint8Array): Promise<Uint8Array> {
     throw new Error("This browser cannot decompress the embedded PNG plan.");
   }
 
-  const stream = new Blob([toArrayBuffer(bytes)]).stream().pipeThrough(
-    new DecompressionStream("gzip"),
-  );
+  const stream = new Blob([toArrayBuffer(bytes)])
+    .stream()
+    .pipeThrough(new DecompressionStream("gzip"));
   return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
