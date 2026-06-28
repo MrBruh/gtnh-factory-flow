@@ -175,6 +175,11 @@ If the build runs out of memory on the home box, the script already sets
 `NODE_OPTIONS=--max-old-space-size=4096`; lower the systemd `PORT`/memory or add swap as
 needed.
 
+> **Refreshing the script later:** because the running copy lives **outside** the checkout,
+> changes to the tracked `deploy/deploy.sh` template (e.g. the health gate / notifications)
+> don't apply until you re-run the `install -m 755 …` line above. The app itself — including
+> the `/health` route — deploys automatically; only the script needs a manual refresh.
+
 ## 9. Auto-deploy via the existing webhook daemon
 
 Add a **second hook** to the array in `/etc/webhook/hooks.json` (the file the portfolio
@@ -207,10 +212,14 @@ ping) — that confirms HMAC matched. Now every push to `main` redeploys in ~30�
 
 ```bash
 curl -I https://gtnh.denissov.tech
+curl -s http://127.0.0.1:3001/health   # on the server: {"status":"ok","version",...,"commit","datasetVersionId"}
 # on the server, if anything is off:
 sudo journalctl -u gtnh-factory-flow -f
 sudo journalctl -u webhook -f
 ```
+
+`/health` is the same endpoint `deploy.sh` polls before declaring a deploy successful, so
+its `commit` field is a quick way to confirm the box is serving the build you just pushed.
 
 Open `https://gtnh.denissov.tech`, confirm the recipe browser loads recipes (proves the
 dataset path), place a node, and **Export** a plan — that JSON is exactly what
@@ -222,6 +231,12 @@ dataset path), place a node, and **Export** a plan — that JSON is exactly what
   `develop`, fast-forward `main` when you want prod to move (matches the portfolio's
   `main`-is-production model and this repo's `AGENTS.md`).
 - **Manual deploy:** `ssh homeserver /srv/gtnh-factory-flow/deploy.sh`.
+- **Fail-closed deploys:** `deploy.sh` restarts then polls `/health` for up to 45s; it only
+  reports success once the new build serves 200, dumping `journalctl` on timeout. There's no
+  automatic rollback — an unhealthy build needs a manual re-deploy of the previous SHA
+  (`git reset --hard <sha>` in the checkout, then re-run `deploy.sh`).
+- **Deploy notifications:** set `DEPLOY_NOTIFY_URL` in `/etc/gtnh-factory-flow.env` to POST a
+  success/failure JSON ping per deploy (ntfy/Discord/Slack/any sink).
 - **Switching dataset modes later:** edit `/etc/gtnh-factory-flow.env` and re-run
   `deploy.sh` (the var is read at build time).
 - **Two apps, one box:** nothing here touches the portfolio — separate user, port,
