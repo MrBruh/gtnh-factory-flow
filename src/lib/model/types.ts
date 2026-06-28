@@ -1,4 +1,4 @@
-export const PROJECT_SCHEMA_VERSION = 1;
+export const PROJECT_SCHEMA_VERSION = 2;
 export const TICKS_PER_SECOND = 20;
 
 export type ItemId = string;
@@ -403,4 +403,79 @@ export interface ThroughputResult {
   externalInputs: ResourceBalance[];
   unconsumedOutputs: ResourceBalance[];
   generatedAt: string;
+}
+
+/**
+ * Solver-facing projection of {@link ThroughputResult}. Carried in the plan
+ * export's optional `resolved` block (schemaVersion >= 2) so downstream
+ * consumers (e.g. gtnh-process-line-solver) get balanced throughput without
+ * re-deriving it. UI-only data (icons, NEI layout, tier ladders) is excluded.
+ */
+export interface ResolvedResourceRate {
+  kind: ResourceKind;
+  id: ResourceId;
+  perSecond: number;
+}
+
+export interface ResolvedMachine {
+  nodeId: string;
+  /** Stable join key for physical rules; falls back to `machineType`. */
+  machineKey?: string;
+  machineType: string;
+  tier: MachineTier | string;
+  machineCount: number;
+  parallel: number;
+  eutPerMachine: number;
+  totalEut: number;
+  /** Nameplate per-second flow when running (not scaled by utilization). */
+  inputs: ResolvedResourceRate[];
+  outputs: ResolvedResourceRate[];
+}
+
+export interface ResolvedNet {
+  edgeId: string;
+  from: string;
+  to: string;
+  kind: ResourceKind;
+  id: ResourceId;
+  /** Actual transferred rate across the edge. */
+  perSecond: number;
+}
+
+export interface ResolvedExternalIO {
+  inputs: ResolvedResourceRate[];
+  outputs: ResolvedResourceRate[];
+}
+
+export interface ResolvedPower {
+  totalEut: number;
+  totalEuPerSecond: number;
+  fuel?: string;
+  fuelPerSecond?: number;
+  fuelUnit?: "L/s" | "buckets/s";
+}
+
+export interface ResolvedPlan {
+  generatedAt: string;
+  machines: ResolvedMachine[];
+  nets: ResolvedNet[];
+  externalIO: ResolvedExternalIO;
+  power: ResolvedPower;
+}
+
+export interface ExportAppInfo {
+  name: string;
+  version?: string;
+  exportedAt?: string;
+}
+
+/**
+ * The plan export artifact: the canonical {@link FactoryProject} plus export-only
+ * provenance and the derived {@link ResolvedPlan}. These extra fields are stripped
+ * on import so the in-memory model stays the canonical editable plan.
+ */
+export interface ExportedFactoryProject extends FactoryProject {
+  datasetVersionId?: string;
+  app?: ExportAppInfo;
+  resolved?: ResolvedPlan;
 }
