@@ -6,10 +6,7 @@ import {
   fetchDatasetManifest,
   pickDefaultDatasetVersion,
 } from "@/lib/datasets";
-import {
-  getRecipeDatasetRecipe,
-  initRecipeDatasetVersion,
-} from "@/lib/datasets/browser-loader";
+import { getRecipeDatasetRecipe, initRecipeDatasetVersion } from "@/lib/datasets/browser-loader";
 import { parseFactoryProjectJson } from "@/lib/import-export";
 import { LOCAL_STORAGE_KEY, loadResourceHistory, useFactoryStore } from "@/store/factory-store";
 import { FactoryFlow } from "./flow/FactoryFlow";

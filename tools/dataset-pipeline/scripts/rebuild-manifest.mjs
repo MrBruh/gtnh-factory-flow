@@ -18,7 +18,9 @@ for (const entry of entries) {
 
   const datasetFiles = getCompleteDatasetFiles(entry.name);
   if (!datasetFiles) {
-    console.warn(`Skipping incomplete dataset ${entry.name}; required compressed dataset indexes are missing.`);
+    console.warn(
+      `Skipping incomplete dataset ${entry.name}; required compressed dataset indexes are missing.`,
+    );
     continue;
   }
 
@@ -97,7 +99,9 @@ function getCompleteDatasetFiles(versionId) {
     recipeLookupIndexPath: path.join(datasetDir, "recipe-lookup-index.json.gz"),
   };
 
-  if (!Object.values(files).every((filePath) => existsSync(filePath) && statSync(filePath).size > 0)) {
+  if (
+    !Object.values(files).every((filePath) => existsSync(filePath) && statSync(filePath).size > 0)
+  ) {
     return undefined;
   }
 
@@ -106,7 +110,9 @@ function getCompleteDatasetFiles(versionId) {
 
 async function readRecipeDatasetMetadata(filePath) {
   const dataset = {};
-  const fileStream = createReadStream(filePath, { encoding: filePath.endsWith(".gz") ? undefined : "utf8" });
+  const fileStream = createReadStream(filePath, {
+    encoding: filePath.endsWith(".gz") ? undefined : "utf8",
+  });
   const input = filePath.endsWith(".gz") ? fileStream.pipe(createGunzip()) : fileStream;
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
   const wantedKeys = new Set(["datasetVersionId", "gtnhVersion", "generatedAt", "sourceInfo"]);

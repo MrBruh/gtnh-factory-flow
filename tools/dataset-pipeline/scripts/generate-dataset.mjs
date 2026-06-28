@@ -138,7 +138,9 @@ function validateDataset(dataset) {
     );
   }
   if (!dataset.sourceInfo || dataset.sourceInfo.sourceId === "unknown") {
-    throw new Error("recipes.json sourceInfo.sourceId must identify nesql, recex, nerd, or gtnh-oracle.");
+    throw new Error(
+      "recipes.json sourceInfo.sourceId must identify nesql, recex, nerd, or gtnh-oracle.",
+    );
   }
   if (!Array.isArray(dataset.resources)) {
     throw new Error("recipes.json resources must be an array.");

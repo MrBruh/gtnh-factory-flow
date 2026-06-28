@@ -1,0 +1,25 @@
+# Build output
+/.next/
+/out/
+/build/
+
+# Dependencies and machine-generated lockfiles
+/node_modules/
+package-lock.json
+
+# Generated / runtime data (mirrors .gitignore)
+/public/datasets/
+/coverage/
+/.pipeline/
+/.tmp/
+/.gh-artifacts-*/
+*.tar
+
+# TypeScript / Next build artifacts
+*.tsbuildinfo
+next-env.d.ts
+
+# Local-only, never committed (see .git/info/exclude and AGENTS.md git hygiene)
+/solver-artifacts-v2/
+platline-v4-1.*
+CLAUDE.local.md

@@ -8,10 +8,7 @@ describe("remote dataset selection", () => {
       schemaVersion: 1,
       latestStableVersion: "stable-2.8.4",
       latestDailyVersion: "daily-523",
-      versions: [
-        datasetVersion("daily-523", "daily"),
-        datasetVersion("stable-2.8.4", "stable"),
-      ],
+      versions: [datasetVersion("daily-523", "daily"), datasetVersion("stable-2.8.4", "stable")],
     };
 
     expect(pickDefaultDatasetVersion(manifest)?.id).toBe("stable-2.8.4");

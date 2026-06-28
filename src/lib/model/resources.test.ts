@@ -20,15 +20,15 @@ describe("resource helpers", () => {
       }),
     ).toBe(true);
     expect(isVirtualChoiceResource({ id: "any:item", displayName: "Any Item" })).toBe(true);
-    expect(isVirtualChoiceResource({ id: "gregtech:gt.metaitem.01:32700", displayName: "Tin Plate" })).toBe(
-      false,
-    );
+    expect(
+      isVirtualChoiceResource({ id: "gregtech:gt.metaitem.01:32700", displayName: "Tin Plate" }),
+    ).toBe(false);
   });
 
   it("removes ore dictionary noise from labels used in recipes", () => {
-    expect(resourceLabel({ id: "oredict:stickWood", displayName: "Ore Dictionary: stickWood" })).toBe(
-      "stickWood",
-    );
+    expect(
+      resourceLabel({ id: "oredict:stickWood", displayName: "Ore Dictionary: stickWood" }),
+    ).toBe("stickWood");
   });
 
   it("trims only decimal zeros from formatted numbers", () => {

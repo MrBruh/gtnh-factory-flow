@@ -107,7 +107,9 @@ export function getChanceMultiplier(output: RecipeOutput): number {
   return output.chance ?? 1;
 }
 
-export function isRecipeInputConsumed(input: Pick<ResourceAmount, "id"> & { consumed?: boolean }): boolean {
+export function isRecipeInputConsumed(
+  input: Pick<ResourceAmount, "id"> & { consumed?: boolean },
+): boolean {
   return input.consumed !== false;
 }
 
@@ -145,11 +147,21 @@ export function getFilledCellFluidEquivalent<
     amount?: number;
     alternatives?: ResourceAmount["alternatives"];
   },
->(resource: T): (Pick<T, "amount"> &
-  Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip">) | undefined {
+>(
+  resource: T,
+):
+  | (Pick<T, "amount"> &
+      Pick<
+        ResourceAmount,
+        "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip"
+      >)
+  | undefined {
   if (resource.kind === "fluid") {
     return resource as Pick<T, "amount"> &
-      Pick<ResourceAmount, "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip">;
+      Pick<
+        ResourceAmount,
+        "kind" | "id" | "displayName" | "iconPath" | "iconAtlas" | "dominantColor" | "tooltip"
+      >;
   }
 
   const alternative = resource.alternatives?.find((entry) => entry.kind === "fluid");
@@ -216,7 +228,9 @@ function isFluidEquivalentToFilledCell(
   );
 }
 
-function getFilledCellFluidName(resource: Pick<ResourceAmount, "displayName" | "id">): string | undefined {
+function getFilledCellFluidName(
+  resource: Pick<ResourceAmount, "displayName" | "id">,
+): string | undefined {
   const label = resourceLabel(resource).trim();
   const match = label.match(/^(.+?)\s+Cell$/i);
   if (!match) {

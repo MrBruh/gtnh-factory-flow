@@ -670,7 +670,10 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         sourceHandle:
           side === "output"
             ? handleId
-            : makeResourceHandleId("output", { kind: storageResource.kind, id: storageResource.id }),
+            : makeResourceHandleId("output", {
+                kind: storageResource.kind,
+                id: storageResource.id,
+              }),
         targetHandle:
           side === "input"
             ? handleId
@@ -710,7 +713,9 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
       };
       const project = touchProject(
         pruneOrphanStorages(
-          duplicateEdge ? projectWithEdge : applyEdgeInputOverride(projectWithEdge, edge, selectedResource),
+          duplicateEdge
+            ? projectWithEdge
+            : applyEdgeInputOverride(projectWithEdge, edge, selectedResource),
         ),
       );
 
@@ -1486,8 +1491,8 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
     return (
       edge.resourceKind === targetStorage.kind &&
       edge.resourceId === targetStorage.resourceId &&
-      effectiveSourceRecipe.outputs.some(
-        (output) => resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
+      effectiveSourceRecipe.outputs.some((output) =>
+        resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
       )
     );
   }
@@ -1500,8 +1505,8 @@ function isFactoryEdgeStillValid(project: FactoryProject, edge: FactoryEdge): bo
   const effectiveTargetRecipe = applyRecipeInputOverrides(targetRecipe, targetNode);
 
   return (
-    effectiveSourceRecipe.outputs.some(
-      (output) => resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
+    effectiveSourceRecipe.outputs.some((output) =>
+      resourceMatchesInput({ kind: edge.resourceKind, id: edge.resourceId }, output),
     ) &&
     effectiveTargetRecipe.inputs.some(
       (input) =>
@@ -1566,9 +1571,8 @@ function buildEdgeBetweenNodes(
     const effectiveSourceRecipe = sourceNode
       ? applyRecipeInputOverrides(sourceRecipe, sourceNode)
       : sourceRecipe;
-    const matchedOutput = effectiveSourceRecipe.outputs.find(
-      (output) =>
-        resourceMatchesInput(sourceStorageResource(targetStorage), output),
+    const matchedOutput = effectiveSourceRecipe.outputs.find((output) =>
+      resourceMatchesInput(sourceStorageResource(targetStorage), output),
     );
     if (!matchedOutput) {
       return undefined;

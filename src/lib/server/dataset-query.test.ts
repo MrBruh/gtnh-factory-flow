@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildTextSearchIndex,
-  queryTextSearchIndex,
-  searchTokensMatch,
-} from "./dataset-query";
+import { buildTextSearchIndex, queryTextSearchIndex, searchTokensMatch } from "./dataset-query";
 
 describe("dataset query text search", () => {
   it("matches substrings inside tokens without matching across token boundaries", () => {
