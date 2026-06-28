@@ -331,3 +331,66 @@ export const factoryProjectSchema = z.object({
 });
 
 export type FactoryProjectInput = z.input<typeof factoryProjectSchema>;
+
+export const resolvedResourceRateSchema = z.object({
+  kind: resourceKindSchema,
+  id: z.string().min(1),
+  perSecond: z.number(),
+});
+
+export const resolvedMachineSchema = z.object({
+  nodeId: z.string().min(1),
+  machineKey: z.string().min(1).optional(),
+  machineType: z.string().min(1),
+  tier: z.string().min(1),
+  machineCount: z.number().nonnegative(),
+  parallel: z.number().positive(),
+  eutPerMachine: z.number(),
+  totalEut: z.number(),
+  inputs: z.array(resolvedResourceRateSchema),
+  outputs: z.array(resolvedResourceRateSchema),
+});
+
+export const resolvedNetSchema = z.object({
+  edgeId: z.string().min(1),
+  from: z.string().min(1),
+  to: z.string().min(1),
+  kind: resourceKindSchema,
+  id: z.string().min(1),
+  perSecond: z.number(),
+});
+
+export const resolvedPlanSchema = z.object({
+  generatedAt: z.string(),
+  machines: z.array(resolvedMachineSchema),
+  nets: z.array(resolvedNetSchema),
+  externalIO: z.object({
+    inputs: z.array(resolvedResourceRateSchema),
+    outputs: z.array(resolvedResourceRateSchema),
+  }),
+  power: z.object({
+    totalEut: z.number(),
+    totalEuPerSecond: z.number(),
+    fuel: z.string().min(1).optional(),
+    fuelPerSecond: z.number().optional(),
+    fuelUnit: z.enum(["L/s", "buckets/s"]).optional(),
+  }),
+});
+
+export const exportAppSchema = z.object({
+  name: z.string().min(1),
+  version: z.string().min(1).optional(),
+  exportedAt: z.string().optional(),
+});
+
+/**
+ * The exported plan artifact: {@link factoryProjectSchema} plus export-only
+ * provenance and the derived `resolved` block. `parseFactoryProjectJson` validates
+ * with the base schema (which strips these extras), keeping the in-memory model
+ * canonical; serialization validates against this extended schema.
+ */
+export const exportedFactoryProjectSchema = factoryProjectSchema.extend({
+  datasetVersionId: z.string().min(1).optional(),
+  app: exportAppSchema.optional(),
+  resolved: resolvedPlanSchema.optional(),
+});
