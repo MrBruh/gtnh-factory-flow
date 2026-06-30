@@ -621,6 +621,25 @@ async function loadManifest(): Promise<DatasetManifest> {
   return manifest;
 }
 
+/**
+ * Best-effort active dataset version for the /health endpoint. Returns null when no
+ * local manifest is present (e.g. proxy mode, where datasets are forwarded upstream),
+ * so the health probe stays dependency-light and never fails on dataset availability.
+ */
+export async function getLatestDatasetVersionId(): Promise<string | null> {
+  try {
+    const manifest = await loadManifest();
+    return (
+      manifest.latestStableVersion ??
+      manifest.latestDailyVersion ??
+      manifest.versions[0]?.id ??
+      null
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function loadCatalog(versionId: string): Promise<LoadedRecipeIndex> {
   const manifest = await loadManifest();
   const version = manifest.versions.find((entry) => entry.id === versionId);
