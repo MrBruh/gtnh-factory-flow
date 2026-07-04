@@ -59,12 +59,15 @@ export interface RecipeNodeData extends Record<string, unknown> {
   projectNode: FactoryNode;
   recipe: Recipe;
   result?: NodeThroughputResult;
+  // Balanced machine count from the ratio optimizer. This is exactly what clicking the wand
+  // applies, so the display stays consistent with the action.
+  suggestedMachineCount?: number;
 }
 
 export type RecipeFlowNode = Node<RecipeNodeData, "recipeNode">;
 
 function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
-  const { projectNode, recipe, result } = data;
+  const { projectNode, recipe, result, suggestedMachineCount } = data;
   const [isMachineMenuOpen, setIsMachineMenuOpen] = useState(false);
   const [openMachineConfigMenuId, setOpenMachineConfigMenuId] = useState<string>();
   const browseResource = useFactoryStore((state) => state.browseResource);
@@ -523,7 +526,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
             <MachineCountStat
               label={isCropProductionNode ? "Seeds" : "Machines"}
               machineCount={projectNode.machineCount}
-              suggestedMachineCount={getSuggestedMachineCount(result, projectNode.machineCount)}
+              suggestedMachineCount={
+                suggestedMachineCount ?? getSuggestedMachineCount(result, projectNode.machineCount)
+              }
               onChange={(machineCount) => updateNode(projectNode.id, { machineCount })}
               onOptimize={() => optimizeMachineCount(projectNode.id)}
             />
