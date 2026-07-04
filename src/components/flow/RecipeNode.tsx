@@ -84,7 +84,9 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
   const pendingResourceConnection = useFactoryStore((state) => state.pendingResourceConnection);
   const dataset = useFactoryStore((state) => state.dataset);
   const utilization = result?.utilization ?? 0;
-  const utilizationPercent = Number.isFinite(utilization) ? utilization * 100 : 999;
+  // Cap the displayed usage at 100%: a machine can't run past full capacity. Demand beyond
+  // capacity is unmet and surfaced by the node's "bottleneck" status, not a >100% usage.
+  const utilizationPercent = Number.isFinite(utilization) ? Math.min(utilization, 1) * 100 : 100;
   const isSearchHighlighted = recipeContainsSearchResource(recipe, recipeSearch);
   const isFlowResourceHighlighted = recipeContainsResourceKey(
     recipe,
