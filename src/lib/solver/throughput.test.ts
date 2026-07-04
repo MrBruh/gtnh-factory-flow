@@ -1889,4 +1889,263 @@ describe("calculateThroughput", () => {
     expect(result.edges["silicone-cell-to-tank"].transferredPerSecond).toBeCloseTo(144);
     expect(result.storages["silicone-tank"].producedPerSecond).toBeCloseTo(144);
   });
+
+  it("flags an under-provisioned producer feeding an over-provisioned consumer", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "node-capacity-bottleneck-project",
+      name: "Node capacity bottleneck test",
+      recipes: [
+        {
+          id: "crushed-source-recipe",
+          name: "Crushed source",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "crushed", amount: 1 }],
+        },
+        {
+          id: "washer-recipe",
+          name: "Ore Washer",
+          machineType: "Ore Washer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "crushed", amount: 1 }],
+          outputs: [{ kind: "item", id: "purified", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "producer",
+          recipeId: "crushed-source-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "consumer",
+          recipeId: "washer-recipe",
+          machineCount: 5,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "crushed-edge",
+          source: "producer",
+          target: "consumer",
+          resourceKind: "item",
+          resourceId: "crushed",
+          label: "Crushed",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    // The producer physically cannot feed five washers, so demand (5/s) exceeds capacity (1/s).
+    expect(result.nodes.producer.maxRatePerSecond).toBeCloseTo(1);
+    expect(result.nodes.producer.requiredRatePerSecond).toBeCloseTo(5);
+    expect(result.nodes.producer.utilization).toBeCloseTo(5);
+    expect(result.nodes.producer.status).toBe("bottleneck");
+
+    // The over-provisioned consumer is starved by the upstream shortage, not a capacity bottleneck.
+    expect(result.nodes.consumer.utilization).toBeCloseTo(0.2);
+    expect(result.nodes.consumer.status).toBe("underutilized");
+
+    const nodeCapacityBottlenecks = result.bottlenecks.filter(
+      (bottleneck) => bottleneck.kind === "node-capacity",
+    );
+    expect(nodeCapacityBottlenecks).toHaveLength(1);
+    expect(nodeCapacityBottlenecks[0]?.nodeId).toBe("producer");
+    expect(nodeCapacityBottlenecks[0]?.requiredPerSecond).toBeCloseTo(5);
+    expect(nodeCapacityBottlenecks[0]?.capacityPerSecond).toBeCloseTo(1);
+  });
+
+  it("does not flag a balanced producer and consumer as a node-capacity bottleneck", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "balanced-no-bottleneck-project",
+      name: "Balanced no bottleneck test",
+      recipes: [
+        {
+          id: "crushed-source-recipe",
+          name: "Crushed source",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "crushed", amount: 1 }],
+        },
+        {
+          id: "washer-recipe",
+          name: "Ore Washer",
+          machineType: "Ore Washer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "crushed", amount: 1 }],
+          outputs: [{ kind: "item", id: "purified", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "producer",
+          recipeId: "crushed-source-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "consumer",
+          recipeId: "washer-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "crushed-edge",
+          source: "producer",
+          target: "consumer",
+          resourceKind: "item",
+          resourceId: "crushed",
+          label: "Crushed",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    expect(result.nodes.producer.utilization).toBeCloseTo(1);
+    expect(result.nodes.producer.status).toBe("balanced");
+    expect(result.nodes.consumer.utilization).toBeCloseTo(1);
+    expect(result.nodes.consumer.status).toBe("balanced");
+    expect(
+      result.bottlenecks.filter((bottleneck) => bottleneck.kind === "node-capacity"),
+    ).toHaveLength(0);
+  });
+
+  it("flags a fully-fed intermediate node without flagging its supplier or starved consumer", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "intermediate-node-capacity-project",
+      name: "Intermediate node capacity test",
+      recipes: [
+        {
+          id: "ore-source-recipe",
+          name: "Ore source",
+          machineType: "Miner",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "ore", amount: 1 }],
+        },
+        {
+          id: "macerator-recipe",
+          name: "Macerator",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "ore", amount: 1 }],
+          outputs: [{ kind: "item", id: "crushed", amount: 1 }],
+        },
+        {
+          id: "washer-recipe",
+          name: "Ore Washer",
+          machineType: "Ore Washer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "crushed", amount: 1 }],
+          outputs: [{ kind: "item", id: "purified", amount: 1 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "source",
+          recipeId: "ore-source-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+        {
+          id: "macerator",
+          recipeId: "macerator-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 0 },
+        },
+        {
+          id: "washer",
+          recipeId: "washer-recipe",
+          machineCount: 5,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 400, y: 0 },
+        },
+      ],
+      edges: [
+        {
+          id: "ore-edge",
+          source: "source",
+          target: "macerator",
+          resourceKind: "item",
+          resourceId: "ore",
+          label: "Ore",
+        },
+        {
+          id: "crushed-edge",
+          source: "macerator",
+          target: "washer",
+          resourceKind: "item",
+          resourceId: "crushed",
+          label: "Crushed",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    // The macerator is fully fed by the source but still cannot meet the washers' demand.
+    expect(result.nodes.macerator.utilization).toBeCloseTo(5);
+    expect(result.nodes.macerator.status).toBe("bottleneck");
+
+    // The source only needs to supply the macerator's real (single-machine) draw, so it stays
+    // balanced; the starved washer stays underutilized. Neither is a false capacity bottleneck.
+    expect(result.nodes.source.utilization).toBeCloseTo(1);
+    expect(result.nodes.source.status).toBe("balanced");
+    expect(result.nodes.washer.utilization).toBeCloseTo(0.2);
+    expect(result.nodes.washer.status).toBe("underutilized");
+
+    const nodeCapacityBottlenecks = result.bottlenecks.filter(
+      (bottleneck) => bottleneck.kind === "node-capacity",
+    );
+    expect(nodeCapacityBottlenecks).toHaveLength(1);
+    expect(nodeCapacityBottlenecks[0]?.nodeId).toBe("macerator");
+  });
 });
