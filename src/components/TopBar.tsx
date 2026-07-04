@@ -205,6 +205,10 @@ export function TopBar({ onLoadDatasetVersion }: TopBarProps) {
           <label className="grid max-w-52 gap-0.5">
             <span className="sr-only">GTNH version</span>
             <select
+              // The dataset manifest loads on the client, so `disabled` legitimately
+              // differs between the server render and the first client render. Suppress
+              // the hydration warning for this element rather than blocking on the fetch.
+              suppressHydrationWarning
               value={selectedDatasetVersionId ?? ""}
               disabled={isDatasetLoading || !manifest?.versions.length}
               onChange={(event) => onLoadDatasetVersion(event.target.value)}
