@@ -50,6 +50,11 @@ export function calculateThroughput(
   const nodes: Record<string, NodeThroughputResult> = {};
   const storages: Record<string, StorageThroughputResult> = {};
   const bottlenecks: BottleneckReport[] = [];
+  // Demand-driven utilization per node: how hard downstream demand (and any target) asks a node to
+  // run, independent of whether upstream can actually supply it. Propagated back to producers so an
+  // over-provisioned consumer's real demand is not masked by its supply-limited throughput, which is
+  // what lets a genuinely under-provisioned node surface as a capacity bottleneck.
+  const demandUtilizationByNode = new Map<string, number>();
   let totalEuT = 0;
   const projectStorages = project.storages ?? [];
   const storagesById = new Map(projectStorages.map((storage) => [storage.id, storage]));
@@ -287,6 +292,7 @@ export function calculateThroughput(
     nodeResult.theoreticalMachinesRequired = utilizationReport.theoreticalMachinesRequired;
     nodeResult.limitingResource = utilizationReport.limitingResource;
     nodeResult.status = getNodeStatus(nodeResult.utilization);
+    demandUtilizationByNode.set(node.id, utilizationReport.utilization);
   }
 
   const maxUtilizationPasses = Math.max(1, project.nodes.length + 1);
@@ -299,9 +305,17 @@ export function calculateThroughput(
       edgeResults,
       incomingEdgeCounts,
       storagesById,
+      demandUtilizationByNode,
     );
     if (
-      !refreshNodeUtilizationFromEdgeResults(project, recipesById, nodes, edgeResults, storagesById)
+      !refreshNodeUtilizationFromEdgeResults(
+        project,
+        recipesById,
+        nodes,
+        edgeResults,
+        storagesById,
+        demandUtilizationByNode,
+      )
     ) {
       break;
     }
@@ -314,6 +328,7 @@ export function calculateThroughput(
     edgeResults,
     incomingEdgeCounts,
     storagesById,
+    demandUtilizationByNode,
   );
   refreshStorageResultsFromEdges(projectStorages, storages, project.edges, edgeResults);
 
@@ -668,6 +683,7 @@ function refreshEdgeResultsFromNodeUtilization(
   edgeResults: Record<string, EdgeThroughput>,
   incomingEdgeCounts: Map<string, number>,
   storagesById: Map<string, FactoryStorage>,
+  demandUtilizationByNode: Map<string, number>,
 ): void {
   const storageIncomingCounts = countIncomingEdgesToStorageResource(project, projectStorages);
   const storageSinkCounts = countStorageSinkEdgesBySourceResource(project, storagesById);
@@ -734,11 +750,20 @@ function refreshEdgeResultsFromNodeUtilization(
             (directDemandBySourceResource.get(`${edge.source}|${key}`) ?? 0),
         ) / (storageSinkCounts.get(`${edge.source}|${key}`) ?? 1)
       : sourceEffectiveCapacity;
+    // For a node->node consumer, use its demand-driven utilization (uncapped by upstream supply) so
+    // the demand relayed back to this producer reflects what the consumer actually requests. Using
+    // the supply-limited utilization here would collapse "required" to whatever the producer already
+    // emits, capping the producer at 100% and hiding under-provisioning. Storage sources keep the
+    // supply-limited value so a drained tank still reports its real (limited) outgoing flow.
+    const targetConsumerUtilization =
+      targetResult && !sourceStorage
+        ? (demandUtilizationByNode.get(edge.target) ?? targetResult.utilization)
+        : (targetResult?.utilization ?? 0);
     const targetDemand = targetStorage
       ? sourceCapacity
       : !targetResult
         ? sourceCapacity
-        : getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetResult.utilization) /
+        : getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetConsumerUtilization) /
           targetCount;
     const demandPerSecond = Number.isFinite(targetDemand) ? targetDemand : 0;
     const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
@@ -904,6 +929,7 @@ function refreshNodeUtilizationFromEdgeResults(
   nodes: Record<string, NodeThroughputResult>,
   edgeResults: Record<string, EdgeThroughput>,
   storagesById: Map<string, FactoryStorage>,
+  demandUtilizationByNode: Map<string, number>,
 ): boolean {
   const requiredByNodeAndResource = new Map<string, Map<ResourceKey, number>>();
   const inputSupplyByNodeAndResource = calculateConnectedInputSupply(
@@ -982,6 +1008,17 @@ function refreshNodeUtilizationFromEdgeResults(
       nodeResult,
       requiredByResource,
     );
+    // Demand-driven figures: what downstream demand (and any target) asks of this node, before we
+    // account for whether upstream can supply it. These decide whether the node itself is a capacity
+    // bottleneck and are relayed to producers so an over-provisioned consumer's demand is preserved.
+    const demandUtilization = utilizationReport.utilization;
+    const demandRequiredRatePerSecond = utilizationReport.requiredRatePerSecond;
+    const demandTheoreticalMachinesRequired = utilizationReport.theoreticalMachinesRequired;
+    const demandLimitingResource = utilizationReport.limitingResource;
+    demandUtilizationByNode.set(node.id, demandUtilization);
+
+    // Supply-limited figures: clamp the demand by what connected inputs can actually deliver so a
+    // starved node reports as underutilized rather than as a false capacity bottleneck.
     const inputSupplyLimit = selectConnectedInputSupplyLimit(
       nodeResult,
       inputSupplyByNodeAndResource.get(node.id),
@@ -999,20 +1036,36 @@ function refreshNodeUtilizationFromEdgeResults(
       }
     }
 
+    // When demand exceeds the node's own capacity it is genuinely under-provisioned: surface the
+    // demand-vs-capacity figures (utilization > 1) so it is flagged even when it is fully fed.
+    // Otherwise use the supply-limited figures so starved/over-provisioned nodes read as
+    // underutilized (and never as a false capacity bottleneck).
+    const isCapacityBottleneck = demandUtilization > 1 + EPSILON;
+    const finalUtilization = isCapacityBottleneck
+      ? demandUtilization
+      : utilizationReport.utilization;
+    const finalRequiredRatePerSecond = isCapacityBottleneck
+      ? demandRequiredRatePerSecond
+      : utilizationReport.requiredRatePerSecond;
+    const finalTheoreticalMachinesRequired = isCapacityBottleneck
+      ? demandTheoreticalMachinesRequired
+      : utilizationReport.theoreticalMachinesRequired;
+    const finalLimitingResource = isCapacityBottleneck
+      ? demandLimitingResource
+      : utilizationReport.limitingResource;
+
     if (
-      Math.abs(nodeResult.utilization - utilizationReport.utilization) > EPSILON ||
-      Math.abs(
-        nodeResult.theoreticalMachinesRequired - utilizationReport.theoreticalMachinesRequired,
-      ) > EPSILON
+      Math.abs(nodeResult.utilization - finalUtilization) > EPSILON ||
+      Math.abs(nodeResult.theoreticalMachinesRequired - finalTheoreticalMachinesRequired) > EPSILON
     ) {
       changed = true;
     }
 
-    nodeResult.requiredRatePerSecond = utilizationReport.requiredRatePerSecond;
+    nodeResult.requiredRatePerSecond = finalRequiredRatePerSecond;
     nodeResult.maxRatePerSecond = utilizationReport.maxRatePerSecond;
-    nodeResult.utilization = utilizationReport.utilization;
-    nodeResult.theoreticalMachinesRequired = utilizationReport.theoreticalMachinesRequired;
-    nodeResult.limitingResource = utilizationReport.limitingResource;
+    nodeResult.utilization = finalUtilization;
+    nodeResult.theoreticalMachinesRequired = finalTheoreticalMachinesRequired;
+    nodeResult.limitingResource = finalLimitingResource;
     nodeResult.status = getNodeStatus(nodeResult.utilization);
   }
 
