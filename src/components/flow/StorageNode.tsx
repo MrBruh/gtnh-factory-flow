@@ -100,7 +100,17 @@ function StorageNodeComponent({ data, selected }: NodeProps<StorageFlowNode>) {
 
 export const StorageNode = memo(StorageNodeComponent);
 
-function StorageHeader({ title, variant }: { title: string; variant: "tank" | "drawer" }) {
+function StorageHeader({
+  title,
+  variant,
+  storageId,
+}: {
+  title: string;
+  variant: "tank" | "drawer";
+  storageId: string;
+}) {
+  const deleteStorage = useFactoryStore((state) => state.deleteStorage);
+
   return (
     <div
       className={[
@@ -108,9 +118,22 @@ function StorageHeader({ title, variant }: { title: string; variant: "tank" | "d
         variant === "tank" ? "border-[#747c91] bg-[#b8c1d9]" : "border-[#4f3518] bg-[#8a6030]",
       ].join(" ")}
     >
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          deleteStorage(storageId);
+        }}
+        className="nodrag flex h-5 w-5 shrink-0 items-center justify-center border-2 border-[#252525] bg-[#7d7d7d] text-base leading-none text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-red-700"
+        title="Remove storage"
+        aria-label="Remove storage"
+      >
+        -
+      </button>
       <div className="minecraft-title min-w-0 flex-1 truncate text-center text-[13px] leading-4">
         {title}
       </div>
+      <span aria-hidden className="h-5 w-5 shrink-0" />
     </div>
   );
 }
@@ -141,7 +164,7 @@ function FluidStorageCard({
         isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
-      <StorageHeader title="Super Tank" variant="tank" />
+      <StorageHeader title="Super Tank" variant="tank" storageId={storage.id} />
       <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#1f1f1f] bg-black shadow-[inset_7px_7px_0_#1f2933,inset_-7px_-7px_0_#050505]">
         <div className="relative grid h-[64px] w-[64px] place-items-center bg-[#111]">
           <StorageEdgeAnchors
@@ -189,7 +212,7 @@ function ItemStorageCard({
         isHighlighted ? "brightness-125 saturate-150" : "",
       ].join(" ")}
     >
-      <StorageHeader title="Drawer" variant="drawer" />
+      <StorageHeader title="Drawer" variant="drawer" storageId={storage.id} />
       <div className="storage-node-body mx-auto mt-3 grid h-[96px] w-[132px] place-items-center border-2 border-[#3a260f] bg-[#7a5427] shadow-[inset_7px_7px_0_#5a3b1b,inset_-7px_-7px_0_#4a3117]">
         <div className="relative grid h-[64px] w-[64px] place-items-center border-2 border-[#1f1f1f] bg-[#d8c4b4] shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#7d6d61]">
           <StorageEdgeAnchors
