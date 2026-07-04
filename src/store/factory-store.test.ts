@@ -677,6 +677,26 @@ describe("factory resource links", () => {
     );
   });
 
+  it("deletes a storage node and its connected edges via deleteStorage", () => {
+    useFactoryStore.getState().connectNodes("fluid-source", "water-tank", {
+      kind: "fluid",
+      id: "water",
+      sourceHandle: makeResourceHandleId("output", { kind: "fluid", id: "water" }, 0),
+      targetHandle: makeResourceHandleId("input", { kind: "fluid", id: "water" }),
+    });
+    expect(useFactoryStore.getState().project.edges).toHaveLength(1);
+    expect(useFactoryStore.getState().project.storages).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "water-tank" })]),
+    );
+
+    useFactoryStore.getState().deleteStorage("water-tank");
+
+    expect(useFactoryStore.getState().project.edges).toHaveLength(0);
+    expect(useFactoryStore.getState().project.storages).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "water-tank" })]),
+    );
+  });
+
   it("undoes and redoes structural project edits", () => {
     useFactoryStore.getState().connectNodes("item-source", "item-target", {
       kind: "item",
