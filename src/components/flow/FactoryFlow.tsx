@@ -52,6 +52,7 @@ import {
   trimTrailingDecimalZeros,
 } from "@/lib/model";
 import { applyMachineOutputMultipliers } from "@/lib/solver/machine-effects";
+import { optimizeMachineCountsForProject } from "@/lib/solver/machine-count-optimizer";
 import { getOverclockedRecipeStats } from "@/lib/solver/overclock";
 import type {
   FactoryEdge,
@@ -221,6 +222,14 @@ export function FactoryFlow() {
     [project.storages],
   );
 
+  // Balanced machine counts shown under each node's wand, so the displayed suggestion matches
+  // exactly what the wand applies. Node positions do not affect the optimizer, and dragging only
+  // commits a new project on drop, so this recomputes at the same cadence as any project edit.
+  const optimizedMachineCounts = useMemo(
+    () => optimizeMachineCountsForProject(project).machineCounts,
+    [project],
+  );
+
   const nodesFromProject = useMemo<Array<RecipeFlowNode | StorageFlowNode>>(
     () => [
       ...project.nodes.map((node) => {
@@ -250,6 +259,7 @@ export function FactoryFlow() {
                 outputs: [],
               } satisfies RecipeFlowNode["data"]["recipe"]),
             result: result.nodes[node.id],
+            suggestedMachineCount: optimizedMachineCounts.get(node.id),
           },
         } satisfies RecipeFlowNode;
       }),
@@ -273,6 +283,7 @@ export function FactoryFlow() {
     [
       activeFlowResourceKey,
       activeNodeBottlenecks,
+      optimizedMachineCounts,
       project.nodes,
       project.storages,
       recipesById,
