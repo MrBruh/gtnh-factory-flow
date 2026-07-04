@@ -1010,17 +1010,27 @@ export const useFactoryStore = create<FactoryStore>((set, get) => ({
         return state;
       }
 
-      const machineCount = optimizeMachineCountsForProject(state.project).machineCounts.get(nodeId);
-      if (machineCount === undefined || machineCount === currentNode.machineCount) {
+      const optimized = optimizeMachineCountsForProject(state.project);
+      const componentNodeIds = collectConnectedNodeIds(state.project, nodeId);
+      const project = {
+        ...state.project,
+        nodes: state.project.nodes.map((node) => {
+          if (!componentNodeIds.has(node.id)) {
+            return node;
+          }
+
+          const machineCount = optimized.machineCounts.get(node.id);
+          return machineCount === undefined || machineCount === node.machineCount
+            ? node
+            : { ...node, machineCount };
+        }),
+      };
+
+      if (haveSameMachineCounts(state.project, project)) {
         return state;
       }
 
-      const touchedProject = touchProject({
-        ...state.project,
-        nodes: state.project.nodes.map((node) =>
-          node.id === nodeId ? { ...node, machineCount } : node,
-        ),
-      });
+      const touchedProject = touchProject(project);
       return withProjectHistory(state, {
         project: touchedProject,
         lastResult: calculateThroughput(touchedProject),
@@ -1890,6 +1900,42 @@ function parseResourceHandleId(handleId?: string | null):
         ? Number.parseInt(encodedSlotIndex, 10)
         : undefined,
   };
+}
+
+function collectConnectedNodeIds(project: FactoryProject, nodeId: string): Set<string> {
+  const nodeIds = new Set(project.nodes.map((node) => node.id));
+  const adjacency = new Map<string, string[]>();
+  const link = (from: string, to: string) => {
+    adjacency.set(from, [...(adjacency.get(from) ?? []), to]);
+  };
+  for (const edge of project.edges) {
+    // Treat every edge as an undirected connector, including edges that pass through storage
+    // nodes, so an entire connected chain is scoped together.
+    link(edge.source, edge.target);
+    link(edge.target, edge.source);
+  }
+
+  const connectedNodeIds = new Set<string>([nodeId]);
+  const visited = new Set<string>();
+  const stack = [nodeId];
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined || visited.has(current)) {
+      continue;
+    }
+
+    visited.add(current);
+    if (nodeIds.has(current)) {
+      connectedNodeIds.add(current);
+    }
+    for (const neighbor of adjacency.get(current) ?? []) {
+      if (!visited.has(neighbor)) {
+        stack.push(neighbor);
+      }
+    }
+  }
+
+  return connectedNodeIds;
 }
 
 function haveSameMachineCounts(left: FactoryProject, right: FactoryProject): boolean {

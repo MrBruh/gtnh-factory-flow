@@ -127,7 +127,7 @@ class MachineCountOptimizer {
 
       hasExplicitDemand = true;
       const key = makeResourceKey(node.targetOutput.kind, node.targetOutput.resourceId);
-      this.requireNodeOutput(node.id, key, node.targetOutput.amountPerSecond, undefined);
+      this.requireNodeOutput(node.id, key, node.targetOutput.amountPerSecond, undefined, true);
     }
 
     if (this.context.project.targetRate) {
@@ -137,6 +137,13 @@ class MachineCountOptimizer {
         this.context.project.targetRate.resourceId,
       );
       this.satisfyLooseOutputDemand(key, this.context.project.targetRate.amountPerSecond);
+    }
+
+    if (hasExplicitDemand) {
+      // Explicit demand scales the demanded producer (and its upstream suppliers). Flush the
+      // downstream consumers it fed through storage so the whole connected chain rebalances,
+      // not just the producer and its inputs.
+      this.flushRoundedStorageOutputConsumers(new Set());
     }
 
     if (!hasExplicitDemand) {
@@ -328,7 +335,7 @@ class MachineCountOptimizer {
       return;
     }
 
-    this.requireNodeOutput(candidate.nodeId, resourceKey, amountPerSecond, undefined);
+    this.requireNodeOutput(candidate.nodeId, resourceKey, amountPerSecond, undefined, true);
   }
 
   private hasOutgoingResourceEdge(nodeId: string, resourceKey: ResourceKey): boolean {
@@ -344,6 +351,7 @@ class MachineCountOptimizer {
     resourceKey: ResourceKey,
     amountPerSecond: number,
     consumerEndpoint: EndpointId | undefined,
+    pushDownstream = false,
   ) {
     if (amountPerSecond <= EPSILON || this.isInternalCyclicDemand(nodeId, consumerEndpoint)) {
       return;
@@ -359,7 +367,10 @@ class MachineCountOptimizer {
     const nextDemand = (this.outputDemand.get(demandKey) ?? 0) + amountPerSecond;
     this.outputDemand.set(demandKey, nextDemand);
 
-    this.ensureNodeOperations(nodeId, nextDemand / outputRate, new Set());
+    const appliedDelta = this.ensureNodeOperations(nodeId, nextDemand / outputRate, new Set());
+    if (pushDownstream && appliedDelta > EPSILON) {
+      this.pushNodeOutputs(nodeId, appliedDelta, new Set());
+    }
   }
 
   private requireNodeInputConsumption(

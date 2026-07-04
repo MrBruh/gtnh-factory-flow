@@ -1634,6 +1634,36 @@ describe("factory machine count optimization", () => {
     ).toBe(globalCokeCount);
   });
 
+  it("rebalances the whole connected component and leaves disconnected nodes untouched", () => {
+    useFactoryStore.getState().setProject(createComponentScopedOptimizationProject());
+
+    useFactoryStore.getState().optimizeMachineCount("component-source");
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        // The clicked node and every node in its connected component rebalance together.
+        expect.objectContaining({ id: "component-source", machineCount: 4 }),
+        expect.objectContaining({ id: "component-consumer", machineCount: 8 }),
+        // The disconnected island keeps its (inflated) count.
+        expect.objectContaining({ id: "island", machineCount: 7 }),
+      ]),
+    );
+  });
+
+  it("rebalances a component connected only through a storage drawer", () => {
+    useFactoryStore.getState().setProject(createComponentScopedStorageProject());
+
+    useFactoryStore.getState().optimizeMachineCount("drawer-source");
+
+    expect(useFactoryStore.getState().project.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "drawer-source", machineCount: 4 }),
+        expect.objectContaining({ id: "drawer-consumer", machineCount: 8 }),
+        expect.objectContaining({ id: "island", machineCount: 7 }),
+      ]),
+    );
+  });
+
   it("does not amplify an externally seeded recipe cycle", () => {
     useFactoryStore.getState().setProject(createAmplifyingCycleProject());
 
@@ -1911,6 +1941,144 @@ function createRatioOptimizationProject(): FactoryProject {
         targetHandle: makeResourceHandleId("input", { kind: "item", id: "dust" }, 0),
         resourceKind: "item",
         resourceId: "dust",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createComponentScopedOptimizationProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "component-scoped-optimization",
+    name: "Component scoped optimization",
+    recipes: [
+      {
+        id: "component-source-recipe",
+        name: "Component source",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "ore", amount: 1 }],
+        outputs: [{ kind: "item", id: "x", amount: 2 }],
+      },
+      {
+        id: "component-consumer-recipe",
+        name: "Component consumer",
+        machineType: "Assembler",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "x", amount: 1 }],
+        outputs: [{ kind: "item", id: "y", amount: 1 }],
+      },
+      {
+        id: "island-recipe",
+        name: "Island",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "rock", amount: 1 }],
+        outputs: [{ kind: "item", id: "gravel", amount: 1 }],
+      },
+    ],
+    nodes: [
+      {
+        ...makeNode("component-source", "component-source-recipe", 0),
+        targetOutput: { kind: "item", resourceId: "x", amountPerSecond: 8 },
+      },
+      makeNode("component-consumer", "component-consumer-recipe", 200),
+      { ...makeNode("island", "island-recipe", 400), machineCount: 7 },
+    ],
+    storages: [],
+    edges: [
+      {
+        id: "component-edge",
+        source: "component-source",
+        target: "component-consumer",
+        sourceHandle: makeResourceHandleId("output", { kind: "item", id: "x" }, 0),
+        targetHandle: makeResourceHandleId("input", { kind: "item", id: "x" }, 0),
+        resourceKind: "item",
+        resourceId: "x",
+      },
+    ],
+    fuelProfiles: [],
+  };
+}
+
+function createComponentScopedStorageProject(): FactoryProject {
+  return {
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "component-scoped-storage",
+    name: "Component scoped storage",
+    recipes: [
+      {
+        id: "drawer-source-recipe",
+        name: "Drawer source",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "ore", amount: 1 }],
+        outputs: [{ kind: "item", id: "x", amount: 2 }],
+      },
+      {
+        id: "drawer-consumer-recipe",
+        name: "Drawer consumer",
+        machineType: "Assembler",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "x", amount: 1 }],
+        outputs: [{ kind: "item", id: "y", amount: 1 }],
+      },
+      {
+        id: "island-recipe",
+        name: "Island",
+        machineType: "Macerator",
+        minimumTier: "LV",
+        durationTicks: 20,
+        eut: 1,
+        inputs: [{ kind: "item", id: "rock", amount: 1 }],
+        outputs: [{ kind: "item", id: "gravel", amount: 1 }],
+      },
+    ],
+    nodes: [
+      {
+        ...makeNode("drawer-source", "drawer-source-recipe", 0),
+        targetOutput: { kind: "item", resourceId: "x", amountPerSecond: 8 },
+      },
+      makeNode("drawer-consumer", "drawer-consumer-recipe", 200),
+      { ...makeNode("island", "island-recipe", 400), machineCount: 7 },
+    ],
+    storages: [
+      {
+        id: "x-drawer",
+        kind: "item",
+        resourceId: "x",
+        displayName: "X",
+        position: { x: 100, y: 0 },
+      },
+    ],
+    edges: [
+      {
+        id: "drawer-in",
+        source: "drawer-source",
+        target: "x-drawer",
+        resourceKind: "item",
+        resourceId: "x",
+        label: "X",
+      },
+      {
+        id: "drawer-out",
+        source: "x-drawer",
+        target: "drawer-consumer",
+        targetHandle: makeResourceHandleId("input", { kind: "item", id: "x" }, 0),
+        resourceKind: "item",
+        resourceId: "x",
+        label: "X",
       },
     ],
     fuelProfiles: [],
