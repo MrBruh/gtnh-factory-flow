@@ -66,6 +66,14 @@ import { ResourceIcon } from "@/components/nei/ResourceIcon";
 import { RecipeNode, type RecipeFlowNode } from "./RecipeNode";
 import { GT_NODE_COLORS, GT_NODE_COLOR_PALETTE } from "./node-colors";
 import { makeResourceHandleId, parseResourceHandleId } from "./resource-handles";
+import {
+  EDGE_LINK_CLEARANCE,
+  clamp,
+  getClosestPointOnSegment,
+  getPolylineSegments,
+  scoreEdgeRoute,
+  type Rect,
+} from "./routing";
 import { StorageNode, type StorageFlowNode } from "./StorageNode";
 
 const nodeTypes = {
@@ -92,7 +100,6 @@ const EDGE_BUNDLE_CLEARANCE = 30;
 const DIRECT_EDGE_NODE_CLEARANCE = 18;
 const EDGE_LANE_SPACING = 8;
 const EDGE_LANE_BUCKETS = 4;
-const EDGE_LINK_CLEARANCE = 8;
 const EDGE_ENDPOINT_SPACING = 5;
 const EDGE_LABEL_ZOOM = 0.78;
 const EDGE_ARROW_ZOOM = 0.72;
@@ -1212,11 +1219,15 @@ function ResourceEdge({
             edgeId: id,
             routeIndex: data?.routeIndex ?? 0,
             sourceNodeId: source,
+            sourceHandleId: data?.sourceHandleId ?? sourceHandleId,
+            sourceIsRecipeNode: data?.sourceSlotEndpoint,
             sourceCandidates: visualSourceCandidates,
             sourceX: visualSource.x,
             sourceY: visualSource.y,
             sourcePosition: visualSource.side,
             targetNodeId: target,
+            targetHandleId: data?.targetHandleId ?? targetHandleId,
+            targetIsRecipeNode: data?.targetSlotEndpoint,
             targetCandidates: visualTargetCandidates,
             targetX: visualTarget.x,
             targetY: visualTarget.y,
@@ -1685,11 +1696,15 @@ function getDirectEdgePath({
   laneOffset = 0,
   routeIndex,
   sourceNodeId,
+  sourceHandleId,
+  sourceIsRecipeNode,
   sourceCandidates,
   sourceX,
   sourceY,
   sourcePosition,
   targetNodeId,
+  targetHandleId,
+  targetIsRecipeNode,
   targetCandidates,
   targetX,
   targetY,
@@ -1700,12 +1715,14 @@ function getDirectEdgePath({
   laneOffset?: number;
   routeIndex?: number;
   sourceNodeId?: string;
+  sourceHandleId?: string | null;
   sourceIsRecipeNode?: boolean;
   sourceCandidates?: SlotEdgeEndpoint[];
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
   targetNodeId?: string;
+  targetHandleId?: string | null;
   targetIsRecipeNode?: boolean;
   targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
@@ -1720,11 +1737,15 @@ function getDirectEdgePath({
           laneOffset,
           routeIndex,
           sourceNodeId,
+          sourceHandleId,
+          sourceIsRecipeNode,
           sourceCandidates,
           sourceX,
           sourceY,
           sourcePosition,
           targetNodeId,
+          targetHandleId,
+          targetIsRecipeNode,
           targetCandidates,
           targetX,
           targetY,
@@ -1812,11 +1833,15 @@ function getBestDirectEdgePoints({
   laneOffset,
   routeIndex,
   sourceNodeId,
+  sourceHandleId,
+  sourceIsRecipeNode,
   sourceCandidates,
   sourceX,
   sourceY,
   sourcePosition,
   targetNodeId,
+  targetHandleId,
+  targetIsRecipeNode,
   targetCandidates,
   targetX,
   targetY,
@@ -1826,11 +1851,15 @@ function getBestDirectEdgePoints({
   laneOffset: number;
   routeIndex?: number;
   sourceNodeId?: string;
+  sourceHandleId?: string | null;
+  sourceIsRecipeNode?: boolean;
   sourceCandidates?: SlotEdgeEndpoint[];
   sourceX: number;
   sourceY: number;
   sourcePosition: Position;
   targetNodeId?: string;
+  targetHandleId?: string | null;
+  targetIsRecipeNode?: boolean;
   targetCandidates?: SlotEdgeEndpoint[];
   targetX: number;
   targetY: number;
@@ -1846,12 +1875,24 @@ function getBestDirectEdgePoints({
       ? normalizeRouteEndpoints(targetCandidates)
       : normalizeRouteEndpoints([{ x: targetX, y: targetY, side: targetPosition }]);
   const normalizedNodeBounds = normalizeRouteBounds(nodeBounds);
+  // Slot displays of the source/target nodes (minus the connected slot). Crossing
+  // these is penalized in scoreEdgeRoute so wires route around neighbouring output
+  // icons/rates instead of straight over them (issue #10).
+  const displayRects = normalizeRouteBounds([
+    ...(sourceIsRecipeNode && sourceNodeId
+      ? getMeasuredNodeSlotRects(sourceNodeId, sourceHandleId)
+      : []),
+    ...(targetIsRecipeNode && targetNodeId
+      ? getMeasuredNodeSlotRects(targetNodeId, targetHandleId)
+      : []),
+  ]);
 
   const routeSignature = getDirectRouteSignature({
     laneOffset,
     sourceEndpoints,
     targetEndpoints,
     nodeBounds: normalizedNodeBounds,
+    displayRects,
   });
   const cachedRoute = edgeId ? directRouteCache.get(edgeId) : undefined;
   if (cachedRoute?.signature === routeSignature) {
@@ -1880,7 +1921,7 @@ function getBestDirectEdgePoints({
     .map((candidate) => ({
       points: candidate.points,
       score:
-        scoreEdgeRoute(candidate.points, normalizedNodeBounds, obstacleSegments) +
+        scoreEdgeRoute(candidate.points, normalizedNodeBounds, obstacleSegments, displayRects) +
         candidate.endpointPenalty,
     }))
     .sort((left, right) => left.score - right.score)[0]?.points;
@@ -1889,7 +1930,12 @@ function getBestDirectEdgePoints({
   }
 
   let optimizedRoute = bestRoute;
-  let optimizedScore = scoreEdgeRoute(bestRoute, normalizedNodeBounds, obstacleSegments);
+  let optimizedScore = scoreEdgeRoute(
+    bestRoute,
+    normalizedNodeBounds,
+    obstacleSegments,
+    displayRects,
+  );
   for (let pass = 0; pass < EDGE_ROUTE_RELAXATION_PASSES; pass += 1) {
     const relaxedObstacleSegments = getIndexedRouteObstacleSegments(
       edgeId,
@@ -1900,14 +1946,19 @@ function getBestDirectEdgePoints({
       .map((candidate) => ({
         points: candidate.points,
         score:
-          scoreEdgeRoute(candidate.points, normalizedNodeBounds, relaxedObstacleSegments) +
-          candidate.endpointPenalty,
+          scoreEdgeRoute(
+            candidate.points,
+            normalizedNodeBounds,
+            relaxedObstacleSegments,
+            displayRects,
+          ) + candidate.endpointPenalty,
       }))
       .sort((left, right) => left.score - right.score)[0];
     const currentScore = scoreEdgeRoute(
       optimizedRoute,
       normalizedNodeBounds,
       relaxedObstacleSegments,
+      displayRects,
     );
     if (
       !relaxedRoute ||
@@ -2018,17 +2069,20 @@ function getDirectRouteSignature({
   sourceEndpoints,
   targetEndpoints,
   nodeBounds,
+  displayRects,
 }: {
   laneOffset: number;
   sourceEndpoints: SlotEdgeEndpoint[];
   targetEndpoints: SlotEdgeEndpoint[];
   nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>;
+  displayRects: Array<{ left: number; right: number; top: number; bottom: number }>;
 }) {
   return JSON.stringify({
     laneOffset,
     source: sourceEndpoints.map(serializeSlotEdgeEndpoint),
     target: targetEndpoints.map(serializeSlotEdgeEndpoint),
     bounds: nodeBounds,
+    displayRects,
   });
 }
 
@@ -2157,100 +2211,6 @@ function buildRoutedEdgePath(points: Array<{ x: number; y: number }>): RoutedEdg
   };
 }
 
-function scoreEdgeRoute(
-  points: Array<{ x: number; y: number }>,
-  nodeBounds: Array<{ left: number; right: number; top: number; bottom: number }>,
-  existingEdgeSegments: Array<{
-    edgeId: string;
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-    length: number;
-  }> = [],
-) {
-  const segments = getPolylineSegments(points);
-  const length = segments.reduce((sum, segment) => sum + segment.length, 0);
-  let nodeHits = 0;
-  let nodeOverlapLength = 0;
-  let edgeIntersections = 0;
-  let edgeNearness = 0;
-  let edgeOverlap = 0;
-  let selfIntersections = 0;
-  let selfOverlap = 0;
-  let foldBacks = 0;
-
-  for (const segment of segments) {
-    for (const bounds of nodeBounds) {
-      const overlapLength = getSegmentRectOverlapLength(
-        segment.start,
-        segment.end,
-        expandBounds(bounds, EDGE_LINK_CLEARANCE),
-      );
-      if (overlapLength > 0) {
-        nodeHits += 1;
-        nodeOverlapLength += overlapLength;
-      }
-    }
-
-    for (const existing of existingEdgeSegments) {
-      if (segment.length < 0.5 || existing.length < 0.5) {
-        continue;
-      }
-
-      if (segmentsIntersect(segment.start, segment.end, existing.start, existing.end)) {
-        edgeIntersections += 1;
-      }
-
-      edgeOverlap += getCollinearOverlapLength(segment, existing);
-
-      const distance = getSegmentDistance(segment.start, segment.end, existing.start, existing.end);
-      if (distance < EDGE_LINK_CLEARANCE) {
-        edgeNearness += ((EDGE_LINK_CLEARANCE - distance) / EDGE_LINK_CLEARANCE) * segment.length;
-      }
-    }
-  }
-
-  for (let index = 1; index < segments.length; index += 1) {
-    const previous = segments[index - 1];
-    const current = segments[index];
-    const previousDirection = getSegmentUnitVector(previous);
-    const currentDirection = getSegmentUnitVector(current);
-    const dot = previousDirection.x * currentDirection.x + previousDirection.y * currentDirection.y;
-
-    if (dot < -0.85) {
-      foldBacks += 1;
-    }
-  }
-
-  for (let leftIndex = 0; leftIndex < segments.length; leftIndex += 1) {
-    for (let rightIndex = leftIndex + 2; rightIndex < segments.length; rightIndex += 1) {
-      if (leftIndex === 0 && rightIndex === segments.length - 1) {
-        continue;
-      }
-
-      const left = segments[leftIndex];
-      const right = segments[rightIndex];
-      if (segmentsIntersect(left.start, left.end, right.start, right.end)) {
-        selfIntersections += 1;
-      }
-      selfOverlap += getCollinearOverlapLength(left, right);
-    }
-  }
-
-  const turns = countPolylineTurns(points);
-  return (
-    nodeOverlapLength * 25_000 +
-    nodeHits * 5_000 +
-    selfIntersections * 1_000_000 +
-    foldBacks * 750_000 +
-    selfOverlap * 40_000 +
-    edgeOverlap * 9_000 +
-    edgeIntersections * 80_000 +
-    edgeNearness * 2_500 +
-    turns * 700 +
-    length
-  );
-}
-
 function getEndpointDirectionPenalty(source: SlotEdgeEndpoint, target: SlotEdgeEndpoint) {
   const sourceToTarget = { x: target.x - source.x, y: target.y - source.y };
   const targetToSource = { x: source.x - target.x, y: source.y - target.y };
@@ -2291,17 +2251,6 @@ function getSideUnitVector(side: Position) {
     default:
       return { x: 1, y: 0 };
   }
-}
-
-function getSegmentUnitVector(segment: {
-  start: { x: number; y: number };
-  end: { x: number; y: number };
-  length: number;
-}) {
-  return {
-    x: (segment.end.x - segment.start.x) / segment.length,
-    y: (segment.end.y - segment.start.y) / segment.length,
-  };
 }
 
 function offsetPointFromSide(point: { x: number; y: number }, side: Position, distance: number) {
@@ -2937,25 +2886,6 @@ function getClosestPointOnPolyline(
     .sort((left, right) => left.distanceSquared - right.distanceSquared)[0]?.point;
 }
 
-function getPolylineSegments(points: Array<{ x: number; y: number }>) {
-  const segments: Array<{
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-    length: number;
-  }> = [];
-
-  for (let index = 1; index < points.length; index += 1) {
-    const start = points[index - 1];
-    const end = points[index];
-    const length = Math.hypot(end.x - start.x, end.y - start.y);
-    if (length > 0.5) {
-      segments.push({ start, end, length });
-    }
-  }
-
-  return segments;
-}
-
 function dedupePolylineCandidates(candidates: Array<Array<{ x: number; y: number }>>) {
   const seen = new Set<string>();
   return candidates.filter((points) => {
@@ -2966,21 +2896,6 @@ function dedupePolylineCandidates(candidates: Array<Array<{ x: number; y: number
     seen.add(key);
     return points.length >= 2;
   });
-}
-
-function countPolylineTurns(points: Array<{ x: number; y: number }>) {
-  let turns = 0;
-  for (let index = 2; index < points.length; index += 1) {
-    const previous = points[index - 2];
-    const current = points[index - 1];
-    const next = points[index];
-    const previousHorizontal = Math.abs(previous.y - current.y) < 0.5;
-    const nextHorizontal = Math.abs(current.y - next.y) < 0.5;
-    if (previousHorizontal !== nextHorizontal) {
-      turns += 1;
-    }
-  }
-  return turns;
 }
 
 function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefined>) {
@@ -2998,202 +2913,6 @@ function getMeasuredAvoidanceNodeBounds(excludedNodeIds: Array<string | undefine
     .filter((bounds): bounds is { left: number; right: number; top: number; bottom: number } =>
       Boolean(bounds),
     );
-}
-
-function expandBounds(
-  bounds: { left: number; right: number; top: number; bottom: number },
-  amount: number,
-) {
-  return {
-    left: bounds.left - amount,
-    right: bounds.right + amount,
-    top: bounds.top - amount,
-    bottom: bounds.bottom + amount,
-  };
-}
-
-function getSegmentRectOverlapLength(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  bounds: { left: number; right: number; top: number; bottom: number },
-) {
-  const deltaX = end.x - start.x;
-  const deltaY = end.y - start.y;
-  let entry = 0;
-  let exit = 1;
-
-  const clips = [
-    { p: -deltaX, q: start.x - bounds.left },
-    { p: deltaX, q: bounds.right - start.x },
-    { p: -deltaY, q: start.y - bounds.top },
-    { p: deltaY, q: bounds.bottom - start.y },
-  ];
-
-  for (const { p, q } of clips) {
-    if (Math.abs(p) < 0.0001) {
-      if (q < 0) {
-        return 0;
-      }
-      continue;
-    }
-
-    const ratio = q / p;
-    if (p < 0) {
-      entry = Math.max(entry, ratio);
-    } else {
-      exit = Math.min(exit, ratio);
-    }
-
-    if (entry > exit) {
-      return 0;
-    }
-  }
-
-  return Math.hypot(deltaX, deltaY) * Math.max(0, exit - entry);
-}
-
-function pointInBounds(
-  point: { x: number; y: number },
-  bounds: { left: number; right: number; top: number; bottom: number },
-) {
-  return (
-    point.x >= bounds.left &&
-    point.x <= bounds.right &&
-    point.y >= bounds.top &&
-    point.y <= bounds.bottom
-  );
-}
-
-function segmentsIntersect(
-  firstStart: { x: number; y: number },
-  firstEnd: { x: number; y: number },
-  secondStart: { x: number; y: number },
-  secondEnd: { x: number; y: number },
-) {
-  const d1 = direction(secondStart, secondEnd, firstStart);
-  const d2 = direction(secondStart, secondEnd, firstEnd);
-  const d3 = direction(firstStart, firstEnd, secondStart);
-  const d4 = direction(firstStart, firstEnd, secondEnd);
-
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
-    return true;
-  }
-
-  return (
-    (Math.abs(d1) < 0.001 && pointOnSegment(firstStart, secondStart, secondEnd)) ||
-    (Math.abs(d2) < 0.001 && pointOnSegment(firstEnd, secondStart, secondEnd)) ||
-    (Math.abs(d3) < 0.001 && pointOnSegment(secondStart, firstStart, firstEnd)) ||
-    (Math.abs(d4) < 0.001 && pointOnSegment(secondEnd, firstStart, firstEnd))
-  );
-}
-
-function direction(
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-  point: { x: number; y: number },
-) {
-  return (point.x - start.x) * (end.y - start.y) - (point.y - start.y) * (end.x - start.x);
-}
-
-function pointOnSegment(
-  point: { x: number; y: number },
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-) {
-  return (
-    point.x >= Math.min(start.x, end.x) - 0.001 &&
-    point.x <= Math.max(start.x, end.x) + 0.001 &&
-    point.y >= Math.min(start.y, end.y) - 0.001 &&
-    point.y <= Math.max(start.y, end.y) + 0.001
-  );
-}
-
-function getClosestPointOnSegment(
-  point: { x: number; y: number },
-  start: { x: number; y: number },
-  end: { x: number; y: number },
-) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const lengthSquared = dx * dx + dy * dy;
-  const t =
-    lengthSquared <= 0
-      ? 0
-      : clamp(((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared, 0, 1);
-  const closest = {
-    x: start.x + dx * t,
-    y: start.y + dy * t,
-  };
-  const distanceX = point.x - closest.x;
-  const distanceY = point.y - closest.y;
-
-  return {
-    point: closest,
-    distanceSquared: distanceX * distanceX + distanceY * distanceY,
-  };
-}
-
-function getSegmentDistance(
-  firstStart: { x: number; y: number },
-  firstEnd: { x: number; y: number },
-  secondStart: { x: number; y: number },
-  secondEnd: { x: number; y: number },
-) {
-  if (segmentsIntersect(firstStart, firstEnd, secondStart, secondEnd)) {
-    return 0;
-  }
-
-  return Math.sqrt(
-    Math.min(
-      getClosestPointOnSegment(firstStart, secondStart, secondEnd).distanceSquared,
-      getClosestPointOnSegment(firstEnd, secondStart, secondEnd).distanceSquared,
-      getClosestPointOnSegment(secondStart, firstStart, firstEnd).distanceSquared,
-      getClosestPointOnSegment(secondEnd, firstStart, firstEnd).distanceSquared,
-    ),
-  );
-}
-
-function getCollinearOverlapLength(
-  first: {
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-  },
-  second: {
-    start: { x: number; y: number };
-    end: { x: number; y: number };
-  },
-) {
-  const firstHorizontal = Math.abs(first.start.y - first.end.y) < 0.5;
-  const secondHorizontal = Math.abs(second.start.y - second.end.y) < 0.5;
-  const firstVertical = Math.abs(first.start.x - first.end.x) < 0.5;
-  const secondVertical = Math.abs(second.start.x - second.end.x) < 0.5;
-
-  if (firstHorizontal && secondHorizontal && Math.abs(first.start.y - second.start.y) < 0.5) {
-    return getRangeOverlapLength(first.start.x, first.end.x, second.start.x, second.end.x);
-  }
-
-  if (firstVertical && secondVertical && Math.abs(first.start.x - second.start.x) < 0.5) {
-    return getRangeOverlapLength(first.start.y, first.end.y, second.start.y, second.end.y);
-  }
-
-  return 0;
-}
-
-function getRangeOverlapLength(
-  firstStart: number,
-  firstEnd: number,
-  secondStart: number,
-  secondEnd: number,
-) {
-  const firstMin = Math.min(firstStart, firstEnd);
-  const firstMax = Math.max(firstStart, firstEnd);
-  const secondMin = Math.min(secondStart, secondEnd);
-  const secondMax = Math.max(secondStart, secondEnd);
-  return Math.max(0, Math.min(firstMax, secondMax) - Math.max(firstMin, secondMin));
-}
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
 }
 
 function getSlotEdgeEndpointCandidates({
@@ -3592,6 +3311,64 @@ function getMeasuredNodeBounds(nodeId: string) {
     top: Math.min(topLeft.y, bottomRight.y),
     bottom: Math.max(topLeft.y, bottomRight.y),
   };
+}
+
+/**
+ * Flow-space rectangles of the slot/handle displays inside a node, excluding the
+ * slot the current edge attaches to. These feed scoreEdgeRoute's display-rect
+ * penalty so an output wire routes around neighbouring output icons instead of
+ * running straight across them (AGENTS.md → Routing Links, issue #10). The source
+ * and target nodes are excluded from getMeasuredAvoidanceNodeBounds (a wire must
+ * reach their slots), so this is what keeps a wire off those nodes' *other* slots.
+ *
+ * Measurement is in flow space (zoom is divided out by screenToFlowPoint), and the
+ * caller snaps/normalizes the result, so the chosen route stays stable across zoom.
+ */
+function getMeasuredNodeSlotRects(nodeId: string, excludeHandleId?: string | null): Rect[] {
+  if (typeof document === "undefined") {
+    return [];
+  }
+
+  const nodeElement = document.querySelector<HTMLElement>(
+    `.react-flow__node[data-id="${cssEscape(nodeId)}"]`,
+  );
+  if (!nodeElement) {
+    return [];
+  }
+
+  const rects: Rect[] = [];
+  // A slot is marked on both the cell button and its inner Handle (same handle id),
+  // so keep one rect per handle id to avoid double-counting the penalty.
+  const seenHandleIds = new Set<string>();
+  for (const slotElement of nodeElement.querySelectorAll<HTMLElement>(
+    "[data-resource-handle='true'][data-resource-handle-id]",
+  )) {
+    const slotHandleId = slotElement.dataset.resourceHandleId;
+    if (!slotHandleId || slotHandleId === excludeHandleId || seenHandleIds.has(slotHandleId)) {
+      continue;
+    }
+    seenHandleIds.add(slotHandleId);
+
+    const rect = slotElement.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
+      continue;
+    }
+
+    const topLeft = screenToFlowPoint({ x: rect.left, y: rect.top }, slotElement);
+    const bottomRight = screenToFlowPoint({ x: rect.right, y: rect.bottom }, slotElement);
+    if (!topLeft || !bottomRight) {
+      continue;
+    }
+
+    rects.push({
+      left: Math.min(topLeft.x, bottomRight.x),
+      right: Math.max(topLeft.x, bottomRight.x),
+      top: Math.min(topLeft.y, bottomRight.y),
+      bottom: Math.max(topLeft.y, bottomRight.y),
+    });
+  }
+
+  return rects;
 }
 
 function screenToFlowPoint(point: { x: number; y: number }, element: HTMLElement) {
