@@ -263,4 +263,130 @@ describe("optimizeMachineCountsForProject", () => {
     expect(third.machineCounts.get("A")).toBe(4);
     expect(third.machineCounts.get("B")).toBe(8);
   });
+
+  it("balances a linear chain with a slow middle stage to its true ratio (no target)", () => {
+    // Regression for issue #11: a linear chain with NO target must balance proportionally, with
+    // the SLOW middle machine getting the highest count -- not one node spiked while the rest
+    // collapse to 1. Per machine: source makes 3 x/s; the slow middle (3x the duration) consumes
+    // 0.333 x/s and makes 0.333 y/s; the terminal consumes 1 y/s.
+    //   source = 1 -> 3 x/s ; middle = 3 / 0.333 = 9 ; terminal = 3 / 1 = 3.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "slow-middle-chain",
+      name: "Slow middle chain",
+      recipes: [
+        {
+          id: "rsource",
+          name: "Source",
+          machineType: "Pulverizer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 1,
+          inputs: [],
+          outputs: [{ kind: "item", id: "x", amount: 3 }],
+        },
+        {
+          id: "rmiddle",
+          name: "Slow middle",
+          machineType: "Thermal Centrifuge",
+          minimumTier: "LV",
+          durationTicks: 60,
+          eut: 1,
+          inputs: [{ kind: "item", id: "x", amount: 1 }],
+          outputs: [{ kind: "item", id: "y", amount: 1 }],
+        },
+        {
+          id: "rterminal",
+          name: "Terminal",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 1,
+          inputs: [{ kind: "item", id: "y", amount: 1 }],
+          outputs: [{ kind: "item", id: "z", amount: 1 }],
+        },
+      ],
+      nodes: [
+        makeNode("source", "rsource", 0),
+        makeNode("middle", "rmiddle", 100),
+        makeNode("terminal", "rterminal", 200),
+      ],
+      storages: [],
+      edges: [nodeEdge("e1", "source", "middle", "x"), nodeEdge("e2", "middle", "terminal", "y")],
+      fuelProfiles: [],
+    };
+
+    const result = optimizeMachineCountsForProject(project);
+    const source = result.machineCounts.get("source") ?? 0;
+    const middle = result.machineCounts.get("middle") ?? 0;
+    const terminal = result.machineCounts.get("terminal") ?? 0;
+
+    // Exact balanced ratio.
+    expect(source).toBe(1);
+    expect(middle).toBe(9);
+    expect(terminal).toBe(3);
+    // Qualitative guards against the regression: the slow machine has the highest count, the fast
+    // machines are lower, and nothing spikes while the others collapse to 1.
+    expect(middle).toBeGreaterThan(source);
+    expect(middle).toBeGreaterThan(terminal);
+    expect(terminal).toBeGreaterThan(source);
+    expect(middle).toBeLessThan(20);
+  });
+
+  it("rounds intermediate stages up (ceil) rather than down (floor)", () => {
+    // A faster source over-feeds a consumer with a non-integer ratio. The consumer must round UP
+    // so it has enough capacity, instead of flooring and leaving the source's output stranded.
+    // source = 1 makes 10 x/s ; middle consumes 3 x -> 10/3 = 3.33 -> 4 ; terminal consumes the
+    // 3.33 y/s -> 4.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "ceil-intermediate-chain",
+      name: "Ceil intermediate chain",
+      recipes: [
+        {
+          id: "rsource",
+          name: "Source",
+          machineType: "Pulverizer",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 1,
+          inputs: [],
+          outputs: [{ kind: "item", id: "x", amount: 10 }],
+        },
+        {
+          id: "rmiddle",
+          name: "Middle",
+          machineType: "Assembler",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 1,
+          inputs: [{ kind: "item", id: "x", amount: 3 }],
+          outputs: [{ kind: "item", id: "y", amount: 1 }],
+        },
+        {
+          id: "rterminal",
+          name: "Terminal",
+          machineType: "Macerator",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 1,
+          inputs: [{ kind: "item", id: "y", amount: 1 }],
+          outputs: [{ kind: "item", id: "z", amount: 1 }],
+        },
+      ],
+      nodes: [
+        makeNode("source", "rsource", 0),
+        makeNode("middle", "rmiddle", 100),
+        makeNode("terminal", "rterminal", 200),
+      ],
+      storages: [],
+      edges: [nodeEdge("e1", "source", "middle", "x"), nodeEdge("e2", "middle", "terminal", "y")],
+      fuelProfiles: [],
+    };
+
+    const result = optimizeMachineCountsForProject(project);
+    expect(result.machineCounts.get("source")).toBe(1);
+    expect(result.machineCounts.get("middle")).toBe(4);
+    expect(result.machineCounts.get("terminal")).toBe(4);
+  });
 });

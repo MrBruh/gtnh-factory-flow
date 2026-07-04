@@ -1504,7 +1504,8 @@ describe("factory machine count optimization", () => {
     expect(useFactoryStore.getState().project.nodes).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: "oxygen-cell-source-node", machineCount: 1 }),
-        expect.objectContaining({ id: "oxygen-consumer-node", machineCount: 11 }),
+        // 1428.6 mB/s oxygen / 125 per machine = 11.43 -> rounds up to 12 (ceil, not floor).
+        expect.objectContaining({ id: "oxygen-consumer-node", machineCount: 12 }),
       ]),
     );
   });
@@ -1598,7 +1599,8 @@ describe("factory machine count optimization", () => {
       expect.arrayContaining([
         expect.objectContaining({ id: "implicit-coke", machineCount: 1 }),
         expect.objectContaining({ id: "implicit-extractor", machineCount: 3 }),
-        expect.objectContaining({ id: "implicit-distillation", machineCount: 5 }),
+        // 4000/s routable woodtar / 700 per machine = 5.71 -> rounds up to 6 (ceil, not floor).
+        expect.objectContaining({ id: "implicit-distillation", machineCount: 6 }),
       ]),
     );
   });

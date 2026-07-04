@@ -19,6 +19,10 @@ import type {
 import { TICKS_PER_SECOND } from "@/lib/model/types";
 import { getOverclockedRecipeStats } from "./overclock";
 import { getMachineOutputMultiplier, getMachineParallelMultiplier } from "./machine-effects";
+import {
+  getRuntimeCalculationOutputs,
+  selectRuntimeCalculationVariant,
+} from "./runtime-calculation";
 
 const EPSILON = 0.000001;
 const STORAGE_BUS_PREFIX = "storage-bus:";
@@ -188,7 +192,7 @@ class MachineCountOptimizer {
   }
 
   private canSeedProducedOutput(plan: RatePlan): boolean {
-    if (!plan.enabled || !plan.valid || plan.inputs.size > 0 || plan.outputs.size === 0) {
+    if (!plan.enabled || !plan.valid || plan.outputs.size === 0 || !this.isChainSourceNode(plan)) {
       return false;
     }
 
@@ -199,6 +203,31 @@ class MachineCountOptimizer {
     }
 
     return false;
+  }
+
+  private isChainSourceNode(plan: RatePlan): boolean {
+    // A node anchors a chain when none of its consumed inputs are produced inside the graph:
+    // either it has no inputs, or every input is fed only by raw source storages (drawers with
+    // no in-graph producer). Anchoring linear chains at the raw-material end lets downstream
+    // stages scale up to consume the source, instead of collapsing to the terminal seed of one.
+    for (const inputKey of plan.inputs.keys()) {
+      const suppliers =
+        this.context.incomingSuppliersByNodeResource.get(makeDemandKey(plan.node.id, inputKey)) ??
+        [];
+      for (const supplier of suppliers) {
+        if (supplier.sourceNodeId) {
+          return false;
+        }
+        if (
+          supplier.sourceStorageBusId &&
+          (this.context.storageProducersByResource.get(supplier.resourceKey) ?? []).length > 0
+        ) {
+          return false;
+        }
+      }
+    }
+
+    return true;
   }
 
   private seedImplicitTerminalDemands() {
@@ -1395,7 +1424,14 @@ function buildRatePlan(node: FactoryNode, recipe: Recipe | undefined): RatePlan 
   const nodeRecipe = applyRecipeInputOverrides(recipe, node);
   const effectiveRecipe = applyMachineHandlerToRecipe(nodeRecipe, node);
   const overclockedRecipe = getOverclockedRecipeStats(nodeRecipe, node);
-  const machineParallelMultiplier = getMachineParallelMultiplier(effectiveRecipe, node);
+  // Mirror calculateThroughput's rate model: when a GTNH runtime-calculation variant exists it
+  // is authoritative for the parallel multiplier and outputs. Deriving rates any other way lets
+  // the optimizer disagree with the displayed throughput (e.g. a runtime parallel of 1 vs a
+  // heuristic parallel of 8), which skews the machine-count ratios across a chain.
+  const runtimeVariant = selectRuntimeCalculationVariant(effectiveRecipe, node);
+  const runtimeOutputs = getRuntimeCalculationOutputs(effectiveRecipe, node);
+  const machineParallelMultiplier =
+    runtimeVariant?.parallel ?? getMachineParallelMultiplier(effectiveRecipe, node);
   const operationRatePerMachine =
     (node.parallel * machineParallelMultiplier * TICKS_PER_SECOND) /
     overclockedRecipe.durationTicks;
@@ -1410,11 +1446,13 @@ function buildRatePlan(node: FactoryNode, recipe: Recipe | undefined): RatePlan 
     addRate(inputs, makeResourceKey(input.kind, input.id), input.amount * operationRatePerMachine);
   }
 
-  for (const output of effectiveRecipe.outputs) {
+  for (const output of runtimeOutputs ?? effectiveRecipe.outputs) {
     const outputRate =
       output.amount *
       getChanceMultiplier(output) *
-      getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier) *
+      (runtimeOutputs
+        ? 1
+        : getMachineOutputMultiplier(effectiveRecipe, node, output, overclockedRecipe.tier)) *
       operationRatePerMachine;
     addRate(outputs, makeResourceKey(output.kind, output.id), outputRate);
   }
@@ -1644,11 +1682,11 @@ function limitInputDrivenMachineDemand(exactMachineDemand: number): number {
     return 0;
   }
 
-  if (exactMachineDemand <= 1) {
-    return exactMachineDemand;
-  }
-
-  return Math.max(1, Math.floor(exactMachineDemand + EPSILON));
+  // Keep the exact fractional demand. roundMachineCount ceils the displayed machine count while
+  // downstream propagation stays proportional to what is actually produced. Flooring here dropped
+  // the fractional remainder and under-provisioned intermediate stages fed by a faster upstream
+  // producer (e.g. a source feeding 3.33 consumers rounded down to 3 instead of up to 4).
+  return exactMachineDemand;
 }
 
 function normalizeMachineCount(machineCount: number): number {
