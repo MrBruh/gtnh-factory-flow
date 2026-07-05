@@ -2,6 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, type CSSProperties } from "react";
+import { X } from "lucide-react";
 import type { FactoryStorage, StorageThroughputResult } from "@/lib/model/types";
 import { formatRate, makeResourceKey, trimTrailingDecimalZeros } from "@/lib/model";
 import { ResourceIcon } from "@/components/nei/ResourceIcon";
@@ -124,11 +125,11 @@ function StorageHeader({
           event.stopPropagation();
           deleteStorage(storageId);
         }}
-        className="nodrag flex h-5 w-5 shrink-0 items-center justify-center border-2 border-[#252525] bg-[#7d7d7d] text-base leading-none text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-red-700"
+        className="nodrag flex h-5 w-5 shrink-0 items-center justify-center border-2 border-[#450a0a] bg-red-600 text-white shadow-[inset_2px_2px_0_#f87171,inset_-2px_-2px_0_#7f1d1d] hover:bg-red-500"
         title="Remove storage"
         aria-label="Remove storage"
       >
-        -
+        <X className="h-3.5 w-3.5" strokeWidth={3} />
       </button>
       <div className="minecraft-title min-w-0 flex-1 truncate text-center text-[13px] leading-4">
         {title}

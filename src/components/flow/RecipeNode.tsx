@@ -2,7 +2,7 @@
 
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { memo, useState, type CSSProperties } from "react";
-import { AlertTriangle, ChevronDown, WandSparkles } from "lucide-react";
+import { AlertTriangle, ChevronDown, WandSparkles, X } from "lucide-react";
 import type {
   FactoryNode,
   MachineTier,
@@ -277,11 +277,11 @@ function RecipeNodeComponent({ data, selected }: NodeProps<RecipeFlowNode>) {
               event.stopPropagation();
               deleteNode(projectNode.id);
             }}
-            className="nodrag h-6 w-6 border-2 border-[#252525] bg-[#7d7d7d] text-base leading-[16px] text-white shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#404040] hover:bg-red-700"
+            className="nodrag flex h-6 w-6 items-center justify-center border-2 border-[#450a0a] bg-red-600 text-white shadow-[inset_2px_2px_0_#f87171,inset_-2px_-2px_0_#7f1d1d] hover:bg-red-500"
             title="Delete node"
             aria-label="Delete node"
           >
-            -
+            <X className="h-4 w-4" strokeWidth={3} />
           </button>
           <div
             className="minecraft-title h-6 truncate border-2 border-[#555] bg-[#9b9b9b] px-2 text-center text-[17px] leading-[20px] shadow-[inset_2px_2px_0_#d8d8d8,inset_-2px_-2px_0_#4a4a4a]"
