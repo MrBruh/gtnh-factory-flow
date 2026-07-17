@@ -172,6 +172,15 @@ function normalizeGregtech(domain) {
     const machineType = text(recipeMap.name, recipeMap.id ?? "GregTech");
     recipeMaps.add(machineType);
     setRecipeMapIcon(machineType, recipeMap.icon);
+    // The recipe map's icon catalyst IS the controller block (e.g. the ExxonMobil Chemical Plant
+    // for the "Chemical Plant" map). Carry its canonical block id + name onto every recipe so a
+    // consumer can join a machine to a controller-block-keyed dataset exactly, rather than by the
+    // localized machineType which diverges for flavor-named machines.
+    const machineIcon = resourceAmount(recipeMap.icon);
+    const machineBlock =
+      machineIcon?.kind === "item" && machineIcon.id
+        ? { id: machineIcon.id, displayName: machineIcon.displayName }
+        : undefined;
     const catalystControls = machineConfigControlsFromCatalysts(recipeMap.catalysts);
     for (const rawRecipe of recipeMap.recipes ?? []) {
       const inputs = [
@@ -221,6 +230,7 @@ function normalizeGregtech(domain) {
           recipeMap: machineType,
           exporter: "gtnh-oracle",
           rawRecipeId: `${recipeMap.id}:${rawRecipe.id}`,
+          ...(machineBlock ? { machineBlock } : {}),
         },
         nei: {
           additionalInfo: [`Special value: ${rawRecipe.specialValue ?? 0}`],

@@ -63,6 +63,7 @@ export function buildResolvedPlan(
     machines.push({
       nodeId: node.id,
       machineKey: recipe?.source?.recipeMap ?? machineType,
+      machineBlock: recipe?.source?.machineBlock,
       machineType,
       tier: node.overclockTier,
       machineCount: node.machineCount,
