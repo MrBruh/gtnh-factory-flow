@@ -184,6 +184,9 @@ export const recipeSchema = z.object({
       recipeMap: z.string().optional(),
       exporter: z.enum(["nesql", "recex", "nerd", "gtnh-oracle", "unknown"]).optional(),
       rawRecipeId: z.string().optional(),
+      machineBlock: z
+        .object({ id: z.string().min(1), displayName: z.string().optional() })
+        .optional(),
     })
     .optional(),
   nei: z
@@ -341,6 +344,7 @@ export const resolvedResourceRateSchema = z.object({
 export const resolvedMachineSchema = z.object({
   nodeId: z.string().min(1),
   machineKey: z.string().min(1).optional(),
+  machineBlock: z.object({ id: z.string().min(1), displayName: z.string().optional() }).optional(),
   machineType: z.string().min(1),
   tier: z.string().min(1),
   machineCount: z.number().nonnegative(),

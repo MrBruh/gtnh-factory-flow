@@ -187,6 +187,15 @@ export interface Recipe {
     recipeMap?: string;
     exporter?: "nesql" | "recex" | "nerd" | "gtnh-oracle" | "unknown";
     rawRecipeId?: string;
+    /**
+     * The in-game controller block this machine places, as a canonical resource id
+     * (`<registry>@<meta>`, e.g. `gregtech:gt.blockmachines@998`) plus its display name. This is
+     * the exact join key to a controller-block-keyed dataset: unlike `recipeMap` (the localized
+     * RecipeMap name), it does not diverge for flavor-named machines ("Chemical Plant" vs
+     * "ExxonMobil Chemical Plant"). Populated by the oracle normalizer from the recipe map's icon
+     * catalyst.
+     */
+    machineBlock?: { id: string; displayName?: string };
   };
   nei?: {
     iconPath?: string;
@@ -421,6 +430,11 @@ export interface ResolvedMachine {
   nodeId: string;
   /** Stable join key for physical rules; falls back to `machineType`. */
   machineKey?: string;
+  /**
+   * The in-game controller block (`<registry>@<meta>` id + display name), from the recipe's
+   * `source.machineBlock`. The exact physical-rules join key, unlike the localized `machineKey`.
+   */
+  machineBlock?: { id: string; displayName?: string };
   machineType: string;
   tier: MachineTier | string;
   machineCount: number;
