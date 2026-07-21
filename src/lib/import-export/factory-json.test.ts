@@ -92,6 +92,63 @@ describe("factory JSON import/export", () => {
     });
   });
 
+  it("carries the controller block id from the recipe source to the resolved machine", () => {
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "machine-block-test",
+      name: "Machine block test",
+      recipes: [
+        {
+          id: "r1",
+          name: "Chemical Plant: Nitrobenzene",
+          // localized recipe-map name; the controller block is "ExxonMobil Chemical Plant"
+          machineType: "Chemical Plant",
+          minimumTier: "MV",
+          durationTicks: 100,
+          eut: 30,
+          inputs: [{ kind: "item", id: "minecraft:coal", amount: 1 }],
+          outputs: [{ kind: "item", id: "minecraft:dye", amount: 1 }],
+          source: {
+            datasetVersionId: "stable-2.8.4",
+            recipeMap: "Chemical Plant",
+            machineBlock: {
+              id: "gregtech:gt.blockmachines@998",
+              displayName: "ExxonMobil Chemical Plant",
+            },
+          },
+        },
+      ],
+      nodes: [
+        {
+          id: "n1",
+          recipeId: "r1",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "MV",
+          enabled: true,
+          position: { x: 0, y: 0 },
+        },
+      ],
+      edges: [],
+      fuelProfiles: [],
+    };
+
+    // the resolved machine carries the exact controller-block join key, not just the localized name
+    const exported = JSON.parse(serializeFactoryProject(project));
+    expect(exported.resolved.machines[0].machineKey).toBe("Chemical Plant");
+    expect(exported.resolved.machines[0].machineBlock).toEqual({
+      id: "gregtech:gt.blockmachines@998",
+      displayName: "ExxonMobil Chemical Plant",
+    });
+
+    // and it survives the public-schema round-trip on the recipe itself
+    const reparsed = parseFactoryProjectJson(serializeFactoryProject(project));
+    expect(reparsed.recipes[0].source?.machineBlock).toEqual({
+      id: "gregtech:gt.blockmachines@998",
+      displayName: "ExxonMobil Chemical Plant",
+    });
+  });
+
   it("strips export-only fields on import so the model stays canonical", () => {
     const json = serializeFactoryProject(loadBiodieselDemoProject());
     expect(JSON.parse(json).resolved).toBeDefined();
