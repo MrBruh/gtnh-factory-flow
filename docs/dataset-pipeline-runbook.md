@@ -94,6 +94,31 @@ The container mounts the repo read-write and runs `npm install`, so its npm rewr
 unwanted — npm 10 drops the `libc` fields npm 11+ writes. Check `git status` after a run and
 `git checkout -- package-lock.json` if it moved.
 
+Line endings are the other Windows trap. The container runs the repo's own
+`gtnh-calc-oracle/gradlew`, and a CRLF checkout turns its shebang into `/bin/sh\r`:
+
+```
+./gradlew: /bin/sh^M: bad interpreter: No such file or directory
+Error: server oracle export failed with exit code 126.
+```
+
+`.gitattributes` already pins everything to `eol=lf`, but Git does not renormalize files
+that were checked out before it was added, so a long-lived Windows clone can still hold
+CRLF. The committed blobs are fine — only the working tree is stale. Confirm, then
+re-materialize the affected subtree:
+
+```bash
+git ls-files | while read -r f; do
+  [ -f "$f" ] && case "$(file -b "$f")" in *CRLF*) echo "$f";; esac
+done
+
+git ls-files tools/dataset-pipeline/gtnh-calc-oracle | while read -r f; do rm -f "$f"; done
+git checkout -- tools/dataset-pipeline/gtnh-calc-oracle
+```
+
+Re-checkout only paths with no uncommitted work; the delete-and-restore step discards
+local modifications.
+
 ### Confirming a change reached the dataset
 
 The generated dataset is gzipped. Check a field directly rather than trusting the run
