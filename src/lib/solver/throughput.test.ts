@@ -2042,7 +2042,7 @@ describe("calculateThroughput", () => {
     ).toHaveLength(0);
   });
 
-  it("flags a fully-fed intermediate node without flagging its supplier or starved consumer", () => {
+  it("cascades demand past a bottlenecked node so every under-provisioned supplier is flagged", () => {
     const project: FactoryProject = {
       schemaVersion: PROJECT_SCHEMA_VERSION,
       id: "intermediate-node-capacity-project",
@@ -2135,17 +2135,184 @@ describe("calculateThroughput", () => {
     expect(result.nodes.macerator.utilization).toBeCloseTo(5);
     expect(result.nodes.macerator.status).toBe("bottleneck");
 
-    // The source only needs to supply the macerator's real (single-machine) draw, so it stays
-    // balanced; the starved washer stays underutilized. Neither is a false capacity bottleneck.
-    expect(result.nodes.source.utilization).toBeCloseTo(1);
-    expect(result.nodes.source.status).toBe("balanced");
+    // Demand carries through the bottleneck to the source: feeding five washers needs five
+    // macerators, which in turn needs five sources. Flagging only the macerator would surface the
+    // chain one layer per re-solve, and would size the balance sheet against a demand the graph
+    // never actually requests. Capping the relay here is what produced the phantom OUTPUT surplus
+    // in issue #26, so the cap is gone and both under-provisioned nodes are reported together.
+    expect(result.nodes.source.utilization).toBeCloseTo(5);
+    expect(result.nodes.source.status).toBe("bottleneck");
+
+    // The starved washer still reports its supply-limited draw rather than a capacity bottleneck.
     expect(result.nodes.washer.utilization).toBeCloseTo(0.2);
     expect(result.nodes.washer.status).toBe("underutilized");
 
     const nodeCapacityBottlenecks = result.bottlenecks.filter(
       (bottleneck) => bottleneck.kind === "node-capacity",
     );
-    expect(nodeCapacityBottlenecks).toHaveLength(1);
-    expect(nodeCapacityBottlenecks[0]?.nodeId).toBe("macerator");
+    expect(nodeCapacityBottlenecks.map((bottleneck) => bottleneck.nodeId).sort()).toEqual([
+      "macerator",
+      "source",
+    ]);
+  });
+
+  it("classifies fully-consumed intermediates as balanced rather than unconsumed surplus", () => {
+    // Mirrors the nitrobenzene plan from issue #26: a multi-input plant draining to a tank, where
+    // one input is the binding constraint and the rest are over-supplied relative to it.
+    const project: FactoryProject = {
+      schemaVersion: PROJECT_SCHEMA_VERSION,
+      id: "phantom-surplus-project",
+      name: "Phantom surplus test",
+      recipes: [
+        {
+          id: "gamma-recipe",
+          name: "Gamma source",
+          machineType: "Gamma source",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "gamma", amount: 1 }],
+        },
+        {
+          id: "beta-recipe",
+          name: "Beta maker",
+          machineType: "Beta maker",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [{ kind: "item", id: "gamma", amount: 1 }],
+          outputs: [{ kind: "item", id: "beta", amount: 1 }],
+        },
+        {
+          id: "alpha-recipe",
+          name: "Alpha maker",
+          machineType: "Alpha maker",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [],
+          outputs: [{ kind: "item", id: "alpha", amount: 4 }],
+        },
+        {
+          id: "plant-recipe",
+          name: "Plant",
+          machineType: "Plant",
+          minimumTier: "LV",
+          durationTicks: 20,
+          eut: 30,
+          inputs: [
+            { kind: "item", id: "alpha", amount: 8 },
+            { kind: "item", id: "beta", amount: 8 },
+          ],
+          outputs: [{ kind: "item", id: "product", amount: 8 }],
+        },
+      ],
+      nodes: [
+        {
+          id: "gamma-maker",
+          recipeId: "gamma-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 0, y: 200 },
+        },
+        {
+          id: "beta-maker",
+          recipeId: "beta-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 200 },
+        },
+        {
+          id: "alpha-maker",
+          recipeId: "alpha-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 200, y: 0 },
+        },
+        {
+          id: "plant",
+          recipeId: "plant-recipe",
+          machineCount: 1,
+          parallel: 1,
+          overclockTier: "LV",
+          enabled: true,
+          position: { x: 400, y: 100 },
+        },
+      ],
+      storages: [
+        {
+          id: "product-tank",
+          kind: "item",
+          resourceId: "product",
+          displayName: "Product",
+          position: { x: 600, y: 100 },
+        },
+      ],
+      edges: [
+        {
+          id: "gamma-edge",
+          source: "gamma-maker",
+          target: "beta-maker",
+          resourceKind: "item",
+          resourceId: "gamma",
+          label: "Gamma",
+        },
+        {
+          id: "beta-edge",
+          source: "beta-maker",
+          target: "plant",
+          resourceKind: "item",
+          resourceId: "beta",
+          label: "Beta",
+        },
+        {
+          id: "alpha-edge",
+          source: "alpha-maker",
+          target: "plant",
+          resourceKind: "item",
+          resourceId: "alpha",
+          label: "Alpha",
+        },
+        {
+          id: "product-edge",
+          source: "plant",
+          target: "product-tank",
+          resourceKind: "item",
+          resourceId: "product",
+          label: "Product",
+        },
+      ],
+      fuelProfiles: [],
+    };
+
+    const result = calculateThroughput(project, { generatedAt: "fixed" });
+
+    // Beta is the binding constraint: 1/s against the plant's 8/s draw. Balancing the plant at its
+    // supply-limited 12.5% while leaving alpha's producer pinned at 100% reported 3/s of alpha as
+    // unconsumed OUTPUT, even though every drop of it is spoken for.
+    expect(result.resources["item:alpha"].producedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:alpha"].consumedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:alpha"].surplusPerSecond).toBeCloseTo(0);
+
+    expect(result.resources["item:beta"].producedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:beta"].consumedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:beta"].surplusPerSecond).toBeCloseTo(0);
+
+    // Gamma sits two hops up, behind the bottlenecked beta maker. Capping the relayed demand at one
+    // machine's worth stopped the 8x request here, leaving gamma short on the balance sheet.
+    expect(result.resources["item:gamma"].producedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:gamma"].consumedPerSecond).toBeCloseTo(8);
+    expect(result.resources["item:gamma"].deficitPerSecond).toBeCloseTo(0);
+
+    // Only the genuine end product is unconsumed, and the tank agrees with the plant feeding it.
+    expect(result.unconsumedOutputs.map((balance) => balance.key)).toEqual(["item:product"]);
+    expect(result.storages["product-tank"].producedPerSecond).toBeCloseTo(8);
   });
 });

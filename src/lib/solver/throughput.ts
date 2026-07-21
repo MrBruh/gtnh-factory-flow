@@ -354,7 +354,7 @@ export function calculateThroughput(
   }
 
   const resourceResults = Object.fromEntries(
-    calculateEffectiveBalances(project, nodes, edgeResults, storagesById),
+    calculateEffectiveBalances(project, nodes, edgeResults, storagesById, demandUtilizationByNode),
   ) as Record<ResourceKey, ResourceBalance>;
   const externalInputs = Object.values(resourceResults)
     .filter((balance) => balance.deficitPerSecond > EPSILON)
@@ -498,6 +498,7 @@ function calculateEffectiveBalances(
   nodes: Record<string, NodeThroughputResult>,
   edgeResults: Record<string, EdgeThroughput>,
   storagesById: Map<string, FactoryStorage>,
+  demandUtilizationByNode: Map<string, number>,
 ): Map<ResourceKey, ResourceBalance> {
   const balances = new Map<ResourceKey, ResourceBalance>();
 
@@ -506,7 +507,13 @@ function calculateEffectiveBalances(
       continue;
     }
 
-    const utilization = clampUtilization(node.utilization);
+    // Balance the whole graph at one operating point: the demand-driven utilization, uncapped by
+    // upstream supply. Using the supply-limited `node.utilization` here mixes two operating points
+    // -- an under-provisioned producer is capped at 100% while the consumer it starves is scaled
+    // down to its supply limit -- so every intermediate except the single binding constraint shows
+    // a phantom surplus and lands in OUTPUT instead of INTERNAL. See issue #26.
+    const utilization =
+      demandUtilizationByNode.get(node.nodeId) ?? clampUtilization(node.utilization);
     for (const input of Object.values(node.inputs)) {
       addBalanceConsumption(
         balances,
@@ -759,11 +766,12 @@ function refreshEdgeResultsFromNodeUtilization(
       targetResult && !sourceStorage
         ? (demandUtilizationByNode.get(edge.target) ?? targetResult.utilization)
         : (targetResult?.utilization ?? 0);
-    const targetDemand = targetStorage
-      ? sourceCapacity
-      : !targetResult
+    const targetDemand =
+      targetStorage || !targetResult
         ? sourceCapacity
-        : getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetConsumerUtilization) /
+        : (sourceStorage
+            ? getEffectiveFlowRate(targetResult.inputs[targetDemandKey], targetConsumerUtilization)
+            : getDemandFlowRate(targetResult.inputs[targetDemandKey], targetConsumerUtilization)) /
           targetCount;
     const demandPerSecond = Number.isFinite(targetDemand) ? targetDemand : 0;
     const transferredPerSecond = Math.min(sourceCapacity, demandPerSecond);
@@ -1074,6 +1082,18 @@ function refreshNodeUtilizationFromEdgeResults(
 
 function getEffectiveFlowRate(flow: ResourceFlow | undefined, utilization: number): number {
   return (flow?.amountPerSecond ?? 0) * clampUtilization(utilization);
+}
+
+// Demand relayed to an upstream producer must not be capped at 100%: a consumer that needs five
+// machines' worth of input has to ask its supplier for 5x, or the supplier is sized against a single
+// machine and the two ends of the link disagree. Capacity and storage paths keep the 100% cap --
+// only the "what is being asked for" side is uncapped. See issue #26.
+function getDemandFlowRate(flow: ResourceFlow | undefined, utilization: number): number {
+  if (!Number.isFinite(utilization)) {
+    return flow?.amountPerSecond ?? 0;
+  }
+
+  return (flow?.amountPerSecond ?? 0) * Math.max(0, utilization);
 }
 
 function getCompatibleOutputFlow(
