@@ -30,11 +30,16 @@ gh api repos/<owner>/<repo>/actions/runners   --jq '.total_count'
 gh api repos/<owner>/<repo>/actions/secrets   --jq '.total_count'
 ```
 
-Note the `schedule:` triggers (`*/30 * * * *` and daily `35 5 * * *`). Scheduled workflows
-only fire from the **default branch**, so the file is inert on a feature branch and becomes
-live the moment it lands on `main`. On a repo with no runner that means a queued run every
-30 minutes, each expiring after 24 hours. Strip or comment the `schedule:` block until a
-runner exists.
+The workflow has been restored here, with one deliberate change from upstream: its
+`schedule:` triggers are commented out. Upstream runs `*/30 * * * *` and a daily
+`35 5 * * *`. Scheduled workflows fire only from the **default branch**, so those crons are
+inert on a feature branch and go live the moment the file lands on `main` — where, with no
+runner, each run queues until GitHub expires it at 24h and marks it failed. The
+`concurrency` group keeps at most one run active and one pending, so the cost is a stream
+of cancelled run entries and failure notifications rather than exhausted capacity.
+
+`workflow_dispatch` and `repository_dispatch` are untouched, so a manual run works the
+moment a runner exists. Restore the crons in the same change that registers the runner.
 
 ## Run locally (verification only, publishes nothing)
 
