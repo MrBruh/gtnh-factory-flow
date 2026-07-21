@@ -124,18 +124,54 @@ git checkout -- tools/dataset-pipeline/gtnh-calc-oracle
 Re-checkout only paths with no uncommitted work; the delete-and-restore step discards
 local modifications.
 
-### Confirming a change reached the dataset
+## Verify a normalizer change without running the pipeline
 
-The generated dataset is gzipped. Check a field directly rather than trusting the run
-exited zero:
+Reach for this first. `normalize-oracle-export.mjs` is a plain CLI over JSON —
+`node normalize-oracle-export.mjs <input> <output>` — so a change to it can be proven
+against a hand-written oracle export in seconds. No Docker, no pack download, no Minecraft.
+This is the "targeted synthetic dataset check" `AGENTS.md` asks for on normalizer changes,
+and it isolates the normalizer from every unrelated way the client export can fail.
+
+Write an export containing only what the change touches. The shape is
+`{ format, domains: [{ id, ... }] }`, where `findDomain` selects by `id` — `gregtech` holds
+`recipeMaps: [{ id, name, icon, catalysts, recipes }]`. Cover the negative cases too; the
+guards are usually where the bug is:
+
+```bash
+GTNH_DATASET_VERSION_ID=synthetic-test \
+GTNH_DATASET_VERSION_LABEL=synthetic \
+GTNH_ORACLE_STRICT=false \
+  node tools/dataset-pipeline/scripts/normalize-oracle-export.mjs \
+    /tmp/synthetic-oracle-export.json /tmp/out/recipes.json
+```
+
+`GTNH_DATASET_VERSION_ID` and `GTNH_DATASET_VERSION_LABEL` are required. Leave
+`GTNH_ORACLE_STRICT` off, or strict mode rejects a synthetic recipe for lacking computed
+runtime variants.
+
+Per-recipe provenance lands under **`source`**, not `machine` — `machine` is the app-side
+name in `recipeSchema`, and confusing the two makes a working field read as missing:
+
+```bash
+node -e '
+  const d = require("/tmp/out/recipes.json");
+  for (const r of d.recipes) {
+    console.log((r.source?.recipeMap ?? "?").padEnd(24), "->",
+      r.source?.machineBlock?.id ?? "none");
+  }'
+```
+
+### Confirming a change reached a generated dataset
+
+After a real run the dataset is gzipped. Check the field rather than trusting exit zero:
 
 ```bash
 gunzip -c public/datasets/gtnh/stable-<version>/recipes.json.gz \
   | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{
       const r=JSON.parse(s).recipes;
-      const n=r.filter(x=>x.machine?.machineBlock).length;
-      console.log(`${n}/${r.length} recipes carry machine.machineBlock`);
-      console.log(JSON.stringify(r.find(x=>x.machine?.machineBlock)?.machine,null,2));
+      const n=r.filter(x=>x.source?.machineBlock).length;
+      console.log(`${n}/${r.length} recipes carry source.machineBlock`);
+      console.log(JSON.stringify(r.find(x=>x.source?.machineBlock)?.source,null,2));
     })'
 ```
 
