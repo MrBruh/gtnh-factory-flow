@@ -89,8 +89,11 @@ export const runtimeCalculationResourceSchema = z.object({
 });
 
 export const runtimeCalculationVariantSchema = z.object({
-  id: z.string().min(1),
+  // `id`/`label`/`notes` are no longer emitted by the dataset pipeline and have no readers, but
+  // stay accepted (and optional) so plans saved under the older verbose encoding keep validating.
+  id: z.string().min(1).optional(),
   label: z.string().min(1).optional(),
+  notes: z.string().optional(),
   machineHandlerId: z.string().min(1).optional(),
   overclockTier: z.string().min(1).optional(),
   coilTier: z.string().min(1).optional(),
@@ -100,7 +103,6 @@ export const runtimeCalculationVariantSchema = z.object({
   parallel: z.number().positive().optional(),
   inputs: z.array(runtimeCalculationResourceSchema).optional(),
   outputs: z.array(runtimeCalculationResourceSchema).optional(),
-  notes: z.string().optional(),
 });
 
 export const runtimeCalculationSchema = z.object({
@@ -120,6 +122,11 @@ export const runtimeCalculationSchema = z.object({
   oracleEligible: z.boolean(),
   strict: z.boolean().optional(),
   generatedAt: z.string().optional(),
+  // Hoisted defaults shared by every variant; a variant's own field overrides them. Older plans
+  // omit these and repeat the values per variant, which readers still honour.
+  parallel: z.number().positive().optional(),
+  inputs: z.array(runtimeCalculationResourceSchema).optional(),
+  outputs: z.array(runtimeCalculationResourceSchema).optional(),
   variants: z.array(runtimeCalculationVariantSchema),
   warnings: z.array(z.string()).optional(),
 });

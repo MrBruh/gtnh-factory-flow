@@ -87,25 +87,20 @@ if (!existsSync(recipeDatasetPath)) {
 
 console.log(`Validating dataset for ${versionId}.`);
 const datasetStats = await readDatasetStatsAndValidate(recipeDatasetPath);
-const postProcessMaxDatasetBytes = positiveIntEnv(
-  "GTNH_ICON_POST_PROCESS_MAX_DATASET_BYTES",
-  450_000_000,
-);
-const recipeDatasetSizeBytes = (await fs.stat(recipeDatasetPath)).size;
-if (recipeDatasetSizeBytes <= postProcessMaxDatasetBytes) {
-  console.log(`Pruning rendered icons for ${versionId}.`);
-  await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
-  console.log(`Finalizing rendered icons for ${versionId}.`);
-  await finalizeRenderedIcons(recipeDatasetPath, outDir);
-} else {
-  console.log(
-    `Skipping rendered icon cleanup/finalization for ${versionId}: dataset is ${recipeDatasetSizeBytes} bytes.`,
-  );
-}
+console.log(`Pruning rendered icons for ${versionId}.`);
+await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
+console.log(`Finalizing rendered icons for ${versionId}.`);
+await finalizeRenderedIcons(recipeDatasetPath, outDir);
+// Captured before the rewriting stages so the post-index guard below can prove none of them
+// silently dropped a top-level field. validateDataset only runs on the normalizer's output,
+// so on its own it cannot catch a key that a later stage deletes.
+const preIndexTopLevelKeys = await readTopLevelKeys(recipeDatasetPath);
 console.log(`Building resource index for ${versionId}.`);
 await buildResourceIndex(recipeDatasetPath);
 console.log(`Building recipe index for ${versionId}.`);
 await buildRecipeIndex(recipeDatasetPath, outDir);
+console.log(`Verifying dataset fields survived indexing for ${versionId}.`);
+await assertTopLevelKeysPreserved(recipeDatasetPath, preIndexTopLevelKeys);
 
 const compressedRecipeDatasetPath = `${recipeDatasetPath}.gz`;
 const uncompressedSizeBytes = (await fs.stat(recipeDatasetPath)).size;
@@ -237,6 +232,62 @@ async function readDatasetStatsAndValidate(datasetPath) {
   });
 
   return counts;
+}
+
+/**
+ * Streams the dataset and returns its top-level key names.
+ *
+ * Container bodies are skipped rather than parsed, so this costs one sequential read and
+ * effectively no memory -- negligible against a pipeline that already reads recipes.json
+ * several times, and cheap insurance against a rewriting stage dropping a field.
+ */
+async function readTopLevelKeys(datasetPath) {
+  const keys = [];
+  let depth = 0;
+
+  const lines = readline.createInterface({
+    input: createReadStream(datasetPath, { encoding: "utf8" }),
+    crlfDelay: Infinity,
+  });
+
+  for await (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line === "{" || line === "}") {
+      continue;
+    }
+
+    if (depth > 0) {
+      if (line === "]" || line === "]," || line === "}" || line === "},") {
+        depth -= 1;
+      }
+      continue;
+    }
+
+    const match = /^("(?:(?:\\.)|[^"\\])*"):\s*(.*)$/.exec(line);
+    if (!match) {
+      continue;
+    }
+
+    keys.push(JSON.parse(match[1]));
+    const value = match[2].replace(/,$/, "");
+    if (value === "[" || value === "{") {
+      depth += 1;
+    }
+  }
+
+  return keys;
+}
+
+async function assertTopLevelKeysPreserved(datasetPath, expectedKeys) {
+  const actualKeys = new Set(await readTopLevelKeys(datasetPath));
+  const missing = expectedKeys.filter((key) => !actualKeys.has(key));
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Indexing dropped top-level field(s) from recipes.json: ${missing.join(", ")}. ` +
+        "A stage that rewrites the dataset must preserve every key it does not understand.",
+    );
+  }
 }
 
 async function writePipelineRecord(record) {
@@ -479,20 +530,6 @@ function envFlag(name, defaultValue) {
     return defaultValue;
   }
   return /^(1|true|yes|on)$/i.test(rawValue);
-}
-
-function positiveIntEnv(name, defaultValue) {
-  const rawValue = process.env[name];
-  if (!rawValue) {
-    return defaultValue;
-  }
-
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-
-  return parsed;
 }
 
 async function gzipFile(inputPath, outputPath) {

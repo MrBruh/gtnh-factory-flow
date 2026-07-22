@@ -1,24 +1,80 @@
 import fs from "node:fs/promises";
+import { createReadStream, createWriteStream } from "node:fs";
 import path from "node:path";
-import { gunzipSync, gzipSync } from "node:zlib";
+import readline from "node:readline";
+import { pipeline } from "node:stream/promises";
+import { createGunzip, createGzip, gunzipSync } from "node:zlib";
 import { writeDatasetJson } from "./dataset-json-writer.mjs";
 
+const RESOURCE_ARRAY_KEYS = new Set(["resources", "resourceIndex"]);
+const RECIPE_ARRAY_KEYS = new Set(["recipes"]);
+
+/**
+ * Thrown when a dataset file does not follow the line-delimited layout emitted by
+ * dataset-json-writer.mjs. Callers fall back to a whole-file parse, which only works for
+ * datasets below Node's max string length.
+ */
+class MalformedDatasetLineError extends Error {}
+
+/**
+ * Reads a dataset without ever materialising the whole file as a single string.
+ *
+ * A real GTNH recipes.json is ~930 MB, well above Node's MAX_STRING_LENGTH (~512 MB), so
+ * `fs.readFile(path, "utf8")` throws ERR_STRING_TOO_LONG before JSON.parse is ever reached.
+ * `writeDatasetJson` emits one array element (and one large-object entry) per line, so the
+ * file can be parsed a line at a time instead.
+ */
 export async function readDataset(filePath) {
-  const data = await fs.readFile(filePath);
-  const source = filePath.endsWith(".gz")
-    ? gunzipSync(data).toString("utf8")
-    : data.toString("utf8");
-  return JSON.parse(source);
+  try {
+    return await readLineDelimitedDataset(filePath);
+  } catch (error) {
+    if (!(error instanceof MalformedDatasetLineError)) {
+      throw error;
+    }
+    return readWholeFileDataset(filePath);
+  }
+}
+
+/**
+ * Streams every resource in a dataset file without retaining the parsed dataset.
+ *
+ * Use this instead of `readDataset` + `forEachResource` when only the resources matter, so
+ * peak memory stays proportional to what the callback keeps rather than to the file size.
+ * Resolves to the dataset's scalar top-level fields (schemaVersion, datasetVersionId, ...).
+ */
+export async function forEachResourceInFile(filePath, callback) {
+  try {
+    return await streamResources(filePath, callback);
+  } catch (error) {
+    if (!(error instanceof MalformedDatasetLineError)) {
+      throw error;
+    }
+    const dataset = await readWholeFileDataset(filePath);
+    forEachResource(dataset, callback);
+    return dataset;
+  }
 }
 
 export async function writeDataset(filePath, dataset) {
-  if (filePath.endsWith(".gz")) {
-    const json = `${JSON.stringify(dataset)}\n`;
-    await fs.writeFile(filePath, gzipSync(json, { level: 9 }));
+  if (!filePath.endsWith(".gz")) {
+    await writeDatasetJson(filePath, dataset);
     return;
   }
 
-  await writeDatasetJson(filePath, dataset);
+  // Serialising to a string first would hit the same ERR_STRING_TOO_LONG ceiling as reading
+  // did, so stage the line-delimited JSON on disk and gzip it as a stream. This keeps the
+  // gzipped payload line-delimited too, matching the pipeline's own gzip step.
+  const stagingPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeDatasetJson(stagingPath, dataset);
+    await pipeline(
+      createReadStream(stagingPath),
+      createGzip({ level: 9 }),
+      createWriteStream(filePath),
+    );
+  } finally {
+    await fs.rm(stagingPath, { force: true });
+  }
 }
 
 export function forEachResource(dataset, callback) {
@@ -29,13 +85,187 @@ export function forEachResource(dataset, callback) {
     callback(resource);
   }
   for (const recipe of dataset.recipes ?? []) {
-    for (const resource of recipe.inputs ?? []) {
-      callback(resource);
-    }
-    for (const resource of recipe.outputs ?? []) {
-      callback(resource);
-    }
+    forEachRecipeResource(recipe, callback);
   }
+}
+
+function forEachRecipeResource(recipe, callback) {
+  for (const resource of recipe.inputs ?? []) {
+    callback(resource);
+  }
+  for (const resource of recipe.outputs ?? []) {
+    callback(resource);
+  }
+}
+
+function createDatasetLineReader(filePath) {
+  const input = filePath.endsWith(".gz")
+    ? createReadStream(filePath).pipe(createGunzip())
+    : createReadStream(filePath, { encoding: "utf8" });
+
+  return readline.createInterface({ input, crlfDelay: Infinity });
+}
+
+async function readLineDelimitedDataset(filePath) {
+  const dataset = {};
+
+  await forEachDatasetLine(filePath, {
+    onScalar(key, value) {
+      dataset[key] = value;
+    },
+    beginArray(key) {
+      const values = [];
+      dataset[key] = values;
+      return (value) => values.push(value);
+    },
+    beginObject(key) {
+      const entries = {};
+      dataset[key] = entries;
+      return (entryKey, entryValue) => {
+        entries[entryKey] = entryValue;
+      };
+    },
+  });
+
+  return dataset;
+}
+
+async function streamResources(filePath, callback) {
+  const meta = {};
+
+  await forEachDatasetLine(filePath, {
+    onScalar(key, value) {
+      meta[key] = value;
+    },
+    beginArray(key) {
+      if (RESOURCE_ARRAY_KEYS.has(key)) {
+        return (value) => callback(value);
+      }
+      if (RECIPE_ARRAY_KEYS.has(key)) {
+        return (value) => forEachRecipeResource(value, callback);
+      }
+      return undefined;
+    },
+    beginObject() {
+      return undefined;
+    },
+  });
+
+  return meta;
+}
+
+/**
+ * Walks the line-delimited layout produced by dataset-json-writer.mjs.
+ *
+ * `beginArray`/`beginObject` return a per-entry consumer, or undefined to discard that
+ * container's contents without ever parsing them.
+ */
+async function forEachDatasetLine(filePath, handlers) {
+  let opened = false;
+  let closed = false;
+  let pushArrayValue;
+  let setObjectEntry;
+  let inArray = false;
+  let inObject = false;
+
+  for await (const rawLine of createDatasetLineReader(filePath)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    if (!opened) {
+      if (line !== "{") {
+        throw new MalformedDatasetLineError(
+          `Expected "{" as the first line, got: ${preview(line)}`,
+        );
+      }
+      opened = true;
+      continue;
+    }
+
+    if (closed) {
+      throw new MalformedDatasetLineError(`Unexpected trailing content: ${preview(line)}`);
+    }
+
+    if (inArray) {
+      if (line === "]" || line === "],") {
+        inArray = false;
+        pushArrayValue = undefined;
+        continue;
+      }
+      if (pushArrayValue) {
+        pushArrayValue(parseJsonLineValue(line));
+      }
+      continue;
+    }
+
+    if (inObject) {
+      if (line === "}" || line === "},") {
+        inObject = false;
+        setObjectEntry = undefined;
+        continue;
+      }
+      if (setObjectEntry) {
+        const entry = splitKeyedLine(line);
+        setObjectEntry(entry.key, parseJsonLineValue(entry.value));
+      }
+      continue;
+    }
+
+    if (line === "}") {
+      closed = true;
+      continue;
+    }
+
+    const { key, value } = splitKeyedLine(line);
+    if (value === "[") {
+      inArray = true;
+      pushArrayValue = handlers.beginArray(key);
+      continue;
+    }
+    if (value === "{") {
+      inObject = true;
+      setObjectEntry = handlers.beginObject(key);
+      continue;
+    }
+
+    handlers.onScalar(key, parseJsonLineValue(value));
+  }
+
+  if (!opened || !closed) {
+    throw new MalformedDatasetLineError("Dataset ended before its top-level object was closed.");
+  }
+}
+
+function splitKeyedLine(line) {
+  const match = /^("(?:\\.|[^"\\])*")\s*:\s*([\s\S]*)$/.exec(line);
+  if (!match) {
+    throw new MalformedDatasetLineError(`Expected a "key": value line, got: ${preview(line)}`);
+  }
+  return { key: parseJsonLineValue(match[1]), value: match[2] };
+}
+
+function parseJsonLineValue(value) {
+  // A well-formed JSON value never ends in a comma, so a trailing one is always a separator.
+  const json = value.endsWith(",") ? value.slice(0, -1) : value;
+  try {
+    return JSON.parse(json);
+  } catch {
+    throw new MalformedDatasetLineError(`Expected a JSON value, got: ${preview(json)}`);
+  }
+}
+
+function preview(line) {
+  return line.length > 120 ? `${line.slice(0, 120)}...` : line;
+}
+
+async function readWholeFileDataset(filePath) {
+  const data = await fs.readFile(filePath);
+  const source = filePath.endsWith(".gz")
+    ? gunzipSync(data).toString("utf8")
+    : data.toString("utf8");
+  return JSON.parse(source);
 }
 
 export function isRenderedIconPath(iconPath) {

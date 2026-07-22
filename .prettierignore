@@ -3,6 +3,12 @@
 /out/
 /build/
 
+# Gradle output from a local dataset pipeline run. Git ignores it via the nested
+# .gitignore, but `/build/` above is root-anchored, so without this `format:check`
+# fails on a clean tree just because the oracle mod was built locally.
+/tools/dataset-pipeline/gtnh-calc-oracle/build/
+/tools/dataset-pipeline/gtnh-calc-oracle/.gradle/
+
 # Dependencies and machine-generated lockfiles
 /node_modules/
 package-lock.json

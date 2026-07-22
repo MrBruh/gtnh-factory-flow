@@ -17,7 +17,19 @@ Working notes for future agents on GTNH Factory Flow.
 - `https://dev-gtnh.samiracle.fr/` is the develop deployment.
 - `https://gtnh.samiracle.fr/` is production.
 - Pushing code can deploy the app, but dataset changes require the dataset pipeline.
-- To regenerate both datasets:
+- Both deploy and dataset publishing run on a self-hosted runner labelled `gtnh-export`, and
+  publish to that machine's dataset volume. A clone without that runner cannot deploy or
+  publish, whatever it merges. GitHub does not copy `.github/workflows/` into a fork, so a
+  fork starts with neither. Check before assuming, and see
+  [`docs/dataset-pipeline-runbook.md`](docs/dataset-pipeline-runbook.md) to wire it up or to
+  rebuild locally for verification:
+
+```bash
+gh api repos/<owner>/<repo>/actions/workflows --jq '.total_count'
+gh api repos/<owner>/<repo>/actions/runners   --jq '.total_count'
+```
+
+- To regenerate both datasets, once the pipeline and runner exist:
 
 ```bash
 gh workflow run "GTNH dataset pipeline" --ref develop -f channel=both -f publish=true -f force_rebuild=true

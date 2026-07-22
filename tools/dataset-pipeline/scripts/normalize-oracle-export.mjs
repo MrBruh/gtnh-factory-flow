@@ -137,6 +137,14 @@ normalizeThaumcraft(findDomain("thaumcraft"));
 normalizeForestryBees(findDomain("forestryBees"));
 normalizeIc2Crops(findDomain("ic2Crops"));
 
+// Applied once over every domain so each producer of runtime variants gets the compact encoding,
+// rather than each having to remember to build it.
+for (const recipe of recipes) {
+  if (recipe.runtimeCalculation) {
+    recipe.runtimeCalculation = compactRuntimeCalculation(recipe.runtimeCalculation);
+  }
+}
+
 const dataset = {
   schemaVersion: 1,
   datasetVersionId,
@@ -1569,7 +1577,7 @@ function normalizeRuntimeCalculation(rawRuntime, recipeMap, fallbackOutputs) {
     ? rawRuntime.compactVariants.map((variant) => compactRuntimeVariant(variant))
     : (rawRuntime.variants ?? []);
   const variants = rawVariants
-    .map((variant, index) => normalizeRuntimeVariant(variant, index, fallbackOutputs))
+    .map((variant) => normalizeRuntimeVariant(variant, fallbackOutputs))
     .filter(Boolean);
   return {
     sourceKind: text(rawRuntime.sourceKind, "gregtech-overclock-calculator"),
@@ -1585,6 +1593,12 @@ function normalizeRuntimeCalculation(rawRuntime, recipeMap, fallbackOutputs) {
   };
 }
 
+// The oracle exports one packed array per tier. Only the fields the app actually reads are
+// unpacked: `id`, `label` and `notes` were pure prose (a "tier-ev" string and an "EV" label per
+// variant cost ~84 MB across the real dataset) and had no readers, so they are no longer built.
+// The profile name only survives through the fields it discriminates on, which is `coilTier`; the
+// duration/EU/t pair it produced is already explicit and must stay that way — no GTNH overclock
+// chain is derivable from a 2x/4x rule once heat discounts and laser OC are in play.
 function compactRuntimeVariant(value) {
   if (!Array.isArray(value)) {
     return value;
@@ -1593,63 +1607,19 @@ function compactRuntimeVariant(value) {
   const tier = GT_VOLTAGE_NAMES[tierIndex] ?? `tier-${tierIndex}`;
   const profile = text(value[3], "");
   const configKey = text(value[4], "");
-  const coil = configKey ? heatingCoilTiers.find((entry) => entry.key === configKey) : undefined;
   const variant = {
-    id: `tier-${tier.toLowerCase()}`,
-    label: tier,
     overclockTier: tier,
     durationTicks: value[1],
     eut: value[2],
     parallel: 1,
   };
-  if (!profile) {
-    return variant;
+  if (configKey && ["ebf-heat", "pyrolyse-coil", "oil-cracker-coil"].includes(profile)) {
+    variant.coilTier = configKey;
   }
-
-  if (profile === "ebf-heat") {
-    return {
-      ...variant,
-      id: `tier-${tier.toLowerCase()}-coil-${configKey}`,
-      label: `${tier} / ${coil?.label ?? configKey}`,
-      coilTier: configKey,
-      notes: "GTNH EBF heat overclock and heat discount profile.",
-    };
-  }
-  if (profile === "pyrolyse-coil") {
-    return {
-      ...variant,
-      id: `tier-${tier.toLowerCase()}-coil-${configKey}`,
-      label: `${tier} / ${coil?.label ?? configKey}`,
-      coilTier: configKey,
-      notes: "GTNH Pyrolyse Oven coil speed profile.",
-    };
-  }
-  if (profile === "oil-cracker-coil") {
-    return {
-      ...variant,
-      id: `tier-${tier.toLowerCase()}-coil-${configKey}`,
-      label: `${tier} / ${coil?.label ?? configKey}`,
-      coilTier: configKey,
-      notes: "GTNH Oil Cracker coil EU discount profile.",
-    };
-  }
-  if (profile === "perfect-oc") {
-    return {
-      ...variant,
-      id: `tier-${tier.toLowerCase()}-perfect-oc`,
-      label: `${tier} Perfect OC`,
-      notes: "GTNH perfect overclock profile.",
-    };
-  }
-  return {
-    ...variant,
-    id: `tier-${tier.toLowerCase()}-${slug(profile)}${configKey ? `-${slug(configKey)}` : ""}`,
-    label: `${tier} ${profile}${configKey ? ` ${configKey}` : ""}`,
-    notes: `GTNH runtime profile: ${profile}${configKey ? `/${configKey}` : ""}.`,
-  };
+  return variant;
 }
 
-function normalizeRuntimeVariant(variant, index, fallbackOutputs) {
+function normalizeRuntimeVariant(variant, fallbackOutputs) {
   const durationTicks = positiveInt(variant?.durationTicks, 0);
   const eut = Number(variant?.eut);
   if (!(durationTicks > 0) || !Number.isFinite(eut) || eut < 0) {
@@ -1657,8 +1627,6 @@ function normalizeRuntimeVariant(variant, index, fallbackOutputs) {
   }
   const outputs = (variant.outputs ?? []).map((entry) => resourceAmount(entry)).filter(Boolean);
   return removeUndefined({
-    id: text(variant.id, `variant-${index}`),
-    label: variant.label,
     machineHandlerId: variant.machineHandlerId,
     overclockTier: variant.overclockTier,
     coilTier: variant.coilTier,
@@ -1666,12 +1634,95 @@ function normalizeRuntimeVariant(variant, index, fallbackOutputs) {
     durationTicks,
     eut,
     parallel: positiveNumber(variant.parallel, undefined),
-    inputs: (variant.inputs ?? [])
-      .map((entry) => runtimeResource(resourceAmount(entry)))
-      .filter(Boolean),
-    outputs: runtimeResources(outputs.length > 0 ? outputs : fallbackOutputs),
-    notes: variant.notes,
+    inputs: nonEmptyList(
+      runtimeResources((variant.inputs ?? []).map((entry) => resourceAmount(entry))),
+    ),
+    outputs: nonEmptyList(runtimeResources(outputs.length > 0 ? outputs : fallbackOutputs)),
   });
+}
+
+/**
+ * Rewrites a runtime calculation into the compact encoding.
+ *
+ * Variants are near-identical apart from their duration/EU pair: on the real dataset the outputs
+ * are the same across every tier of 99.9% of recipes, and the inputs of 100%. Repeating them per
+ * tier was the single largest thing in the dataset. So the values every variant shares are hoisted
+ * onto the runtime calculation itself and deleted from the variants; a variant that genuinely
+ * differs keeps its own copy, which readers give precedence to. Identity-only fields are dropped,
+ * and variants that become byte-identical afterwards are deduplicated.
+ */
+function compactRuntimeCalculation(runtimeCalculation) {
+  if (!runtimeCalculation || !Array.isArray(runtimeCalculation.variants)) {
+    return runtimeCalculation;
+  }
+  const variants = [];
+  const seen = new Set();
+  for (const variant of runtimeCalculation.variants) {
+    if (!variant) {
+      continue;
+    }
+    const stripped = removeUndefined({
+      machineHandlerId: text(variant.machineHandlerId, undefined),
+      overclockTier: text(variant.overclockTier, undefined),
+      coilTier: text(variant.coilTier, undefined),
+      machineConfigTiers: variant.machineConfigTiers,
+      durationTicks: variant.durationTicks,
+      eut: variant.eut,
+      parallel: variant.parallel,
+      inputs: nonEmptyList(variant.inputs),
+      outputs: nonEmptyList(variant.outputs),
+    });
+    const signature = JSON.stringify(stripped);
+    if (seen.has(signature)) {
+      continue;
+    }
+    seen.add(signature);
+    variants.push(stripped);
+  }
+  const compacted = { ...runtimeCalculation, variants };
+  delete compacted.parallel;
+  delete compacted.inputs;
+  delete compacted.outputs;
+  for (const field of ["outputs", "inputs", "parallel"]) {
+    hoistSharedRuntimeField(compacted, field);
+  }
+  return compacted;
+}
+
+function hoistSharedRuntimeField(runtimeCalculation, field) {
+  const variants = runtimeCalculation.variants;
+  if (variants.length === 0 || variants.some((variant) => variant[field] === undefined)) {
+    // Every variant must define the field. Once it is hoisted a variant has no way left to say
+    // "I have none of these", so hoisting over a gap would silently invent values for it.
+    return;
+  }
+  const signatures = variants.map((variant) => JSON.stringify(variant[field]));
+  const counts = new Map();
+  for (const signature of signatures) {
+    counts.set(signature, (counts.get(signature) ?? 0) + 1);
+  }
+  let bestSignature;
+  let bestCount = 0;
+  for (const [signature, count] of counts) {
+    if (count > bestCount) {
+      bestSignature = signature;
+      bestCount = count;
+    }
+  }
+  if (bestCount < 2 && variants.length > 1) {
+    // Every variant differs; hoisting one of them would only add bytes.
+    return;
+  }
+  runtimeCalculation[field] = variants[signatures.indexOf(bestSignature)][field];
+  for (const [index, variant] of variants.entries()) {
+    if (signatures[index] === bestSignature) {
+      delete variant[field];
+    }
+  }
+}
+
+function nonEmptyList(values) {
+  return Array.isArray(values) && values.length > 0 ? values : undefined;
 }
 
 function runtimeResources(values) {
