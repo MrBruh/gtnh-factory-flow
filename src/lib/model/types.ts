@@ -96,18 +96,22 @@ export interface RuntimeCalculationResource {
 }
 
 export interface RuntimeCalculationVariant {
-  id: string;
+  /** Legacy identity fields. Never read; kept so plans saved before the compact encoding round-trip. */
+  id?: string;
   label?: string;
+  notes?: string;
   machineHandlerId?: string;
   overclockTier?: MachineTier | string;
   coilTier?: string;
   machineConfigTiers?: Record<string, string>;
   durationTicks: number;
   eut: number;
+  /** Overrides {@link RuntimeCalculation.parallel} when this variant differs from the rest. */
   parallel?: number;
+  /** Overrides {@link RuntimeCalculation.inputs} when this variant differs from the rest. */
   inputs?: RuntimeCalculationResource[];
+  /** Overrides {@link RuntimeCalculation.outputs} when this variant differs from the rest. */
   outputs?: RuntimeCalculationResource[];
-  notes?: string;
 }
 
 export interface RuntimeCalculation {
@@ -126,6 +130,15 @@ export interface RuntimeCalculation {
   oracleEligible: boolean;
   strict?: boolean;
   generatedAt?: string;
+  /**
+   * Values shared by every variant, hoisted out of {@link variants} so they are stored once per
+   * recipe instead of once per tier. A variant that genuinely differs carries its own field, and
+   * that per-variant value always wins. Absent here means the encoding is the legacy per-variant
+   * one, so readers must fall back to the variant.
+   */
+  parallel?: number;
+  inputs?: RuntimeCalculationResource[];
+  outputs?: RuntimeCalculationResource[];
   variants: RuntimeCalculationVariant[];
   warnings?: string[];
 }
