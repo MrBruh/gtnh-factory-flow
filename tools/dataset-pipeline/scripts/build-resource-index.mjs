@@ -1,8 +1,19 @@
 import fs from "node:fs/promises";
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import readline from "node:readline";
-import { gunzipSync, gzipSync } from "node:zlib";
+import { pipeline } from "node:stream/promises";
+import { createGunzip, createGzip, gunzipSync } from "node:zlib";
 import { writeDatasetJson } from "./dataset-json-writer.mjs";
+
+/**
+ * Thrown when a dataset file does not follow the line-delimited layout emitted by
+ * dataset-json-writer.mjs. Callers fall back to a whole-file parse, which only works for
+ * datasets below Node's max string length.
+ *
+ * Declared before the top-level await below: unlike function declarations, a class binding
+ * is not hoisted, so readDataset would hit its temporal dead zone.
+ */
+class MalformedDatasetLineError extends Error {}
 
 const datasetPath = process.argv[2];
 
@@ -16,94 +27,196 @@ await writeDataset(datasetPath, dataset);
 
 console.log(`Wrote resourceIndex with ${dataset.resourceIndex.length} resources.`);
 
+/**
+ * Reads a dataset without ever materialising the whole file as a single string.
+ *
+ * A real GTNH recipes.json is ~930 MB, well above Node's MAX_STRING_LENGTH (~512 MB), so
+ * `fs.readFile(path, "utf8")` throws ERR_STRING_TOO_LONG before JSON.parse is ever reached.
+ * `writeDatasetJson` emits one array element (and one large-object entry) per line, so the
+ * file can be parsed a line at a time instead.
+ *
+ * Every top-level key is retained. This script rewrites the whole dataset back to disk to
+ * add `resourceIndex`, so anything the reader drops is deleted from the published dataset --
+ * that is how `oreDictionary`, the only top-level object big enough to be written multi-line,
+ * disappeared from every published dataset.
+ */
 async function readDataset(filePath) {
-  if (!filePath.endsWith(".gz")) {
-    return readLineDelimitedDataset(filePath);
+  try {
+    return await readLineDelimitedDataset(filePath);
+  } catch (error) {
+    if (!(error instanceof MalformedDatasetLineError)) {
+      throw error;
+    }
+    return readWholeFileDataset(filePath);
   }
-
-  const data = await fs.readFile(filePath);
-  const source = gunzipSync(data).toString("utf8");
-  return JSON.parse(source);
 }
 
 async function readLineDelimitedDataset(filePath) {
   const dataset = {};
-  const wantedArrays = new Set(["resources", "recipes", "recipeMaps", "recipeMapIcons"]);
-  let currentArrayKey;
-  let skippingArray = false;
-  let skippingObject = false;
 
-  const lines = readline.createInterface({
-    input: createReadStream(filePath, { encoding: "utf8" }),
-    crlfDelay: Infinity,
+  await forEachDatasetLine(filePath, {
+    onScalar(key, value) {
+      dataset[key] = value;
+    },
+    beginArray(key) {
+      const values = [];
+      dataset[key] = values;
+      return (value) => values.push(value);
+    },
+    beginObject(key) {
+      const entries = {};
+      dataset[key] = entries;
+      return (entryKey, entryValue) => {
+        entries[entryKey] = entryValue;
+      };
+    },
   });
-
-  for await (const rawLine of lines) {
-    const line = rawLine.trim();
-    if (!line || line === "{" || line === "}") {
-      continue;
-    }
-
-    if (currentArrayKey || skippingArray) {
-      if (line === "]," || line === "]") {
-        currentArrayKey = undefined;
-        skippingArray = false;
-        continue;
-      }
-
-      if (currentArrayKey) {
-        dataset[currentArrayKey].push(parseJsonLineValue(line));
-      }
-      continue;
-    }
-
-    if (skippingObject) {
-      if (line === "}," || line === "}") {
-        skippingObject = false;
-      }
-      continue;
-    }
-
-    const match = /^("(?:(?:\\.)|[^"\\])*"):\s*(.*)$/.exec(line);
-    if (!match) {
-      continue;
-    }
-
-    const key = JSON.parse(match[1]);
-    const value = match[2].replace(/,$/, "");
-    if (value === "[") {
-      if (wantedArrays.has(key)) {
-        dataset[key] = [];
-        currentArrayKey = key;
-      } else {
-        skippingArray = true;
-      }
-      continue;
-    }
-
-    if (value === "{") {
-      skippingObject = true;
-      continue;
-    }
-
-    dataset[key] = JSON.parse(value);
-  }
 
   return dataset;
 }
 
-function parseJsonLineValue(line) {
-  return JSON.parse(line.replace(/,$/, ""));
+function createDatasetLineReader(filePath) {
+  const input = filePath.endsWith(".gz")
+    ? createReadStream(filePath).pipe(createGunzip())
+    : createReadStream(filePath, { encoding: "utf8" });
+
+  return readline.createInterface({ input, crlfDelay: Infinity });
+}
+
+/**
+ * Walks the line-delimited layout produced by dataset-json-writer.mjs.
+ *
+ * `beginArray`/`beginObject` return a per-entry consumer, or undefined to discard that
+ * container's contents without ever parsing them.
+ */
+async function forEachDatasetLine(filePath, handlers) {
+  let opened = false;
+  let closed = false;
+  let pushArrayValue;
+  let setObjectEntry;
+  let inArray = false;
+  let inObject = false;
+
+  for await (const rawLine of createDatasetLineReader(filePath)) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+
+    if (!opened) {
+      if (line !== "{") {
+        throw new MalformedDatasetLineError(
+          `Expected "{" as the first line, got: ${preview(line)}`,
+        );
+      }
+      opened = true;
+      continue;
+    }
+
+    if (closed) {
+      throw new MalformedDatasetLineError(`Unexpected trailing content: ${preview(line)}`);
+    }
+
+    if (inArray) {
+      if (line === "]" || line === "],") {
+        inArray = false;
+        pushArrayValue = undefined;
+        continue;
+      }
+      if (pushArrayValue) {
+        pushArrayValue(parseJsonLineValue(line));
+      }
+      continue;
+    }
+
+    if (inObject) {
+      if (line === "}" || line === "},") {
+        inObject = false;
+        setObjectEntry = undefined;
+        continue;
+      }
+      if (setObjectEntry) {
+        const entry = splitKeyedLine(line);
+        setObjectEntry(entry.key, parseJsonLineValue(entry.value));
+      }
+      continue;
+    }
+
+    if (line === "}") {
+      closed = true;
+      continue;
+    }
+
+    const { key, value } = splitKeyedLine(line);
+    if (value === "[") {
+      inArray = true;
+      pushArrayValue = handlers.beginArray(key);
+      continue;
+    }
+    if (value === "{") {
+      inObject = true;
+      setObjectEntry = handlers.beginObject(key);
+      continue;
+    }
+
+    handlers.onScalar(key, parseJsonLineValue(value));
+  }
+
+  if (!opened || !closed) {
+    throw new MalformedDatasetLineError("Dataset ended before its top-level object was closed.");
+  }
+}
+
+function splitKeyedLine(line) {
+  const match = /^("(?:\\.|[^"\\])*")\s*:\s*([\s\S]*)$/.exec(line);
+  if (!match) {
+    throw new MalformedDatasetLineError(`Expected a "key": value line, got: ${preview(line)}`);
+  }
+  return { key: parseJsonLineValue(match[1]), value: match[2] };
+}
+
+function parseJsonLineValue(value) {
+  // A well-formed JSON value never ends in a comma, so a trailing one is always a separator.
+  const json = value.endsWith(",") ? value.slice(0, -1) : value;
+  try {
+    return JSON.parse(json);
+  } catch {
+    throw new MalformedDatasetLineError(`Expected a JSON value, got: ${preview(json)}`);
+  }
+}
+
+function preview(line) {
+  return line.length > 120 ? `${line.slice(0, 120)}...` : line;
+}
+
+async function readWholeFileDataset(filePath) {
+  const data = await fs.readFile(filePath);
+  const source = filePath.endsWith(".gz")
+    ? gunzipSync(data).toString("utf8")
+    : data.toString("utf8");
+  return JSON.parse(source);
 }
 
 async function writeDataset(filePath, dataset) {
-  if (filePath.endsWith(".gz")) {
-    const json = `${JSON.stringify(dataset)}\n`;
-    await fs.writeFile(filePath, gzipSync(json, { level: 9 }));
+  if (!filePath.endsWith(".gz")) {
+    await writeDatasetJson(filePath, dataset);
     return;
   }
 
-  await writeDatasetJson(filePath, dataset);
+  // Serialising to a string first would hit the same ERR_STRING_TOO_LONG ceiling as reading
+  // did, so stage the line-delimited JSON on disk and gzip it as a stream. This keeps the
+  // gzipped payload line-delimited too, matching the pipeline's own gzip step.
+  const stagingPath = `${filePath}.${process.pid}.tmp`;
+  try {
+    await writeDatasetJson(stagingPath, dataset);
+    await pipeline(
+      createReadStream(stagingPath),
+      createGzip({ level: 9 }),
+      createWriteStream(filePath),
+    );
+  } finally {
+    await fs.rm(stagingPath, { force: true });
+  }
 }
 
 function buildResourceIndex(dataset) {
