@@ -262,6 +262,21 @@ detect_fatal_runtime_log() {
 }
 
 raw_oracle_json=""
+
+# Drop stale exports before the first runtime start, mirroring restart_runtime_after_failure.
+# $oracle_output_dir lives under the persistent .pipeline/raw-export/<version> tree, so a
+# previous run's gtnh-oracle-*.json survives here. The wait loop below starts polling
+# immediately after start_runtime, and a leftover file is already size-stable, so without this
+# the loop "detects a completed export" within seconds, kills the still-booting runtime, and
+# normalizes the old data while exiting 0 - a silent staleness failure, not a visible one.
+find "$oracle_output_dir" -type f -name '*.json' -delete 2>/dev/null || true
+
+# Belt and braces: the delete above is best-effort (2>/dev/null || true), so also refuse any
+# JSON older than the runtime we are about to start. Only a file written by this run can
+# satisfy the loop, even if the clear silently failed. Do not remove either guard.
+runtime_start_marker="$GTNH_RAW_EXPORT_DIR/.oracle-runtime-start"
+: >"$runtime_start_marker"
+
 deadline=$((SECONDS + GTNH_EXPORT_TIMEOUT_SECONDS))
 start_runtime
 
@@ -270,7 +285,7 @@ while (( SECONDS < deadline )); do
     fail_from_runtime_log "GTNH runtime emitted a fatal Forge/Minecraft crash log before completing the oracle export."
   fi
 
-  raw_oracle_json="$(find "$oracle_output_dir" -type f -name '*.json' 2>/dev/null | sort | tail -n 1 || true)"
+  raw_oracle_json="$(find "$oracle_output_dir" -type f -name '*.json' -newer "$runtime_start_marker" 2>/dev/null | sort | tail -n 1 || true)"
   if [[ -n "$raw_oracle_json" ]]; then
     current_size="$(stat -c%s "$raw_oracle_json")"
     sleep 5
