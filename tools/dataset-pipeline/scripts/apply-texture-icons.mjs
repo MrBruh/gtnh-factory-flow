@@ -3,7 +3,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { writeDatasetJson } from "./dataset-json-writer.mjs";
+import { readDataset, writeDataset } from "./icon-utils.mjs";
+
+const MAX_CACHED_JAR_ENTRY_BYTES = 256 * 1024;
+const jarEntryCache = new Map();
 
 const instanceRoot = process.argv[2];
 const datasetPath = process.argv[3];
@@ -19,34 +22,7 @@ if (!existsSync(datasetPath)) {
   throw new Error(`Dataset not found: ${datasetPath}`);
 }
 
-const maxDatasetBytes = positiveIntEnv("GTNH_TEXTURE_ICON_MAX_DATASET_BYTES", 450_000_000);
-const datasetSizeBytes = (await fs.stat(datasetPath)).size;
-if (datasetSizeBytes > maxDatasetBytes) {
-  const versionId = path.basename(outDir);
-  const textureOutDir = path.join(outDir, "textures");
-  await fs.mkdir(textureOutDir, { recursive: true });
-  await fs.writeFile(
-    path.join(textureOutDir, "icon-report.json"),
-    `${JSON.stringify(
-      {
-        schemaVersion: 1,
-        datasetVersionId: versionId,
-        generatedAt: new Date().toISOString(),
-        source: "minecraft-asset-pngs",
-        skipped: true,
-        reason: `Dataset is ${datasetSizeBytes} bytes, above GTNH_TEXTURE_ICON_MAX_DATASET_BYTES=${maxDatasetBytes}.`,
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  console.log(
-    `Skipping texture icon enrichment for ${versionId}: dataset is ${datasetSizeBytes} bytes.`,
-  );
-  process.exit(0);
-}
-
-const dataset = JSON.parse(await fs.readFile(datasetPath, "utf8"));
+const dataset = await readDataset(datasetPath);
 const versionId = dataset.datasetVersionId;
 const textureOutDir = path.join(outDir, "textures");
 const publicTextureBase = `/datasets/gtnh/${versionId}/textures`;
@@ -132,7 +108,7 @@ for (const entry of dataset.recipeMapIcons ?? []) {
   }
 }
 
-await writeDatasetJson(datasetPath, dataset);
+await writeDataset(datasetPath, dataset);
 await fs.writeFile(
   path.join(textureOutDir, "icon-report.json"),
   `${JSON.stringify(
@@ -314,17 +290,32 @@ async function extractTexture(resource, texture, textureOutDir, publicTextureBas
   const outputPath = path.join(textureOutDir, resource.kind, filename);
 
   await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, readJarEntry(texture.jar, texture.entry));
+  return `${publicTextureBase}/${relativePath}`;
+}
 
-  const extract = spawnSync("unzip", ["-p", texture.jar, texture.entry], {
+function readJarEntry(jar, entry) {
+  // Several resources routinely resolve to the same texture (metadata variants, fluids
+  // matched by loose stem), and every `unzip -p` re-scans the jar's central directory.
+  // Caching by entry keeps that to one spawn per distinct texture.
+  const cacheKey = `${jar} ${entry}`;
+  const cached = jarEntryCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const extract = spawnSync("unzip", ["-p", jar, entry], {
     encoding: "buffer",
     maxBuffer: 10 * 1024 * 1024,
   });
   if (extract.status !== 0 || extract.stdout.length === 0) {
-    throw new Error(`Failed to extract ${texture.entry} from ${texture.jar}`);
+    throw new Error(`Failed to extract ${entry} from ${jar}`);
   }
 
-  await fs.writeFile(outputPath, extract.stdout);
-  return `${publicTextureBase}/${relativePath}`;
+  if (extract.stdout.length <= MAX_CACHED_JAR_ENTRY_BYTES) {
+    jarEntryCache.set(cacheKey, extract.stdout);
+  }
+  return extract.stdout;
 }
 
 function applyIcon(resource, iconsByKey) {
@@ -423,20 +414,6 @@ function addFirst(map, key, value) {
   if (!map.has(key)) {
     map.set(key, value);
   }
-}
-
-function positiveIntEnv(name, defaultValue) {
-  const rawValue = process.env[name];
-  if (!rawValue) {
-    return defaultValue;
-  }
-
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-
-  return parsed;
 }
 
 function unique(values) {

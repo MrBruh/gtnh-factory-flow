@@ -1,7 +1,12 @@
 import fs from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
-import { forEachResource, readDataset, writeDataset } from "./icon-utils.mjs";
+import {
+  forEachResource,
+  forEachResourceInFile,
+  readDataset,
+  writeDataset,
+} from "./icon-utils.mjs";
 
 const currentDatasetPath = process.argv[2];
 const previousDatasetDir = process.argv[3];
@@ -20,18 +25,39 @@ if (!existsSync(previousDatasetPath)) {
 }
 
 const current = await readDataset(currentDatasetPath);
-const previous = await readDataset(previousDatasetPath);
-const previousVersionId = previous.datasetVersionId ?? path.basename(previousDatasetDir);
 const currentVersionId = current.datasetVersionId ?? path.basename(currentDatasetDir);
 const previousIcons = new Map();
 
-forEachResource(previous, (resource) => {
-  const icon = reusableIcon(resource, previousVersionId, currentVersionId);
-  if (!icon) {
+// Both datasets are ~930 MB raw, well past Node's max string length. Stream the previous one
+// so only its icon-bearing resources are retained, instead of holding two fully parsed
+// datasets in memory at once.
+const previousMeta = await forEachResourceInFile(previousDatasetPath, (resource) => {
+  if (!resource?.iconPath && !resource?.iconAtlas) {
     return;
   }
-  previousIcons.set(`${resource.kind}:${resource.id}`, icon);
+
+  // The same resource appears in resources, resourceIndex and every recipe slot that uses
+  // it, and the recipe-slot copies often omit dominantColor. Prefer whichever copy carries
+  // the most icon detail so the result does not depend on the order keys appear in the file.
+  const key = `${resource.kind}:${resource.id}`;
+  const existing = previousIcons.get(key);
+  if (existing && (existing.dominantColor || !resource.dominantColor)) {
+    return;
+  }
+  previousIcons.set(key, resource);
 });
+const previousVersionId = previousMeta.datasetVersionId ?? path.basename(previousDatasetDir);
+
+// datasetVersionId is only known once the whole file has been read, so rewrite the collected
+// references here rather than inside the stream.
+for (const [key, resource] of previousIcons) {
+  const icon = reusableIcon(resource, previousVersionId, currentVersionId);
+  if (icon) {
+    previousIcons.set(key, icon);
+  } else {
+    previousIcons.delete(key);
+  }
+}
 
 await copyTextureDir("icons");
 await copyTextureDir("atlas");
