@@ -4,6 +4,7 @@ import type {
   MachineTier,
   Recipe,
   RecipeOutput,
+  RuntimeCalculation,
   RuntimeCalculationVariant,
 } from "@/lib/model/types";
 
@@ -13,8 +14,9 @@ export function selectRuntimeCalculationVariant(
   recipe: Pick<Recipe, "runtimeCalculation">,
   node: Pick<FactoryNode, "machineHandlerId" | "overclockTier" | "coilTier" | "machineConfigTiers">,
 ): RuntimeCalculationVariant | undefined {
-  const variants = recipe.runtimeCalculation?.variants ?? [];
-  if (recipe.runtimeCalculation?.status !== "computed" || variants.length === 0) {
+  const runtimeCalculation = recipe.runtimeCalculation;
+  const variants = runtimeCalculation?.variants ?? [];
+  if (runtimeCalculation?.status !== "computed" || variants.length === 0) {
     return undefined;
   }
 
@@ -23,7 +25,39 @@ export function selectRuntimeCalculationVariant(
     .filter((entry) => entry.score >= 0)
     .sort((left, right) => right.score - left.score);
 
-  return matching[0]?.variant;
+  const selected = matching[0]?.variant;
+  return selected ? resolveRuntimeVariant(runtimeCalculation, selected) : undefined;
+}
+
+/**
+ * Materializes the fields the compact dataset encoding hoists to the runtime-calculation level so
+ * every caller sees one complete variant shape.
+ *
+ * The per-variant value always wins, which is what keeps plans saved under the older verbose
+ * encoding working: they repeat `outputs`/`inputs`/`parallel` on each variant and carry no hoisted
+ * fields, so nothing is merged and the variant is returned untouched.
+ */
+function resolveRuntimeVariant(
+  runtimeCalculation: RuntimeCalculation,
+  variant: RuntimeCalculationVariant,
+): RuntimeCalculationVariant {
+  const outputs = variant.outputs ?? runtimeCalculation.outputs;
+  const inputs = variant.inputs ?? runtimeCalculation.inputs;
+  const parallel = variant.parallel ?? runtimeCalculation.parallel;
+  if (outputs === variant.outputs && inputs === variant.inputs && parallel === variant.parallel) {
+    return variant;
+  }
+  const resolved: RuntimeCalculationVariant = { ...variant };
+  if (outputs !== undefined) {
+    resolved.outputs = outputs;
+  }
+  if (inputs !== undefined) {
+    resolved.inputs = inputs;
+  }
+  if (parallel !== undefined) {
+    resolved.parallel = parallel;
+  }
+  return resolved;
 }
 
 export function getRuntimeCalculationOutputs(
