@@ -20,15 +20,18 @@ if (!datasetPath || !datasetOutDir) {
   );
 }
 
-const dataset = await readDataset(datasetPath);
-const versionId = dataset.datasetVersionId ?? path.basename(datasetOutDir);
 const renderedDir = path.join(datasetOutDir, "textures", "rendered");
 const iconsDir = path.join(datasetOutDir, "textures", "icons");
 
+// Check before reading: parsing a ~930 MB dataset just to discover there is nothing to do
+// costs minutes.
 if (!existsSync(renderedDir)) {
   console.log("No rendered icon directory found; skipping standalone icon finalization.");
   process.exit(0);
 }
+
+const dataset = await readDataset(datasetPath);
+const versionId = dataset.datasetVersionId ?? path.basename(datasetOutDir);
 
 const renderedIconPaths = new Set();
 forEachResource(dataset, (resource) => {

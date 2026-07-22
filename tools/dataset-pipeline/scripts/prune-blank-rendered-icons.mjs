@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import zlib from "node:zlib";
-import { writeDatasetJson } from "./dataset-json-writer.mjs";
+import { readDataset, writeDataset } from "./icon-utils.mjs";
 
 const datasetPath = process.argv[2];
 const renderedDir = process.argv[3];
@@ -12,10 +12,7 @@ if (!datasetPath || !renderedDir) {
   );
 }
 
-const datasetBuffer = await fs.readFile(datasetPath);
-const dataset = JSON.parse(
-  datasetPath.endsWith(".gz") ? zlib.gunzipSync(datasetBuffer).toString("utf8") : datasetBuffer,
-);
+const dataset = await readDataset(datasetPath);
 const pruneAtlasLikeIcons = process.env.PRUNE_ATLAS_LIKE_ICONS === "true";
 
 const blankFiles = new Set();
@@ -62,10 +59,9 @@ for (const recipe of dataset.recipes ?? []) {
   }
 }
 
-if (datasetPath.endsWith(".gz")) {
-  await fs.writeFile(datasetPath, zlib.gzipSync(`${JSON.stringify(dataset)}\n`));
-} else {
-  await writeDatasetJson(datasetPath, dataset);
+// Rewriting a ~930 MB dataset costs minutes, so only pay it when something actually changed.
+if (clearedIconPaths > 0) {
+  await writeDataset(datasetPath, dataset);
 }
 
 console.log(
