@@ -87,21 +87,10 @@ if (!existsSync(recipeDatasetPath)) {
 
 console.log(`Validating dataset for ${versionId}.`);
 const datasetStats = await readDatasetStatsAndValidate(recipeDatasetPath);
-const postProcessMaxDatasetBytes = positiveIntEnv(
-  "GTNH_ICON_POST_PROCESS_MAX_DATASET_BYTES",
-  450_000_000,
-);
-const recipeDatasetSizeBytes = (await fs.stat(recipeDatasetPath)).size;
-if (recipeDatasetSizeBytes <= postProcessMaxDatasetBytes) {
-  console.log(`Pruning rendered icons for ${versionId}.`);
-  await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
-  console.log(`Finalizing rendered icons for ${versionId}.`);
-  await finalizeRenderedIcons(recipeDatasetPath, outDir);
-} else {
-  console.log(
-    `Skipping rendered icon cleanup/finalization for ${versionId}: dataset is ${recipeDatasetSizeBytes} bytes.`,
-  );
-}
+console.log(`Pruning rendered icons for ${versionId}.`);
+await pruneRenderedIcons(recipeDatasetPath, path.join(outDir, "textures", "rendered"));
+console.log(`Finalizing rendered icons for ${versionId}.`);
+await finalizeRenderedIcons(recipeDatasetPath, outDir);
 console.log(`Building resource index for ${versionId}.`);
 await buildResourceIndex(recipeDatasetPath);
 console.log(`Building recipe index for ${versionId}.`);
@@ -479,20 +468,6 @@ function envFlag(name, defaultValue) {
     return defaultValue;
   }
   return /^(1|true|yes|on)$/i.test(rawValue);
-}
-
-function positiveIntEnv(name, defaultValue) {
-  const rawValue = process.env[name];
-  if (!rawValue) {
-    return defaultValue;
-  }
-
-  const parsed = Number.parseInt(rawValue, 10);
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    throw new Error(`${name} must be a positive integer.`);
-  }
-
-  return parsed;
 }
 
 async function gzipFile(inputPath, outputPath) {
