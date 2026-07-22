@@ -1,16 +1,19 @@
-// Run with: node --test tools/dataset-pipeline/scripts/icon-utils.test.mjs
+// Run with `npm run test`; vitest.config.ts includes tools/**/*.test.mjs.
 //
 // These cover the streaming dataset reader/writer in icon-utils.mjs. A real GTNH
 // recipes.json is ~930 MB, past Node's MAX_STRING_LENGTH (~512 MB), so the icon stages
 // cannot materialise it as a single string. Round-tripping matters as much as reading:
 // every icon stage writes the dataset back, so anything the reader silently drops is
 // permanently lost from the published dataset.
+//
+// The assertions stay on node:assert/strict rather than vitest's expect: they throw on
+// failure, which is all a runner needs, and it keeps the diff to the runner import.
 
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "vitest";
 import { gunzipSync } from "node:zlib";
 
 import { writeDatasetJson } from "./dataset-json-writer.mjs";
