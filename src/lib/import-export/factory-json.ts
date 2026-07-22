@@ -2,7 +2,13 @@ import { ZodError } from "zod";
 import { normalizeProjectFuelProfiles } from "../model/fuels";
 import { exportedFactoryProjectSchema, factoryProjectSchema } from "../model/schemas";
 import { PROJECT_SCHEMA_VERSION } from "../model/types";
-import type { ExportedFactoryProject, FactoryProject } from "../model/types";
+import type {
+  ExportedFactoryProject,
+  FactoryProject,
+  Recipe,
+  RecipeInput,
+  RecipeOutput,
+} from "../model/types";
 import { APP_NAME, buildResolvedPlan, deriveDatasetVersionId } from "./resolved-plan";
 
 export class FactoryJsonError extends Error {
@@ -37,6 +43,181 @@ export function migrateFactoryProjectRaw(raw: unknown): unknown {
   }
 
   return raw;
+}
+
+/**
+ * The fields that identify a recipe by what it *does*, independently of its dataset id.
+ *
+ * Dataset recipe ids are not portable across dataset regenerations: the oracle exporter used to
+ * hash the registry iteration index (and, for GregTech, an identity hash), so republishing the
+ * very same GTNH version reshuffled every id. Exported plans embed `node.recipeId`, so such a plan
+ * resolved nothing against the republished dataset. Content matching re-points those references,
+ * and keeps working for every future regeneration regardless of how ids are produced.
+ */
+export type RecipeContentRef = Pick<Recipe, "durationTicks" | "eut" | "inputs" | "outputs"> &
+  Partial<Pick<Recipe, "machineType" | "source">>;
+
+/** A dataset recipe, reduced to what content matching needs. */
+export type DatasetRecipeContentRef = Pick<Recipe, "id"> & RecipeContentRef;
+
+/** `contentKey -> dataset recipe ids`, in the order the dataset yielded them. */
+export type RecipeContentIndex = Map<string, string[]>;
+
+export interface RecipeIdMigrationReport {
+  /** Plan recipes whose id was re-pointed at the dataset's current id for the same content. */
+  migrated: Array<{ fromId: string; toId: string; name: string }>;
+  /** Plan recipes with no dataset counterpart. Their embedded copy is kept as-is. */
+  unmatched: Array<{ id: string; name: string }>;
+  /**
+   * Plan recipes whose content matches more than one dataset recipe, or that share their content
+   * with another plan recipe. Left untouched rather than bound to an arbitrary row.
+   */
+  ambiguous: Array<{ id: string; name: string; candidateIds: string[] }>;
+}
+
+export interface RecipeIdMigrationResult extends RecipeIdMigrationReport {
+  project: FactoryProject;
+  /** True when at least one recipe id changed. */
+  changed: boolean;
+}
+
+function resourceContentKey(resource: RecipeInput | RecipeOutput): string {
+  const chance = "chance" in resource && resource.chance != null ? `@${resource.chance}` : "";
+  return `${resource.kind}:${resource.id}:${resource.amount}${chance}`;
+}
+
+function resourceMultisetKey(resources: Array<RecipeInput | RecipeOutput> | undefined): string {
+  return (resources ?? []).map(resourceContentKey).sort().join("|");
+}
+
+/**
+ * Stable fingerprint of a recipe's observable behaviour: where it runs, how long it takes, what it
+ * costs, and the exact multisets it consumes and produces.
+ *
+ * Slot order is deliberately *not* part of the key. Normalizers are free to reorder slots between
+ * dataset builds, and a plan that matches on behaviour should survive that; the amounts and chances
+ * that the solver actually uses are all still compared.
+ */
+export function recipeContentKey(recipe: RecipeContentRef): string {
+  return [
+    recipe.source?.recipeMap ?? recipe.machineType ?? "",
+    recipe.durationTicks ?? 0,
+    recipe.eut ?? 0,
+    resourceMultisetKey(recipe.inputs),
+    resourceMultisetKey(recipe.outputs),
+  ].join("##");
+}
+
+export function buildRecipeContentIndex(
+  recipes: Iterable<DatasetRecipeContentRef>,
+): RecipeContentIndex {
+  const index: RecipeContentIndex = new Map();
+
+  for (const recipe of recipes) {
+    const key = recipeContentKey(recipe);
+    const ids = index.get(key);
+    if (ids) {
+      ids.push(recipe.id);
+    } else {
+      index.set(key, [recipe.id]);
+    }
+  }
+
+  return index;
+}
+
+/**
+ * Re-point an imported plan's recipe ids at the dataset recipes that carry the same content.
+ *
+ * Only ids the dataset does not already contain are considered, so a plan that still resolves is
+ * never rewritten. An id is rewritten only when exactly one plan recipe and exactly one dataset
+ * recipe share a content key; every other outcome is reported and left alone, so this can neither
+ * bind a node to an arbitrary row nor collapse two plan recipes into one.
+ *
+ * Unmatched recipes keep their embedded copy rather than being marked missing: the plan carries
+ * full recipe bodies, so it still renders and solves, and a dataset-side change should not break a
+ * plan that opened yesterday. Callers should surface {@link RecipeIdMigrationReport} instead of
+ * migrating silently.
+ */
+export function migrateProjectRecipeIds(
+  project: FactoryProject,
+  dataset: RecipeContentIndex | Iterable<DatasetRecipeContentRef>,
+): RecipeIdMigrationResult {
+  const index = dataset instanceof Map ? dataset : buildRecipeContentIndex(dataset);
+  const datasetIds = new Set<string>();
+  for (const ids of index.values()) {
+    for (const id of ids) {
+      datasetIds.add(id);
+    }
+  }
+
+  const report: RecipeIdMigrationReport = { migrated: [], unmatched: [], ambiguous: [] };
+  const unresolved = project.recipes.filter((recipe) => !datasetIds.has(recipe.id));
+
+  // Group first: two plan recipes sharing one content key have no non-arbitrary pairing.
+  const unresolvedByContentKey = new Map<string, Recipe[]>();
+  for (const recipe of unresolved) {
+    const key = recipeContentKey(recipe);
+    const group = unresolvedByContentKey.get(key);
+    if (group) {
+      group.push(recipe);
+    } else {
+      unresolvedByContentKey.set(key, [recipe]);
+    }
+  }
+
+  const idMigration = new Map<string, string>();
+  for (const [key, group] of unresolvedByContentKey) {
+    const candidateIds = index.get(key) ?? [];
+
+    if (candidateIds.length === 0) {
+      for (const recipe of group) {
+        report.unmatched.push({ id: recipe.id, name: recipe.name });
+      }
+      continue;
+    }
+
+    if (candidateIds.length > 1 || group.length > 1) {
+      for (const recipe of group) {
+        report.ambiguous.push({
+          id: recipe.id,
+          name: recipe.name,
+          candidateIds: [...candidateIds],
+        });
+      }
+      continue;
+    }
+
+    const [recipe] = group;
+    const [toId] = candidateIds;
+    if (!recipe || !toId) {
+      continue;
+    }
+    idMigration.set(recipe.id, toId);
+    report.migrated.push({ fromId: recipe.id, toId, name: recipe.name });
+  }
+
+  if (idMigration.size === 0) {
+    return { ...report, project, changed: false };
+  }
+
+  return {
+    ...report,
+    changed: true,
+    project: {
+      ...project,
+      // Node edges reference node ids, and their handles are resource-keyed, so re-pointing the
+      // recipe id is enough - no edge or input-override rewiring is needed.
+      recipes: project.recipes.map((recipe) => {
+        const toId = idMigration.get(recipe.id);
+        return toId ? { ...recipe, id: toId } : recipe;
+      }),
+      nodes: project.nodes.map((node) => {
+        const toId = idMigration.get(node.recipeId);
+        return toId ? { ...node, recipeId: toId } : node;
+      }),
+    },
+  };
 }
 
 export function parseFactoryProjectJson(source: string): FactoryProject {

@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { loadBiodieselDemoProject } from "@/examples";
-import { PROJECT_SCHEMA_VERSION, type FactoryProject } from "@/lib/model/types";
+import { PROJECT_SCHEMA_VERSION, type FactoryProject, type Recipe } from "@/lib/model/types";
 import { parseDatasetManifestJson, parseRecipeDatasetJson } from "./dataset-json";
-import { parseFactoryProjectJson, serializeFactoryProject } from "./factory-json";
+import {
+  buildRecipeContentIndex,
+  migrateProjectRecipeIds,
+  parseFactoryProjectJson,
+  recipeContentKey,
+  serializeFactoryProject,
+} from "./factory-json";
 
 describe("factory JSON import/export", () => {
   it("round-trips the biodiesel demo through the public schema", () => {
@@ -333,5 +339,210 @@ describe("factory JSON import/export", () => {
 
     expect(manifest.latestStableVersion).toBe("gtnh-2.7.4");
     expect(manifest.versions[0]?.recipeDatasetPath).toBe("/datasets/gtnh/2.7.4/recipes.json");
+  });
+});
+
+describe("recipe id migration by content", () => {
+  const nitrobenzene = (id: string, overrides: Partial<Recipe> = {}): Recipe => ({
+    id,
+    name: "Chemical Plant: Nitrobenzene",
+    machineType: "Chemical Plant",
+    minimumTier: "HV",
+    durationTicks: 600,
+    eut: 480,
+    inputs: [
+      { kind: "fluid", id: "benzene", amount: 5000 },
+      { kind: "fluid", id: "nitricacid", amount: 5000 },
+      { kind: "fluid", id: "sulfuricacid", amount: 1000 },
+    ],
+    outputs: [{ kind: "fluid", id: "nitrobenzene", amount: 5000 }],
+    source: { datasetVersionId: "stable-2.8.4", recipeMap: "Chemical Plant" },
+    ...overrides,
+  });
+
+  const planWith = (recipes: Recipe[]): FactoryProject => ({
+    schemaVersion: PROJECT_SCHEMA_VERSION,
+    id: "migration-test",
+    name: "Migration test",
+    recipes,
+    nodes: recipes.map((recipe, index) => ({
+      id: `n${index + 1}`,
+      recipeId: recipe.id,
+      machineCount: 1,
+      parallel: 1,
+      overclockTier: "HV",
+      enabled: true,
+      position: { x: 0, y: 0 },
+    })),
+    edges: [],
+    fuelProfiles: [],
+  });
+
+  it("keys a recipe on behaviour, not on slot order or display metadata", () => {
+    const plain = nitrobenzene("a");
+    const reordered = nitrobenzene("b", {
+      name: "Totally different label",
+      inputs: [
+        {
+          kind: "fluid",
+          id: "sulfuricacid",
+          amount: 1000,
+          displayName: "Sulfuric Acid",
+          iconPath: "/some/icon.png",
+        },
+        { kind: "fluid", id: "nitricacid", amount: 5000 },
+        { kind: "fluid", id: "benzene", amount: 5000 },
+      ],
+    });
+
+    expect(recipeContentKey(reordered)).toBe(recipeContentKey(plain));
+    // amounts still matter, so a different ratio is a different recipe
+    expect(
+      recipeContentKey(
+        nitrobenzene("c", { inputs: [{ kind: "fluid", id: "benzene", amount: 1 }] }),
+      ),
+    ).not.toBe(recipeContentKey(plain));
+    // and so does output chance
+    expect(
+      recipeContentKey(
+        nitrobenzene("d", {
+          outputs: [{ kind: "fluid", id: "nitrobenzene", amount: 5000, chance: 0.5 }],
+        }),
+      ),
+    ).not.toBe(recipeContentKey(plain));
+  });
+
+  it("leaves a plan alone when its recipe ids still exist in the dataset", () => {
+    const project = planWith([nitrobenzene("oracle:stable-2.8.4:chemplant:abc123")]);
+    const result = migrateProjectRecipeIds(project, [
+      // same id, and a decoy sharing the content key: the exact id must win outright
+      nitrobenzene("oracle:stable-2.8.4:chemplant:abc123"),
+      nitrobenzene("oracle:stable-2.8.4:chemplant:decoy0"),
+    ]);
+
+    expect(result.changed).toBe(false);
+    expect(result.project).toBe(project);
+    expect(result.migrated).toEqual([]);
+    expect(result.ambiguous).toEqual([]);
+    expect(result.unmatched).toEqual([]);
+  });
+
+  it("re-points a plan at the regenerated dataset when only the id hashes moved", () => {
+    const project = planWith([nitrobenzene("oracle:stable-2.8.4:chemplant:oldhash")]);
+    const result = migrateProjectRecipeIds(project, [
+      nitrobenzene("oracle:stable-2.8.4:chemplant:newhash"),
+      // an unrelated dataset recipe must not be considered
+      nitrobenzene("oracle:stable-2.8.4:lcr:other", {
+        durationTicks: 240,
+        source: { recipeMap: "Large Chemical Reactor" },
+      }),
+    ]);
+
+    expect(result.changed).toBe(true);
+    expect(result.migrated).toEqual([
+      {
+        fromId: "oracle:stable-2.8.4:chemplant:oldhash",
+        toId: "oracle:stable-2.8.4:chemplant:newhash",
+        name: "Chemical Plant: Nitrobenzene",
+      },
+    ]);
+    expect(result.unmatched).toEqual([]);
+    expect(result.ambiguous).toEqual([]);
+
+    // both the recipe and the node that references it move together
+    expect(result.project.recipes[0]?.id).toBe("oracle:stable-2.8.4:chemplant:newhash");
+    expect(result.project.nodes[0]?.recipeId).toBe("oracle:stable-2.8.4:chemplant:newhash");
+    // and the original project is not mutated
+    expect(project.recipes[0]?.id).toBe("oracle:stable-2.8.4:chemplant:oldhash");
+    expect(project.nodes[0]?.recipeId).toBe("oracle:stable-2.8.4:chemplant:oldhash");
+  });
+
+  it("keeps the embedded recipe when the dataset has no counterpart", () => {
+    const project = planWith([nitrobenzene("oracle:stable-2.8.4:chemplant:removed")]);
+    const result = migrateProjectRecipeIds(project, [
+      nitrobenzene("oracle:stable-2.8.4:chemplant:other", { durationTicks: 300 }),
+    ]);
+
+    expect(result.changed).toBe(false);
+    expect(result.unmatched).toEqual([
+      { id: "oracle:stable-2.8.4:chemplant:removed", name: "Chemical Plant: Nitrobenzene" },
+    ]);
+    // the plan still carries a usable recipe, so it opens and solves
+    expect(result.project.recipes[0]?.id).toBe("oracle:stable-2.8.4:chemplant:removed");
+    expect(result.project.recipes[0]?.outputs[0]?.id).toBe("nitrobenzene");
+    expect(result.project.nodes[0]?.recipeId).toBe("oracle:stable-2.8.4:chemplant:removed");
+  });
+
+  it("reports ambiguity instead of picking one of several identical dataset recipes", () => {
+    const project = planWith([nitrobenzene("oracle:stable-2.8.4:chemplant:oldhash")]);
+    const result = migrateProjectRecipeIds(project, [
+      nitrobenzene("oracle:stable-2.8.4:chemplant:twin1"),
+      nitrobenzene("oracle:stable-2.8.4:chemplant:twin2"),
+    ]);
+
+    expect(result.changed).toBe(false);
+    expect(result.migrated).toEqual([]);
+    expect(result.ambiguous).toEqual([
+      {
+        id: "oracle:stable-2.8.4:chemplant:oldhash",
+        name: "Chemical Plant: Nitrobenzene",
+        candidateIds: [
+          "oracle:stable-2.8.4:chemplant:twin1",
+          "oracle:stable-2.8.4:chemplant:twin2",
+        ],
+      },
+    ]);
+    expect(result.project.nodes[0]?.recipeId).toBe("oracle:stable-2.8.4:chemplant:oldhash");
+  });
+
+  it("refuses to collapse two plan recipes that share one dataset counterpart", () => {
+    const project = planWith([nitrobenzene("plan:one"), nitrobenzene("plan:two")]);
+    const result = migrateProjectRecipeIds(project, [nitrobenzene("dataset:only")]);
+
+    expect(result.changed).toBe(false);
+    expect(result.ambiguous.map((entry) => entry.id)).toEqual(["plan:one", "plan:two"]);
+    expect(result.project.nodes.map((node) => node.recipeId)).toEqual(["plan:one", "plan:two"]);
+  });
+
+  it("migrates only the stale references in a partly stale plan", () => {
+    const project = planWith([
+      nitrobenzene("dataset:fresh"),
+      nitrobenzene("plan:stale", { durationTicks: 240, source: { recipeMap: "Chemical Plant" } }),
+      nitrobenzene("plan:gone", { durationTicks: 999 }),
+    ]);
+    const result = migrateProjectRecipeIds(project, [
+      nitrobenzene("dataset:fresh"),
+      nitrobenzene("dataset:renamed", {
+        durationTicks: 240,
+        source: { recipeMap: "Chemical Plant" },
+      }),
+    ]);
+
+    expect(result.migrated).toEqual([
+      { fromId: "plan:stale", toId: "dataset:renamed", name: "Chemical Plant: Nitrobenzene" },
+    ]);
+    expect(result.unmatched.map((entry) => entry.id)).toEqual(["plan:gone"]);
+    expect(result.project.nodes.map((node) => node.recipeId)).toEqual([
+      "dataset:fresh",
+      "dataset:renamed",
+      "plan:gone",
+    ]);
+  });
+
+  it("accepts a prebuilt content index so a large dataset is walked once", () => {
+    const index = buildRecipeContentIndex([nitrobenzene("dataset:newhash")]);
+    expect(index.size).toBe(1);
+
+    const result = migrateProjectRecipeIds(planWith([nitrobenzene("plan:oldhash")]), index);
+    expect(result.project.nodes[0]?.recipeId).toBe("dataset:newhash");
+  });
+
+  it("survives a round-trip through the public plan schema", () => {
+    const project = planWith([nitrobenzene("plan:oldhash")]);
+    const migrated = migrateProjectRecipeIds(project, [nitrobenzene("dataset:newhash")]).project;
+    const reparsed = parseFactoryProjectJson(serializeFactoryProject(migrated));
+
+    expect(reparsed.recipes[0]?.id).toBe("dataset:newhash");
+    expect(reparsed.nodes[0]?.recipeId).toBe("dataset:newhash");
   });
 });
