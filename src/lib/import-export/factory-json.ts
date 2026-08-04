@@ -1,15 +1,19 @@
 import { ZodError } from "zod";
 import { normalizeProjectFuelProfiles } from "../model/fuels";
+import { buildRecipeContentIndex, recipeContentKey } from "../model/recipe-content";
+import type { DatasetRecipeContentRef, RecipeContentIndex } from "../model/recipe-content";
 import { exportedFactoryProjectSchema, factoryProjectSchema } from "../model/schemas";
 import { PROJECT_SCHEMA_VERSION } from "../model/types";
-import type {
-  ExportedFactoryProject,
-  FactoryProject,
-  Recipe,
-  RecipeInput,
-  RecipeOutput,
-} from "../model/types";
+import type { ExportedFactoryProject, FactoryProject, Recipe } from "../model/types";
 import { APP_NAME, buildResolvedPlan, deriveDatasetVersionId } from "./resolved-plan";
+
+export {
+  buildRecipeContentIndex,
+  recipeContentKey,
+  type DatasetRecipeContentRef,
+  type RecipeContentIndex,
+  type RecipeContentRef,
+} from "../model/recipe-content";
 
 export class FactoryJsonError extends Error {
   constructor(message: string) {
@@ -45,24 +49,6 @@ export function migrateFactoryProjectRaw(raw: unknown): unknown {
   return raw;
 }
 
-/**
- * The fields that identify a recipe by what it *does*, independently of its dataset id.
- *
- * Dataset recipe ids are not portable across dataset regenerations: the oracle exporter used to
- * hash the registry iteration index (and, for GregTech, an identity hash), so republishing the
- * very same GTNH version reshuffled every id. Exported plans embed `node.recipeId`, so such a plan
- * resolved nothing against the republished dataset. Content matching re-points those references,
- * and keeps working for every future regeneration regardless of how ids are produced.
- */
-export type RecipeContentRef = Pick<Recipe, "durationTicks" | "eut" | "inputs" | "outputs"> &
-  Partial<Pick<Recipe, "machineType" | "source">>;
-
-/** A dataset recipe, reduced to what content matching needs. */
-export type DatasetRecipeContentRef = Pick<Recipe, "id"> & RecipeContentRef;
-
-/** `contentKey -> dataset recipe ids`, in the order the dataset yielded them. */
-export type RecipeContentIndex = Map<string, string[]>;
-
 export interface RecipeIdMigrationReport {
   /** Plan recipes whose id was re-pointed at the dataset's current id for the same content. */
   migrated: Array<{ fromId: string; toId: string; name: string }>;
@@ -81,51 +67,6 @@ export interface RecipeIdMigrationResult extends RecipeIdMigrationReport {
   changed: boolean;
 }
 
-function resourceContentKey(resource: RecipeInput | RecipeOutput): string {
-  const chance = "chance" in resource && resource.chance != null ? `@${resource.chance}` : "";
-  return `${resource.kind}:${resource.id}:${resource.amount}${chance}`;
-}
-
-function resourceMultisetKey(resources: Array<RecipeInput | RecipeOutput> | undefined): string {
-  return (resources ?? []).map(resourceContentKey).sort().join("|");
-}
-
-/**
- * Stable fingerprint of a recipe's observable behaviour: where it runs, how long it takes, what it
- * costs, and the exact multisets it consumes and produces.
- *
- * Slot order is deliberately *not* part of the key. Normalizers are free to reorder slots between
- * dataset builds, and a plan that matches on behaviour should survive that; the amounts and chances
- * that the solver actually uses are all still compared.
- */
-export function recipeContentKey(recipe: RecipeContentRef): string {
-  return [
-    recipe.source?.recipeMap ?? recipe.machineType ?? "",
-    recipe.durationTicks ?? 0,
-    recipe.eut ?? 0,
-    resourceMultisetKey(recipe.inputs),
-    resourceMultisetKey(recipe.outputs),
-  ].join("##");
-}
-
-export function buildRecipeContentIndex(
-  recipes: Iterable<DatasetRecipeContentRef>,
-): RecipeContentIndex {
-  const index: RecipeContentIndex = new Map();
-
-  for (const recipe of recipes) {
-    const key = recipeContentKey(recipe);
-    const ids = index.get(key);
-    if (ids) {
-      ids.push(recipe.id);
-    } else {
-      index.set(key, [recipe.id]);
-    }
-  }
-
-  return index;
-}
-
 /**
  * Re-point an imported plan's recipe ids at the dataset recipes that carry the same content.
  *
@@ -138,6 +79,13 @@ export function buildRecipeContentIndex(
  * full recipe bodies, so it still renders and solves, and a dataset-side change should not break a
  * plan that opened yesterday. Callers should surface {@link RecipeIdMigrationReport} instead of
  * migrating silently.
+ *
+ * This re-points ids only. It does *not* swap in the matched dataset recipe bodies, and a content
+ * key ignores slot order, so a caller that also adopts the dataset body must repair slot-indexed
+ * references itself - edge handles embed a slot index. The app's import path does exactly that
+ * (`hydrateImportedProjectRecipes` -> `remapMigratedRecipeReferences` in `TopBar`), and resolves
+ * content matches server-side so the browser never loads every dataset recipe body; this function
+ * is the standalone primitive for consumers that already hold the dataset in memory.
  */
 export function migrateProjectRecipeIds(
   project: FactoryProject,

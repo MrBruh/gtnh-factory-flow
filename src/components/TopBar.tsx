@@ -392,6 +392,26 @@ async function hydrateImportedProjectRecipes(
                 kind: output.kind,
                 id: output.id,
               })),
+              // Content matching runs server-side: the index it needs spans every recipe in the
+              // dataset, which is far too much to ship to the browser on import. Only the fields
+              // the content key reads are sent, so display metadata stays out of the request.
+              content: {
+                machineType: recipe.machineType,
+                source: recipe.source,
+                durationTicks: recipe.durationTicks,
+                eut: recipe.eut,
+                inputs: recipe.inputs.map((input) => ({
+                  kind: input.kind,
+                  id: input.id,
+                  amount: input.amount,
+                })),
+                outputs: recipe.outputs.map((output) => ({
+                  kind: output.kind,
+                  id: output.id,
+                  amount: output.amount,
+                  ...(output.chance === undefined ? {} : { chance: output.chance }),
+                })),
+              },
             })),
           )
         ).matches.map((match) => [match.importedId, match.recipeId] as const)
@@ -404,9 +424,10 @@ async function hydrateImportedProjectRecipes(
   const hydratedRecipes = await Promise.all(
     project.recipes.map(async (recipe) => {
       if (!availableRecipeIds.has(recipe.id)) {
-        const rawRecipeIdMatch = resolvedRecipeIds.get(recipe.id);
-        const migratedRecipe = rawRecipeIdMatch
-          ? await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, rawRecipeIdMatch)
+        // Either a content match or the legacy rawRecipeId heuristic, resolved server-side.
+        const resolvedId = resolvedRecipeIds.get(recipe.id);
+        const migratedRecipe = resolvedId
+          ? await getRecipeDatasetRecipe(DEFAULT_DATASET_MANIFEST_URL, version, resolvedId)
           : await resolveImportedRecipe(version, recipe);
         if (migratedRecipe) {
           migratedRecipes.push({
