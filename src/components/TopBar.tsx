@@ -33,6 +33,7 @@ import type {
   RecipeOutput,
   ResourceKind,
 } from "@/lib/model/types";
+import { remapMigratedRecipeInputOverrides } from "@/lib/model/recipe-input-overrides";
 import { makeResourceHandleId, parseResourceHandleId } from "./flow/resource-handles";
 import {
   FLOW_IMAGE_EXPORT_COMPLETE_EVENT,
@@ -420,6 +421,8 @@ async function hydrateImportedProjectRecipes(
   const missingRecipes: Array<Pick<FactoryProject["recipes"][number], "id" | "name">> = [];
   const migratedRecipes: Array<{ fromId: string; toId: string; name: string }> = [];
   const recipeIdMigration = new Map<string, string>();
+  // The pre-migration bodies, kept so slot-indexed references can be moved onto the new slots.
+  const previousRecipeBodies = new Map<string, FactoryProject["recipes"][number]>();
 
   const hydratedRecipes = await Promise.all(
     project.recipes.map(async (recipe) => {
@@ -436,6 +439,7 @@ async function hydrateImportedProjectRecipes(
             name: recipe.name,
           });
           recipeIdMigration.set(recipe.id, migratedRecipe.id);
+          previousRecipeBodies.set(recipe.id, recipe);
           return migratedRecipe;
         }
 
@@ -452,7 +456,11 @@ async function hydrateImportedProjectRecipes(
   };
 
   return {
-    project: remapMigratedRecipeReferences(hydratedProject, recipeIdMigration),
+    project: remapMigratedRecipeReferences(
+      hydratedProject,
+      recipeIdMigration,
+      previousRecipeBodies,
+    ),
     missingRecipes,
     migratedRecipes,
   };
@@ -461,15 +469,35 @@ async function hydrateImportedProjectRecipes(
 function remapMigratedRecipeReferences(
   project: FactoryProject,
   recipeIdMigration: Map<string, string>,
+  previousRecipeBodies: Map<string, FactoryProject["recipes"][number]>,
 ): FactoryProject {
   if (recipeIdMigration.size === 0) {
     return project;
   }
 
-  const nodes = project.nodes.map((node) => ({
-    ...node,
-    recipeId: recipeIdMigration.get(node.recipeId) ?? node.recipeId,
-  }));
+  const recipesById = new Map(project.recipes.map((recipe) => [recipe.id, recipe] as const));
+  const nodes = project.nodes.map((node) => {
+    const toId = recipeIdMigration.get(node.recipeId);
+    if (!toId) {
+      return node;
+    }
+
+    const previousRecipe = previousRecipeBodies.get(node.recipeId);
+    const nextRecipe = recipesById.get(toId);
+    return {
+      ...node,
+      recipeId: toId,
+      ...(node.recipeInputOverrides && previousRecipe && nextRecipe
+        ? {
+            recipeInputOverrides: remapMigratedRecipeInputOverrides(
+              node.recipeInputOverrides,
+              previousRecipe,
+              nextRecipe,
+            ),
+          }
+        : {}),
+    };
+  });
   const nodesById = new Map(nodes.map((node) => [node.id, node] as const));
   const originalNodesById = new Map(project.nodes.map((node) => [node.id, node] as const));
 
