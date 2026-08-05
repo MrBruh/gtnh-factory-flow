@@ -27,6 +27,11 @@ on:
         required: true
         default: false
         type: boolean
+      render_icons:
+        description: "Render item icons. Uncheck for recipe-only runs (id verification): skips the slow client pass"
+        required: false
+        default: true
+        type: boolean
   # Scheduled triggers are intentionally disabled in this repo. Every job below needs a
   # self-hosted runner labelled `gtnh-export`; without one each scheduled run queues until
   # GitHub expires it at 24h and marks it failed. Schedules fire only from the default
@@ -109,7 +114,10 @@ jobs:
         run: docker build -t gtnh-factory-flow-dataset:ci -f tools/dataset-pipeline/docker/Dockerfile .
 
       - name: Generate normalized dataset
-        timeout-minutes: 360
+        # Slow hardware needs a longer ceiling, not a failed run at hour six. Keep this and
+        # GTNH_EXPORT_TIMEOUT_SECONDS in step: the inner timeout must expire first so the export
+        # fails with its own diagnostics rather than being cut off mid-write by the job timeout.
+        timeout-minutes: ${{ fromJSON(vars.GTNH_BUILD_TIMEOUT_MINUTES || '360') }}
         env:
           GTNH_CHANNEL: ${{ matrix.channel }}
           GTNH_VERSION_ID: ${{ matrix.id }}
@@ -118,10 +126,21 @@ jobs:
           GTNH_SOURCE_REF: ${{ matrix.sourceRef }}
           GTNH_SOURCE_URL: ${{ matrix.sourceUrl }}
           GTNH_CLIENT_EXPORT_COMMAND: ${{ secrets.GTNH_CLIENT_EXPORT_COMMAND }}
-          GTNH_EXPORT_MAX_MEMORY: "6G"
-          GTNH_EXPORT_TIMEOUT_SECONDS: "21600"
+          # Sized for the runner. The docker asks, the JVM heap and the Node heap have to move
+          # together - raising one past what the host can back is what makes an export thrash
+          # rather than fail cleanly. Override per host with repository variables; unset keeps
+          # the values this pipeline has always used. See docs/dataset-pipeline-runbook.md.
+          GTNH_EXPORT_MAX_MEMORY: ${{ vars.GTNH_EXPORT_MAX_MEMORY || '6G' }}
+          GTNH_DOCKER_MEMORY: ${{ vars.GTNH_DOCKER_MEMORY || '10g' }}
+          GTNH_DOCKER_MEMORY_SWAP: ${{ vars.GTNH_DOCKER_MEMORY_SWAP || '12g' }}
+          GTNH_DOCKER_CPUS: ${{ vars.GTNH_DOCKER_CPUS || '8' }}
+          GTNH_DOCKER_SHM_SIZE: ${{ vars.GTNH_DOCKER_SHM_SIZE || '2g' }}
+          GTNH_NODE_MAX_OLD_SPACE_MB: ${{ vars.GTNH_NODE_MAX_OLD_SPACE_MB || '8192' }}
+          GTNH_EXPORT_TIMEOUT_SECONDS: ${{ vars.GTNH_EXPORT_TIMEOUT_SECONDS || '21600' }}
           GTNH_EXPORT_PACK_KIND: "client"
-          GTNH_RENDER_STACK_ICONS: "true"
+          # Only a workflow_dispatch that explicitly unchecks the box skips icons; every other
+          # trigger renders them, so a scheduled or dispatched publish is unaffected.
+          GTNH_RENDER_STACK_ICONS: ${{ github.event_name == 'workflow_dispatch' && inputs.render_icons == false && 'false' || 'true' }}
           GTNH_ATLAS_ICON_SIZE: "256"
           GTNH_ATLAS_MAX_SIZE: "8192"
           GTNH_EXPORT_DISABLE_CLIENT_UI_MODS: "true"
@@ -149,10 +168,10 @@ jobs:
           docker run --rm \
             --name "$container_name" \
             --user "$(id -u):$(id -g)" \
-            --shm-size=2g \
-            --memory=10g \
-            --memory-swap=12g \
-            --cpus=8 \
+            --shm-size="$GTNH_DOCKER_SHM_SIZE" \
+            --memory="$GTNH_DOCKER_MEMORY" \
+            --memory-swap="$GTNH_DOCKER_MEMORY_SWAP" \
+            --cpus="$GTNH_DOCKER_CPUS" \
             -e HOME=/tmp \
             -e GITHUB_TOKEN \
             -e GTNH_CHANNEL \
@@ -168,7 +187,7 @@ jobs:
             -e GTNH_RENDER_STACK_ICONS \
             -e GTNH_ATLAS_ICON_SIZE \
             -e GTNH_ATLAS_MAX_SIZE \
-            -e NODE_OPTIONS=--max-old-space-size=8192 \
+            -e NODE_OPTIONS=--max-old-space-size="$GTNH_NODE_MAX_OLD_SPACE_MB" \
             -e GTNH_SPLIT_SERVER_CLIENT_EXPORT \
             -e GTNH_ORACLE_STRICT \
             -e GTNH_PACK_CACHE_DIR=/pack-cache \
