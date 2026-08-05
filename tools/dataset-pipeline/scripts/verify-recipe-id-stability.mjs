@@ -34,10 +34,24 @@ if (!pathA) {
 }
 
 /**
- * Fields that legitimately differ between two exports of the same recipe, and so must not count
- * as a content difference. `generatedAt` is stamped per recipe at export time.
+ * Fields that must not count as a content difference.
+ *
+ * `generatedAt` is stamped per recipe at export time. The rest are presentation: the exporter
+ * deliberately keeps display names and textures out of the content key so localization and icon
+ * capture cannot move an id. Comparing them here would report the exporter's intended behaviour
+ * as a failure - and GTNH really does ship items whose display name is randomized per run
+ * ("QED (Quasar Entanglement Device)" vs "QED (Quark/Electron Director)"), which is precisely the
+ * case that exclusion exists to survive. Drift in these is reported as an observation instead.
  */
-const VOLATILE_KEYS = new Set(["generatedAt"]);
+const VOLATILE_KEYS = new Set([
+  "generatedAt",
+  "displayName",
+  "icon",
+  "iconPath",
+  "iconAtlas",
+  "dominantColor",
+  "tooltip",
+]);
 
 function stripVolatile(value) {
   if (Array.isArray(value)) {
@@ -60,6 +74,29 @@ function stripVolatile(value) {
 function contentOf(recipe) {
   const { id: _id, ...rest } = recipe;
   return JSON.stringify(stripVolatile(rest));
+}
+
+/** Content including presentation, so display-only drift can be counted rather than ignored. */
+function contentWithPresentation(recipe) {
+  const { id: _id, ...rest } = recipe;
+  return JSON.stringify(stripKeys(rest, new Set(["generatedAt"])));
+}
+
+function stripKeys(value, drop) {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripKeys(entry, drop));
+  }
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value).sort()) {
+      if (drop.has(key)) {
+        continue;
+      }
+      out[key] = stripKeys(value[key], drop);
+    }
+    return out;
+  }
+  return value;
 }
 
 /** Scope and content as one key. Encoded as a pair so no separator can be forged by either half. */
@@ -211,12 +248,20 @@ if (pathB) {
 
   let shared = 0;
   let drifted = 0;
+  let presentationDrift = 0;
   for (const [id, entriesA] of byIdA) {
     const entriesB = byIdB.get(id);
     if (!entriesB) {
       continue;
     }
     shared++;
+    if (
+      entriesA.length === 1 &&
+      entriesB.length === 1 &&
+      contentWithPresentation(entriesA[0].recipe) !== contentWithPresentation(entriesB[0].recipe)
+    ) {
+      presentationDrift++;
+    }
     const contentsA = new Set(entriesA.map((entry) => contentOf(entry.recipe)));
     const contentsB = new Set(entriesB.map((entry) => contentOf(entry.recipe)));
     const same =
@@ -238,6 +283,12 @@ if (pathB) {
     failures.push(`${drifted} shared id(s) changed meaning between the two exports`);
   } else {
     notes.push(`all ${shared} shared ids describe the same recipe in both exports`);
+  }
+
+  if (presentationDrift > 0) {
+    notes.push(
+      `${presentationDrift} id(s) kept their identity while display metadata changed - the exclusion of display fields from the key working as intended`,
+    );
   }
 
   if (onlyA > 0 || onlyB > 0) {
