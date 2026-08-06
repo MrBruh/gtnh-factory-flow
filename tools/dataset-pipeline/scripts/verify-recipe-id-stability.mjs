@@ -5,24 +5,28 @@
 // Exported plans embed `node.recipeId`. Ids used to hash the registry iteration index - and, for
 // GregTech, `GTRecipe.toString()`, which is an identity hash on a class that does not override it
 // - so republishing the very same version reshuffled every id and a saved plan resolved nothing.
-// The exporter now derives ids from content. Two properties have to hold for that to be worth
-// anything, and this script checks both:
+// The exporter now derives ids from content. Three properties have to hold, and this checks them:
 //
 //   1. No id means two different things. Within one export, an id must not appear twice on
-//      recipes that differ in content. Across two exports, an id present in both must describe
-//      the same recipe in both.
-//   2. Recipes that share an id's input - the content key - must be indistinguishable. Identical
-//      recipes are separated by an occurrence counter, and the order the exporter walks the
-//      registry decides who gets which number. That is only safe if the members of such a group
-//      are interchangeable, i.e. they serialize identically apart from the id itself.
+//      recipes that differ; across two exports, an id present in both must describe the same
+//      recipe in both.
+//   2. The recipes an occurrence counter separates must be indistinguishable. Identical recipes
+//      are numbered by registry walk order, so that order is only safe if the rows it numbers are
+//      byte-identical - otherwise which row takes which number, and so which id, is luck.
+//   3. Both exports produce the same set of ids.
+//
+// Identity is compared the way the exporter's key computes it: resource lists as sorted
+// multisets, display and texture fields excluded. Comparing them any other way would report the
+// exporter's deliberate design as a failure. Order and presentation still drift for real - GTNH
+// registers some recipes by walking a hash-ordered collection, and randomizes a few display names
+// per run - so both are counted and reported as observations rather than silently dropped.
 //
 // Usage:
 //   node verify-recipe-id-stability.mjs <export.json>                     # properties 1 and 2
-//   node verify-recipe-id-stability.mjs <export-a.json> <export-b.json>   # plus the run diff
+//   node verify-recipe-id-stability.mjs <export-a.json> <export-b.json>   # plus 3
 //
-// The input is the raw oracle export (`oracle-export.json`, or the merged `oracle-records`), not
-// the normalized `recipes.json`. The pipeline uploads it on every run as the
-// `gtnh-export-logs-<version>` artifact.
+// The input is the raw oracle export (`oracle-export.json`), not the normalized `recipes.json`.
+// The pipeline uploads it on every run as the `gtnh-export-logs-<version>` artifact.
 
 import fs from "node:fs/promises";
 
@@ -33,18 +37,15 @@ if (!pathA) {
   process.exit(2);
 }
 
+/** Stamped per recipe at export time; never an identity difference. */
+const VOLATILE = new Set(["generatedAt"]);
+
 /**
- * Fields that must not count as a content difference.
- *
- * `generatedAt` is stamped per recipe at export time. The rest are presentation: the exporter
- * deliberately keeps display names and textures out of the content key so localization and icon
- * capture cannot move an id. Comparing them here would report the exporter's intended behaviour
- * as a failure - and GTNH really does ship items whose display name is randomized per run
- * ("QED (Quasar Entanglement Device)" vs "QED (Quark/Electron Director)"), which is precisely the
- * case that exclusion exists to survive. Drift in these is reported as an observation instead.
+ * Presentation. The exporter keeps these out of the content key so localization and icon capture
+ * cannot move an id - GTNH really does randomize some display names per run
+ * ("QED (Quasar Entanglement Device)" vs "QED (Quark/Electron Director)").
  */
-const VOLATILE_KEYS = new Set([
-  "generatedAt",
+const PRESENTATION = new Set([
   "displayName",
   "icon",
   "iconPath",
@@ -53,34 +54,20 @@ const VOLATILE_KEYS = new Set([
   "tooltip",
 ]);
 
-function stripVolatile(value) {
-  if (Array.isArray(value)) {
-    return value.map(stripVolatile);
-  }
-  if (value && typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value).sort()) {
-      if (VOLATILE_KEYS.has(key)) {
-        continue;
-      }
-      out[key] = stripVolatile(value[key]);
-    }
-    return out;
-  }
-  return value;
-}
+/** Every list the exporter hashes through `resourceContentKeys`, which sorts before hashing. */
+const RESOURCE_LISTS = [
+  "itemInputs",
+  "itemOutputs",
+  "fluidInputs",
+  "fluidOutputs",
+  "nonConsumedInputs",
+  "inputs",
+  "outputs",
+  "components",
+  "aspects",
+];
 
-/** A recipe's content: everything the export writes about it except the id under test. */
-function contentOf(recipe) {
-  const { id: _id, ...rest } = recipe;
-  return JSON.stringify(stripVolatile(rest));
-}
-
-/** Content including presentation, so display-only drift can be counted rather than ignored. */
-function contentWithPresentation(recipe) {
-  const { id: _id, ...rest } = recipe;
-  return JSON.stringify(stripKeys(rest, new Set(["generatedAt"])));
-}
+const IDENTITY_DROP = new Set([...VOLATILE, ...PRESENTATION]);
 
 function stripKeys(value, drop) {
   if (Array.isArray(value)) {
@@ -99,34 +86,47 @@ function stripKeys(value, drop) {
   return value;
 }
 
-/** Scope and content as one key. Encoded as a pair so no separator can be forged by either half. */
-function contentGroupKey(entry) {
-  return JSON.stringify([entry.scope, contentOf(entry.recipe)]);
+function withoutId(recipe, drop) {
+  const { id: _id, ...rest } = recipe;
+  return stripKeys(rest, drop);
 }
 
-/**
- * Collect every id-bearing recipe in the export, tagged with where it came from. GregTech nests
- * recipes under `recipeMaps`; the other domains carry them on the domain itself.
- */
+function sortResourceLists(normalized) {
+  for (const key of RESOURCE_LISTS) {
+    if (Array.isArray(normalized[key])) {
+      normalized[key] = normalized[key].map((entry) => JSON.stringify(entry)).sort();
+    }
+  }
+  return normalized;
+}
+
+/** What the id is supposed to pin down: content, order-insensitive, presentation excluded. */
+function identityOf(recipe) {
+  return JSON.stringify(sortResourceLists(withoutId(recipe, IDENTITY_DROP)));
+}
+
+/** Identity plus list order, to detect ordering drift that identity deliberately ignores. */
+function orderedOf(recipe) {
+  return JSON.stringify(withoutId(recipe, IDENTITY_DROP));
+}
+
+/** Identity plus presentation, to detect display drift that identity deliberately ignores. */
+function presentationOf(recipe) {
+  return JSON.stringify(sortResourceLists(withoutId(recipe, VOLATILE)));
+}
+
 function collectRecipes(raw) {
   const collected = [];
-
   for (const domain of raw.domains ?? []) {
     for (const recipe of domain.recipes ?? []) {
-      if (recipe?.id) {
-        collected.push({ scope: domain.id, recipe });
-      }
+      if (recipe?.id) collected.push({ scope: domain.id, recipe });
     }
-
     for (const recipeMap of domain.recipeMaps ?? []) {
       for (const recipe of recipeMap.recipes ?? []) {
-        if (recipe?.id) {
-          collected.push({ scope: `${domain.id}/${recipeMap.id}`, recipe });
-        }
+        if (recipe?.id) collected.push({ scope: `${domain.id}/${recipeMap.id}`, recipe });
       }
     }
   }
-
   return collected;
 }
 
@@ -154,11 +154,8 @@ function indexById(recipes) {
   const byId = new Map();
   for (const entry of recipes) {
     const existing = byId.get(entry.recipe.id);
-    if (existing) {
-      existing.push(entry);
-    } else {
-      byId.set(entry.recipe.id, [entry]);
-    }
+    if (existing) existing.push(entry);
+    else byId.set(entry.recipe.id, [entry]);
   }
   return byId;
 }
@@ -171,60 +168,42 @@ const byIdA = indexById(recipesA);
 
 console.log(`${pathA}: ${recipesA.length} recipes, ${byIdA.size} distinct ids`);
 
-// Property 1, within one export: an id must never sit on two recipes that differ.
+// Property 1, within one export.
 let reusedIds = 0;
-let collidingButIdentical = 0;
 for (const [id, entries] of byIdA) {
-  if (entries.length === 1) {
-    continue;
-  }
-  const contents = new Set(entries.map((entry) => contentOf(entry.recipe)));
-  if (contents.size > 1) {
+  if (entries.length === 1) continue;
+  if (new Set(entries.map((entry) => identityOf(entry.recipe))).size > 1) {
     reusedIds++;
     if (reusedIds <= 5) {
-      failures.push(
-        `id ${id} is on ${entries.length} recipes with ${contents.size} distinct contents (${entries[0].scope})`,
-      );
+      failures.push(`id ${id} is on ${entries.length} recipes that differ (${entries[0].scope})`);
     }
-  } else {
-    collidingButIdentical++;
   }
 }
+if (reusedIds > 0) failures.push(`${reusedIds} id(s) describe more than one distinct recipe`);
+else notes.push("no id describes more than one distinct recipe");
 
-if (reusedIds > 0) {
-  failures.push(`${reusedIds} id(s) describe more than one distinct recipe`);
-} else {
-  notes.push("no id describes more than one distinct recipe");
-}
-if (collidingButIdentical > 0) {
-  notes.push(
-    `${collidingButIdentical} id(s) repeat on byte-identical recipes (harmless: nothing distinguishes them)`,
-  );
-}
-
-// Property 2: how much of the export leans on the occurrence counter, and whether the recipes it
-// separates are interchangeable. Members of a group that serialize identically can be numbered in
-// any order without changing what an id means.
-const byContent = new Map();
+// Property 2. Group the way the key groups, then ask whether the rows a counter separates are
+// truly indistinguishable - including the list order the key ignores. A group whose members
+// differ in order would make the counter, and so the id, depend on registry walk order.
+const byIdentity = new Map();
 for (const entry of recipesA) {
-  const key = contentGroupKey(entry);
-  const ids = byContent.get(key);
-  if (ids) {
-    ids.push(entry.recipe.id);
-  } else {
-    byContent.set(key, [entry.recipe.id]);
-  }
+  const key = JSON.stringify([entry.scope, identityOf(entry.recipe)]);
+  const group = byIdentity.get(key);
+  if (group) group.push(entry);
+  else byIdentity.set(key, [entry]);
 }
 
+let groups = 0;
 let groupedRecipes = 0;
 let largestGroup = 1;
-let groups = 0;
-for (const ids of byContent.values()) {
-  if (ids.length > 1) {
-    groups++;
-    groupedRecipes += ids.length;
-    largestGroup = Math.max(largestGroup, ids.length);
-  }
+let orderDependentGroups = 0;
+for (const entries of byIdentity.values()) {
+  if (entries.length < 2) continue;
+  groups++;
+  groupedRecipes += entries.length;
+  largestGroup = Math.max(largestGroup, entries.length);
+  const strict = new Set(entries.map((entry) => orderedOf(entry.recipe)));
+  if (strict.size > 1) orderDependentGroups++;
 }
 
 if (groups === 0) {
@@ -234,13 +213,18 @@ if (groups === 0) {
   notes.push(
     `${groups} content group(s) hold more than one recipe: ${groupedRecipes}/${recipesA.length} rows (${pct}%), largest ${largestGroup}`,
   );
-  notes.push(
-    "those rows are identical apart from their id, so occurrence-counter order cannot change what any id means",
-  );
+  if (orderDependentGroups > 0) {
+    failures.push(
+      `${orderDependentGroups} counter group(s) hold rows that differ in list order, so which row takes which id depends on registry walk order`,
+    );
+  } else {
+    notes.push(
+      "every such row is byte-identical to its group, so occurrence-counter order cannot change what any id means",
+    );
+  }
 }
 
-// Property 1, across two exports: an id in both must mean the same recipe in both. This is the
-// direct regeneration test.
+// Property 3.
 if (pathB) {
   const recipesB = await loadExport(pathB);
   const byIdB = indexById(recipesB);
@@ -248,43 +232,42 @@ if (pathB) {
 
   let shared = 0;
   let drifted = 0;
+  let orderingDrift = 0;
   let presentationDrift = 0;
+
   for (const [id, entriesA] of byIdA) {
     const entriesB = byIdB.get(id);
-    if (!entriesB) {
-      continue;
-    }
+    if (!entriesB) continue;
     shared++;
-    if (
-      entriesA.length === 1 &&
-      entriesB.length === 1 &&
-      contentWithPresentation(entriesA[0].recipe) !== contentWithPresentation(entriesB[0].recipe)
-    ) {
-      presentationDrift++;
-    }
-    const contentsA = new Set(entriesA.map((entry) => contentOf(entry.recipe)));
-    const contentsB = new Set(entriesB.map((entry) => contentOf(entry.recipe)));
-    const same =
-      contentsA.size === contentsB.size && [...contentsA].every((value) => contentsB.has(value));
+
+    const identA = new Set(entriesA.map((entry) => identityOf(entry.recipe)));
+    const identB = new Set(entriesB.map((entry) => identityOf(entry.recipe)));
+    const same = identA.size === identB.size && [...identA].every((value) => identB.has(value));
     if (!same) {
       drifted++;
-      if (drifted <= 5) {
-        failures.push(`id ${id} describes a different recipe in the two exports`);
-      }
+      if (drifted <= 5) failures.push(`id ${id} describes a different recipe in the two exports`);
+      continue;
+    }
+
+    if (entriesA.length === 1 && entriesB.length === 1) {
+      if (orderedOf(entriesA[0].recipe) !== orderedOf(entriesB[0].recipe)) orderingDrift++;
+      if (presentationOf(entriesA[0].recipe) !== presentationOf(entriesB[0].recipe))
+        presentationDrift++;
     }
   }
 
   const onlyA = [...byIdA.keys()].filter((id) => !byIdB.has(id)).length;
   const onlyB = [...byIdB.keys()].filter((id) => !byIdA.has(id)).length;
-
   console.log(`shared ids: ${shared}, only in A: ${onlyA}, only in B: ${onlyB}`);
 
-  if (drifted > 0) {
-    failures.push(`${drifted} shared id(s) changed meaning between the two exports`);
-  } else {
-    notes.push(`all ${shared} shared ids describe the same recipe in both exports`);
-  }
+  if (drifted > 0) failures.push(`${drifted} shared id(s) changed meaning between the two exports`);
+  else notes.push(`all ${shared} shared ids describe the same recipe in both exports`);
 
+  if (orderingDrift > 0) {
+    notes.push(
+      `${orderingDrift} id(s) kept their identity while their exported list order changed - the sort in the content key absorbing a registry walk that is not stable between runs`,
+    );
+  }
   if (presentationDrift > 0) {
     notes.push(
       `${presentationDrift} id(s) kept their identity while display metadata changed - the exclusion of display fields from the key working as intended`,
@@ -300,12 +283,8 @@ if (pathB) {
   }
 }
 
-for (const note of notes) {
-  console.log(`  ok    ${note}`);
-}
-for (const failure of failures) {
-  console.error(`  FAIL  ${failure}`);
-}
+for (const note of notes) console.log(`  ok    ${note}`);
+for (const failure of failures) console.error(`  FAIL  ${failure}`);
 
 if (failures.length > 0) {
   console.error(`\n${failures.length} problem(s) found.`);
