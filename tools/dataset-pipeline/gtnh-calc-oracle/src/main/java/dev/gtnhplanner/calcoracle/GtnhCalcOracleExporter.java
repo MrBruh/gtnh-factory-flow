@@ -2574,7 +2574,20 @@ public final class GtnhCalcOracleExporter {
         for (Map<String, Object> resource : resources) {
             keys.add(resourceContentKey(resource));
         }
-        // Slot order is part of the recipe, so the list is never sorted.
+        // Sorted, deliberately. Some recipes are registered by walking a hash-ordered collection,
+        // so the order of their exported lists is not stable across JVM runs: two exports of
+        // stable-2.8.4 minutes apart disagreed on the order of the fluid outputs of 69 recipes
+        // (32 centrifuge, 32 multiblock centrifuge, 5 Eye of Harmony) with identical fluids and
+        // amounts. Hashing that order made the id move with it, which is the very failure
+        // content-derived ids exist to prevent.
+        //
+        // This cannot lose an arrangement that matters: where slot position is part of a
+        // recipe's identity the exporter records slotIndex on each resource, and
+        // resourceContentKey folds it into that resource's own key, so the sorted multiset
+        // still pins every resource to its slot. Measured over the whole export, sorting adds
+        // no key collisions at all - the recipes sharing a key remain exactly the 11,204 that
+        // are byte-identical anyway, for which occurrence order is immaterial.
+        Collections.sort(keys);
         return join(keys, ",");
     }
 
