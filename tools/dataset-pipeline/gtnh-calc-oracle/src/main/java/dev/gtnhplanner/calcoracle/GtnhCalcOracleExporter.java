@@ -193,26 +193,41 @@ public final class GtnhCalcOracleExporter {
                     }
                 });
 
-                int index = 0;
+                Map<String, Integer> occurrences = new LinkedHashMap<String, Integer>();
                 for (GTRecipe recipe : rawRecipes) {
                     if (!recipe.mEnabled || recipe.mDuration <= 0) {
                         continue;
                     }
 
+                    List<Map<String, Object>> itemInputs =
+                        itemStacks(recipe.mInputs, getInputChances(recipe, recipe.mInputs.length), true);
+                    List<Map<String, Object>> itemOutputs = outputItemStacks(recipe);
+                    List<Map<String, Object>> fluidInputs = fluidStacks(recipe.mFluidInputs);
+                    List<Map<String, Object>> fluidOutputs = fluidStacks(recipe.mFluidOutputs);
+                    List<Map<String, Object>> nonConsumedInputs = specialItems(recipe.mSpecialItems);
+                    String contentKey = gtRecipeContentKey(
+                        map.unlocalizedName,
+                        recipe,
+                        itemInputs,
+                        itemOutputs,
+                        fluidInputs,
+                        fluidOutputs,
+                        nonConsumedInputs
+                    );
+
                     Map<String, Object> exportedRecipe = map();
-                    exportedRecipe.put("id", sha1(map.unlocalizedName + ":" + index + ":" + recipe.toString()).substring(0, 16));
+                    exportedRecipe.put("id", contentDerivedId(occurrences, "gregtech", contentKey));
                     exportedRecipe.put("enabled", Boolean.TRUE);
                     exportedRecipe.put("durationTicks", Integer.valueOf(recipe.mDuration));
                     exportedRecipe.put("eut", Long.valueOf(recipe.mEUt));
                     exportedRecipe.put("specialValue", Integer.valueOf(recipe.mSpecialValue));
-                    exportedRecipe.put("itemInputs", itemStacks(recipe.mInputs, getInputChances(recipe, recipe.mInputs.length), true));
-                    exportedRecipe.put("itemOutputs", outputItemStacks(recipe));
-                    exportedRecipe.put("fluidInputs", fluidStacks(recipe.mFluidInputs));
-                    exportedRecipe.put("fluidOutputs", fluidStacks(recipe.mFluidOutputs));
-                    exportedRecipe.put("nonConsumedInputs", specialItems(recipe.mSpecialItems));
+                    exportedRecipe.put("itemInputs", itemInputs);
+                    exportedRecipe.put("itemOutputs", itemOutputs);
+                    exportedRecipe.put("fluidInputs", fluidInputs);
+                    exportedRecipe.put("fluidOutputs", fluidOutputs);
+                    exportedRecipe.put("nonConsumedInputs", nonConsumedInputs);
                     exportedRecipe.put("runtimeCalculation", buildGtRuntimeCalculation(map.unlocalizedName, name, recipe));
                     recipes.add(exportedRecipe);
-                    index++;
                 }
 
                 exportedMap.put("recipes", recipes);
@@ -236,7 +251,7 @@ public final class GtnhCalcOracleExporter {
 
         try {
             List<?> rawRecipes = CraftingManager.getInstance().getRecipeList();
-            int index = 0;
+            Map<String, Integer> occurrences = new LinkedHashMap<String, Integer>();
             for (Object raw : rawRecipes) {
                 if (!(raw instanceof IRecipe)) {
                     continue;
@@ -246,16 +261,28 @@ public final class GtnhCalcOracleExporter {
                 if (output == null) {
                     continue;
                 }
+                String className = raw.getClass().getName();
+                String type = craftingType(raw);
+                int width = readIntField(raw, "recipeWidth");
+                int height = readIntField(raw, "recipeHeight");
+                List<Map<String, Object>> inputs = craftingInputs(raw);
+                Map<String, Object> outputResource = itemStack(output);
+                String contentKey = safeString(className)
+                    + "|t=" + safeString(type)
+                    + "|w=" + width
+                    + "|h=" + height
+                    + "|in=" + resourceContentKeys(inputs)
+                    + "|out=" + resourceContentKey(outputResource);
+
                 Map<String, Object> exported = map();
-                exported.put("id", sha1("crafting:" + index + ":" + raw.getClass().getName() + ":" + stackKey(output)).substring(0, 16));
-                exported.put("className", raw.getClass().getName());
-                exported.put("type", craftingType(raw));
-                exported.put("width", readIntField(raw, "recipeWidth"));
-                exported.put("height", readIntField(raw, "recipeHeight"));
-                exported.put("inputs", craftingInputs(raw));
-                exported.put("output", itemStack(output));
+                exported.put("id", contentDerivedId(occurrences, "crafting", contentKey));
+                exported.put("className", className);
+                exported.put("type", type);
+                exported.put("width", Integer.valueOf(width));
+                exported.put("height", Integer.valueOf(height));
+                exported.put("inputs", inputs);
+                exported.put("output", outputResource);
                 recipes.add(exported);
-                index++;
             }
             domain.put("recipes", recipes);
             adapters.add(adapter("minecraft-forge-crafting", "computed", true, 1, recipes.size(), started, null));
@@ -273,17 +300,20 @@ public final class GtnhCalcOracleExporter {
 
         try {
             Map<?, ?> smelting = FurnaceRecipes.smelting().getSmeltingList();
-            int index = 0;
+            Map<String, Integer> occurrences = new LinkedHashMap<String, Integer>();
             for (Map.Entry<?, ?> entry : smelting.entrySet()) {
                 if (!(entry.getKey() instanceof ItemStack) || !(entry.getValue() instanceof ItemStack)) {
                     continue;
                 }
+                Map<String, Object> input = itemStack((ItemStack) entry.getKey());
+                Map<String, Object> output = itemStack((ItemStack) entry.getValue());
+                String contentKey = "in=" + resourceContentKey(input) + "|out=" + resourceContentKey(output);
+
                 Map<String, Object> recipe = map();
-                recipe.put("id", sha1("smelting:" + index + ":" + stackKey((ItemStack) entry.getKey())).substring(0, 16));
-                recipe.put("input", itemStack((ItemStack) entry.getKey()));
-                recipe.put("output", itemStack((ItemStack) entry.getValue()));
+                recipe.put("id", contentDerivedId(occurrences, "smelting", contentKey));
+                recipe.put("input", input);
+                recipe.put("output", output);
                 recipes.add(recipe);
-                index++;
             }
             domain.put("recipes", recipes);
             adapters.add(adapter("minecraft-furnace", "computed", true, 1, recipes.size(), started, null));
@@ -311,6 +341,7 @@ public final class GtnhCalcOracleExporter {
             unlockThaumcraftKnowledgeForOracle();
             neiLayoutsBySignature = exportThaumcraftNeiLayoutsBySignature(adapters);
             Class<?> api = Class.forName("thaumcraft.api.ThaumcraftApi");
+            Map<String, Integer> occurrences = new LinkedHashMap<String, Integer>();
             for (Field field : api.getDeclaredFields()) {
                 if (!Modifier.isStatic(field.getModifiers()) || !Collection.class.isAssignableFrom(field.getType())) {
                     continue;
@@ -324,9 +355,8 @@ public final class GtnhCalcOracleExporter {
                 if (rawRecipes == null) {
                     continue;
                 }
-                int index = 0;
                 for (Object rawRecipe : rawRecipes) {
-                    Map<String, Object> recipe = thaumcraftRecipe(field.getName(), index, rawRecipe);
+                    Map<String, Object> recipe = thaumcraftRecipe(field.getName(), occurrences, rawRecipe);
                     if (recipe != null) {
                         Map<String, Object> neiLayout = neiLayoutsBySignature.get(thaumcraftRecipeSignature(recipe));
                         if (neiLayout == null) {
@@ -335,7 +365,6 @@ public final class GtnhCalcOracleExporter {
                         putIfPresent(recipe, "neiLayout", neiLayout);
                         recipes.add(recipe);
                     }
-                    index++;
                 }
             }
             int essentiaSmeltingCount = addThaumcraftEssentiaSmeltingRecipes(recipes);
@@ -949,24 +978,38 @@ public final class GtnhCalcOracleExporter {
         return domain;
     }
 
-    private Map<String, Object> thaumcraftRecipe(String sourceList, int index, Object rawRecipe) {
+    private Map<String, Object> thaumcraftRecipe(String sourceList, Map<String, Integer> occurrences, Object rawRecipe) {
         if (rawRecipe == null) {
             return null;
         }
 
-        Map<String, Object> recipe = map();
         String className = rawRecipe.getClass().getName();
         String type = thaumcraftType(className);
-        recipe.put("id", sha1("thaumcraft:" + sourceList + ":" + index + ":" + className).substring(0, 16));
+        String research = firstString(rawRecipe, "research", "researchKey", "key");
+        Map<String, Object> output = resourceFromUnknown(firstObject(rawRecipe, "getRecipeOutput", "recipeOutput", "output"));
+        Map<String, Object> centralInput = resourceFromUnknown(firstObject(rawRecipe, "getRecipeInput", "recipeInput", "input"));
+        Map<String, Object> catalyst = resourceFromUnknown(firstObject(rawRecipe, "getCatalyst", "catalyst"));
+        List<Map<String, Object>> components = resourcesFromUnknown(firstObject(rawRecipe, "getComponents", "components", "recipeItems"));
+        List<Map<String, Object>> aspects = aspectResources(firstObject(rawRecipe, "getAspects", "aspects"));
+        String contentKey = safeString(sourceList)
+            + "|t=" + safeString(type)
+            + "|c=" + safeString(className)
+            + "|r=" + safeString(research)
+            + "|out=" + resourceContentKey(output)
+            + "|ci=" + resourceContentKey(centralInput)
+            + "|cat=" + resourceContentKey(catalyst)
+            + "|comp=" + resourceContentKeys(components)
+            + "|asp=" + resourceContentKeys(aspects);
+
+        Map<String, Object> recipe = map();
+        recipe.put("id", contentDerivedId(occurrences, "thaumcraft", contentKey));
         recipe.put("sourceList", sourceList);
         recipe.put("type", type);
         recipe.put("className", className);
-        putIfPresent(recipe, "research", firstString(rawRecipe, "research", "researchKey", "key"));
-        putIfPresent(recipe, "output", resourceFromUnknown(firstObject(rawRecipe, "getRecipeOutput", "recipeOutput", "output")));
-        putIfPresent(recipe, "centralInput", resourceFromUnknown(firstObject(rawRecipe, "getRecipeInput", "recipeInput", "input")));
-        putIfPresent(recipe, "catalyst", resourceFromUnknown(firstObject(rawRecipe, "getCatalyst", "catalyst")));
-        List<Map<String, Object>> components = resourcesFromUnknown(firstObject(rawRecipe, "getComponents", "components", "recipeItems"));
-        List<Map<String, Object>> aspects = aspectResources(firstObject(rawRecipe, "getAspects", "aspects"));
+        putIfPresent(recipe, "research", research);
+        putIfPresent(recipe, "output", output);
+        putIfPresent(recipe, "centralInput", centralInput);
+        putIfPresent(recipe, "catalyst", catalyst);
         putIfPresent(recipe, "components", components);
         putIfPresent(recipe, "aspects", aspects);
         putIfPresent(recipe, "durationTicks", thaumcraftDurationTicks(type, components, aspects));
@@ -2478,6 +2521,112 @@ public final class GtnhCalcOracleExporter {
         String domain = normalized.substring(0, separator).toLowerCase(Locale.ROOT);
         String path = normalized.substring(separator + 1).toLowerCase(Locale.ROOT);
         return domain + ":" + path;
+    }
+
+    /**
+     * Builds a recipe id that depends only on the recipe's exported content.
+     *
+     * <p>Ids are embedded in exported plans, so they have to survive a dataset regeneration of the
+     * same GTNH version. Anything positional is therefore banned from the key: registry iteration
+     * indexes shift whenever the mod set or insertion order moves, and {@code Object.toString()}
+     * on a type that does not override it is an identity hash that changes on every JVM run.
+     *
+     * <p>{@code occurrences} disambiguates registry entries that are identical in every field this
+     * exporter writes. The counter is part of the hashed key rather than a global position, so it
+     * only reflects how many equal recipes came before this one. Members of such a group are
+     * interchangeable by construction - they serialize to the same JSON apart from the id - so it
+     * does not matter which member claims which occurrence.
+     */
+    private String contentDerivedId(Map<String, Integer> occurrences, String prefix, String contentKey) {
+        Integer seen = occurrences.get(contentKey);
+        int occurrence = seen == null ? 0 : seen.intValue() + 1;
+        occurrences.put(contentKey, Integer.valueOf(occurrence));
+        return sha1(prefix + ":" + contentKey + "#" + occurrence).substring(0, 16);
+    }
+
+    private String gtRecipeContentKey(
+        String recipeMapId,
+        GTRecipe recipe,
+        List<Map<String, Object>> itemInputs,
+        List<Map<String, Object>> itemOutputs,
+        List<Map<String, Object>> fluidInputs,
+        List<Map<String, Object>> fluidOutputs,
+        List<Map<String, Object>> nonConsumedInputs
+    ) {
+        // Covers every field exportGregtech writes. runtimeCalculation is a pure function of the
+        // recipe map plus duration/EU/specialValue, so it needs no separate term.
+        return safeString(recipeMapId)
+            + "|d=" + recipe.mDuration
+            + "|eu=" + recipe.mEUt
+            + "|sv=" + recipe.mSpecialValue
+            + "|ii=" + resourceContentKeys(itemInputs)
+            + "|io=" + resourceContentKeys(itemOutputs)
+            + "|fi=" + resourceContentKeys(fluidInputs)
+            + "|fo=" + resourceContentKeys(fluidOutputs)
+            + "|nc=" + resourceContentKeys(nonConsumedInputs);
+    }
+
+    private String resourceContentKeys(List<Map<String, Object>> resources) {
+        if (resources == null || resources.isEmpty()) {
+            return "";
+        }
+        List<String> keys = new ArrayList<String>();
+        for (Map<String, Object> resource : resources) {
+            keys.add(resourceContentKey(resource));
+        }
+        // Sorted, deliberately. Some recipes are registered by walking a hash-ordered collection,
+        // so the order of their exported lists is not stable across JVM runs: two exports of
+        // stable-2.8.4 minutes apart disagreed on the order of the fluid outputs of 69 recipes
+        // (32 centrifuge, 32 multiblock centrifuge, 5 Eye of Harmony) with identical fluids and
+        // amounts. Hashing that order made the id move with it, which is the very failure
+        // content-derived ids exist to prevent.
+        //
+        // This cannot lose an arrangement that matters: where slot position is part of a
+        // recipe's identity the exporter records slotIndex on each resource, and
+        // resourceContentKey folds it into that resource's own key, so the sorted multiset
+        // still pins every resource to its slot. Measured over the whole export, sorting adds
+        // no key collisions at all - the recipes sharing a key remain exactly the 11,204 that
+        // are byte-identical anyway, for which occurrence order is immaterial.
+        Collections.sort(keys);
+        return join(keys, ",");
+    }
+
+    /**
+     * Identity fields of an exported resource. Display names and icons are deliberately excluded:
+     * they come from localization and texture capture, and must not be able to move a recipe id.
+     */
+    private String resourceContentKey(Map<?, ?> resource) {
+        if (resource == null) {
+            return "-";
+        }
+        StringBuilder builder = new StringBuilder();
+        builder.append(safeString(resource.get("kind")));
+        builder.append(':').append(safeString(resource.get("id")));
+        Object names = resource.get("names");
+        if (names != null) {
+            builder.append(":n=").append(safeString(names));
+        }
+        Object text = resource.get("value");
+        if (text != null) {
+            builder.append(":v=").append(safeString(text));
+        }
+        builder.append('x').append(safeString(resource.get("amount")));
+        Object slotIndex = resource.get("slotIndex");
+        if (slotIndex != null) {
+            builder.append('s').append(safeString(slotIndex));
+        }
+        Object chance = resource.get("chance");
+        if (chance != null) {
+            builder.append('@').append(safeString(chance));
+        }
+        if (Boolean.FALSE.equals(resource.get("consumed"))) {
+            builder.append("!nc");
+        }
+        Object nbt = resource.get("nbt");
+        if (nbt != null) {
+            builder.append('#').append(safeString(nbt));
+        }
+        return builder.toString();
     }
 
     private String sha1(String value) {

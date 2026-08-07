@@ -10,6 +10,12 @@ import type {
   RecipeMapIconEntry,
   RecipeSummary,
 } from "@/lib/datasets/types";
+import {
+  buildRecipeContentIndex,
+  recipeContentKey,
+  type RecipeContentIndex,
+  type RecipeContentRef,
+} from "@/lib/model/recipe-content";
 import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
 import {
   enrichPassiveProductionRecipe,
@@ -55,6 +61,7 @@ interface LoadedRecipeIndex {
   recipeMapIconCache?: Map<string, DatasetResourceIndexEntry | undefined>;
   recipeMapIconEntriesByMap?: Map<string, RecipeMapIconEntry>;
   recipesByRawRecipeId?: Map<string, Recipe[]>;
+  recipesByContentKey?: RecipeContentIndex;
   hydratedRecipeSummaries?: Map<number, RecipeSummary>;
 }
 
@@ -65,6 +72,12 @@ export interface DatasetRecipeRef {
   recipeMap?: string;
   rawRecipeId?: string;
   outputs: Array<Pick<RecipeOutput, "kind" | "id">>;
+  /**
+   * Full recipe content, when the client can supply it. Lets {@link resolveDatasetRecipeRefs}
+   * match on behaviour rather than on the unstable `rawRecipeId`; older clients omit it and fall
+   * back to the name/outputs path.
+   */
+  content?: RecipeContentRef;
 }
 
 interface RecipeLookupIndexFile {
@@ -210,16 +223,31 @@ export async function resolveDatasetRecipeRefs(
   versionId: string,
   refs: DatasetRecipeRef[],
 ): Promise<Array<{ importedId: string; recipeId: string }>> {
-  if (!refs.some((ref) => ref.rawRecipeId)) {
+  const hasContent = refs.some((ref) => ref.content);
+  if (!hasContent && !refs.some((ref) => ref.rawRecipeId)) {
     return [];
   }
 
   const catalog = await loadCatalog(versionId);
-  const recipesByRawRecipeId = await getRecipesByRawRecipeId(catalog);
+  const byContentKey = hasContent ? await getRecipesByContentKey(catalog) : undefined;
+  const contentMatches = byContentKey
+    ? matchRefsByContent(refs, byContentKey)
+    : new Map<string, string>();
+
+  const needsRawRecipeIdPass = refs.some((ref) => ref.rawRecipeId && !contentMatches.has(ref.id));
+  const recipesByRawRecipeId = needsRawRecipeIdPass
+    ? await getRecipesByRawRecipeId(catalog)
+    : undefined;
 
   return refs
     .map((ref) => {
-      if (!ref.rawRecipeId) {
+      // Content is exact and dataset-id agnostic, so it wins over the name/outputs heuristic.
+      const contentMatch = contentMatches.get(ref.id);
+      if (contentMatch) {
+        return { importedId: ref.id, recipeId: contentMatch };
+      }
+
+      if (!ref.rawRecipeId || !recipesByRawRecipeId) {
         return undefined;
       }
 
@@ -237,6 +265,65 @@ export async function resolveDatasetRecipeRefs(
       return match ? { importedId: ref.id, recipeId: match.id } : undefined;
     })
     .filter((match): match is { importedId: string; recipeId: string } => Boolean(match));
+}
+
+/**
+ * Pair plan recipes with dataset recipes that describe the same work, so a plan survives the id
+ * churn a dataset regeneration used to cause.
+ *
+ * A pairing is only made when it is forced: exactly one ref and exactly one dataset recipe share a
+ * content key. Two refs on one key have no non-arbitrary pairing, and one ref over several dataset
+ * rows would be a guess - both are dropped rather than resolved, leaving the caller to keep the
+ * plan's embedded recipe body.
+ */
+export function matchRefsByContent(
+  refs: DatasetRecipeRef[],
+  byContentKey: RecipeContentIndex,
+): Map<string, string> {
+  const refsByContentKey = new Map<string, DatasetRecipeRef[]>();
+  for (const ref of refs) {
+    if (!ref.content) {
+      continue;
+    }
+
+    const key = recipeContentKey(ref.content);
+    const group = refsByContentKey.get(key);
+    if (group) {
+      group.push(ref);
+    } else {
+      refsByContentKey.set(key, [ref]);
+    }
+  }
+
+  const matches = new Map<string, string>();
+  for (const [key, group] of refsByContentKey) {
+    const candidateIds = byContentKey.get(key) ?? [];
+    const [ref] = group;
+    const [recipeId] = candidateIds;
+    if (group.length !== 1 || candidateIds.length !== 1 || !ref || !recipeId) {
+      continue;
+    }
+    if (recipeId === ref.id) {
+      continue;
+    }
+
+    matches.set(ref.id, recipeId);
+  }
+
+  return matches;
+}
+
+async function getRecipesByContentKey(catalog: LoadedRecipeIndex): Promise<RecipeContentIndex> {
+  if (catalog.recipesByContentKey) {
+    return catalog.recipesByContentKey;
+  }
+
+  const shardRecipes = await Promise.all(
+    catalog.shards.map((shard) => loadShard(catalog.version, shard)),
+  );
+  const recipesByContentKey = buildRecipeContentIndex(shardRecipes.flat());
+  catalog.recipesByContentKey = recipesByContentKey;
+  return recipesByContentKey;
 }
 
 export async function queryDatasetResources(

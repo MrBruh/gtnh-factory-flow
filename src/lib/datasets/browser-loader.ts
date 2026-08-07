@@ -1,5 +1,6 @@
 "use client";
 
+import type { RecipeContentRef } from "@/lib/model/recipe-content";
 import type { MachineTier, Recipe, RecipeOutput, ResourceAmount } from "@/lib/model/types";
 import type {
   DatasetResourceIndexEntry,
@@ -51,6 +52,12 @@ export interface RecipeDatasetResolveRef {
   recipeMap?: string;
   rawRecipeId?: string;
   outputs: Array<Pick<RecipeOutput, "kind" | "id">>;
+  /**
+   * Recipe content, matched server-side against the dataset so an id that moved between dataset
+   * builds still resolves. Sent as a nested block because the flat `outputs` above are the legacy
+   * heuristic's shape (kind/id only) and must stay as they are.
+   */
+  content?: RecipeContentRef;
 }
 
 export interface RecipeDatasetResolveResult {
