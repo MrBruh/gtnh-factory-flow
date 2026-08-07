@@ -256,9 +256,40 @@ if (pathB) {
     }
   }
 
-  const onlyA = [...byIdA.keys()].filter((id) => !byIdB.has(id)).length;
-  const onlyB = [...byIdB.keys()].filter((id) => !byIdA.has(id)).length;
-  console.log(`shared ids: ${shared}, only in A: ${onlyA}, only in B: ${onlyB}`);
+  const onlyAIds = [...byIdA.keys()].filter((id) => !byIdB.has(id));
+  const onlyBIds = [...byIdB.keys()].filter((id) => !byIdA.has(id));
+  console.log(
+    `shared ids: ${shared}, only in A: ${onlyAIds.length}, only in B: ${onlyBIds.length}`,
+  );
+
+  // A one-sided id is only a defect if the recipe it named still exists on the other side. Then
+  // the id moved under an unchanged recipe, which is exactly what content-derived ids exist to
+  // prevent. If no recipe of that identity exists there, the recipe itself changed between runs -
+  // GTNH rolls the aspect costs of some infusion recipes per run - and an id that tracks content
+  // is right to change with it. Classifying by identity rather than by a list of known-random
+  // recipes keeps this honest as the pack changes.
+  const identitiesOf = (recipes) => new Set(recipes.map((entry) => identityOf(entry.recipe)));
+  const identitiesA = identitiesOf(recipesA);
+  const identitiesB = identitiesOf(recipesB);
+
+  let movedIds = 0;
+  let changedRecipes = 0;
+  for (const [ids, byId, otherIdentities] of [
+    [onlyAIds, byIdA, identitiesB],
+    [onlyBIds, byIdB, identitiesA],
+  ]) {
+    for (const id of ids) {
+      const entry = byId.get(id)[0];
+      if (otherIdentities.has(identityOf(entry.recipe))) {
+        movedIds++;
+        if (movedIds <= 5) {
+          failures.push(`id ${id} moved while its recipe stayed the same (${entry.scope})`);
+        }
+      } else {
+        changedRecipes++;
+      }
+    }
+  }
 
   if (drifted > 0) failures.push(`${drifted} shared id(s) changed meaning between the two exports`);
   else notes.push(`all ${shared} shared ids describe the same recipe in both exports`);
@@ -274,12 +305,20 @@ if (pathB) {
     );
   }
 
-  if (onlyA > 0 || onlyB > 0) {
+  if (movedIds > 0) {
     failures.push(
-      `id sets differ: ${onlyA} only in A, ${onlyB} only in B - a plan built against one would lose those recipes`,
+      `${movedIds} id(s) moved while the recipe they name was unchanged - a plan built against one export would lose them`,
     );
-  } else {
+  } else if (changedRecipes === 0) {
     notes.push("both exports produced exactly the same id set");
+  } else {
+    notes.push("no id moved under an unchanged recipe");
+  }
+
+  if (changedRecipes > 0) {
+    notes.push(
+      `${changedRecipes} id(s) exist on only one side because the recipe itself differs between runs - the game generated it differently, so a content-derived id is correct to differ too`,
+    );
   }
 }
 
